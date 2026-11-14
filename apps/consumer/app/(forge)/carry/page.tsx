@@ -45,6 +45,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import { useSession } from "next-auth/react";
 import { sessionPending } from "@/lib/session-policy";
@@ -67,11 +68,12 @@ type DecodeResult =
   | { ok: false; error: string; message: string };
 
 export default function CarryPage() {
+  const t = useTranslations("refineryShell.carry");
   const router = useRouter();
   const { data: authData, status: authStatus } = useSession();
   const authUser = authData?.user as { email?: string | null; mfa?: unknown; claim?: unknown } | undefined;
   const signedInEmail =
-    authStatus === "authenticated" && authUser && !sessionPending(authUser) ? authUser.email || "your account" : null;
+    authStatus === "authenticated" && authUser && !sessionPending(authUser) ? authUser.email || t("yourAccount") : null;
   const { updateSession } = useForgeSession();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -167,15 +169,14 @@ export default function CarryPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
-      <h1 className="mb-2 text-2xl font-semibold text-t-white">Enter your code</h1>
+      <h1 className="mb-2 text-2xl font-semibold text-t-white">{t("title")}</h1>
       <p className="mb-3 text-t-phos">
-        The one you wrote down before you left. It fills in everything you already
-        answered so you do not start over.
+        {t("lead")}
       </p>
       <p className="mb-8 text-sm text-t-phos-dim" data-testid="carry-where">
         {signedInEmail
-          ? `Once you add your resume, your answers are saved to the account for ${signedInEmail}, so you can finish on any computer.`
-          : "Your answers stay on this computer. Sign in to save them to a free account."}
+          ? t("whereSignedIn", { email: signedInEmail })
+          : t("whereSignedOut")}
       </p>
 
       {error && (
@@ -188,7 +189,7 @@ export default function CarryPage() {
       )}
 
       <label htmlFor="carry_code" className="mb-2 block text-sm font-medium text-t-white">
-        Your code
+        {t("codeLabel")}
       </label>
       <input
         type="text"
@@ -204,8 +205,7 @@ export default function CarryPage() {
         className="min-h-touch w-full rounded-lg border border-t-line bg-t-panel px-4 py-3 text-center font-mono text-xl uppercase text-t-white focus:outline-none focus:ring-2 focus:ring-t-amber"
       />
       <p className="mt-2 text-sm text-t-phos-dim">
-        Dashes are optional. Codes never use the letter O, the letter I, the number
-        zero, or the number one.
+        {t("codeHint")}
       </p>
 
       <button
@@ -213,12 +213,11 @@ export default function CarryPage() {
         onClick={handleRedeem}
         className="min-h-touch mt-6 w-full rounded-lg bg-t-amber px-6 py-4 text-lg font-semibold text-t-bg transition-opacity hover:opacity-90"
       >
-        Pick up where I left off
+        {t("redeem")}
       </button>
 
       <p className="mt-6 text-sm text-t-phos-dim">
-        Lost the code? You can answer the questions again from the start. It takes a
-        few minutes and nothing is gone forever.
+        {t("lost")}
       </p>
     </div>
   );

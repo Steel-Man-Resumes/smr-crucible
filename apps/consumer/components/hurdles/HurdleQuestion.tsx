@@ -3,7 +3,8 @@
 /** One question of the hurdle planner. The next question depends on this answer. */
 
 import { useEffect, useState } from "react";
-import { HURDLES, getNode } from "@/lib/hurdles/graph";
+import { useTranslations } from "next-intl";
+import { getNode } from "@/lib/hurdles/graph";
 import type { Answer } from "@/lib/hurdles/reducer";
 
 interface Props {
@@ -18,6 +19,9 @@ interface Props {
 }
 
 export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step, onAnswer, onSkip, onBack }: Props) {
+  const t = useTranslations("refineryInterview.question");
+  const th = useTranslations("refineryInterview.hurdles");
+  const tc = useTranslations("common.actions");
   const node = getNode(nodeId);
   const [picked, setPicked] = useState<string[]>(answer?.choices ?? []);
   const [text, setText] = useState(answer?.text ?? "");
@@ -30,13 +34,14 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
   };
   const ready = node.kind === "text" ? text.trim().length > 0 : picked.length > 0;
   const headingId = `q-${node.id.replace(/\W/g, "-")}`;
+  const nk = `n.${node.id.replace(/\./g, "_")}`;
   return (
     <section aria-labelledby={headingId} className="bg-t-panel p-5 border border-t-line" data-testid="hurdle-question">
       <p className="text-xs text-t-phos-dim mb-1">
-        {HURDLES[node.hurdle].label} &middot; Hurdle {hurdleIndex + 1} of {hurdleCount} &middot; Question {step}
+        {t("header", { label: th(`h.${node.hurdle}.label`), number: hurdleIndex + 1, count: hurdleCount, step })}
       </p>
-      <h2 id={headingId} className="text-lg font-semibold text-t-white mb-1">{node.question}</h2>
-      {node.help && <p className="text-xs text-t-phos-dim mb-3">{node.help}</p>}
+      <h2 id={headingId} className="text-lg font-semibold text-t-white mb-1">{th(`${nk}.q`)}</h2>
+      {node.help && <p className="text-xs text-t-phos-dim mb-3">{th(`${nk}.help`)}</p>}
       {node.kind === "text" ? (
         <div className="mb-4">
           {node.format === "state" || (node.maxLength ?? 300) <= 80 ? (
@@ -44,7 +49,7 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
               value={text}
               onChange={(e) => setText(e.target.value)}
               maxLength={node.maxLength}
-              placeholder={node.placeholder}
+              placeholder={node.placeholder ? th(`${nk}.ph`) : undefined}
               aria-labelledby={headingId}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
@@ -53,7 +58,7 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
               value={text}
               onChange={(e) => setText(e.target.value)}
               maxLength={node.maxLength}
-              placeholder={node.placeholder}
+              placeholder={node.placeholder ? th(`${nk}.ph`) : undefined}
               rows={3}
               aria-labelledby={headingId}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none resize-y"
@@ -77,7 +82,7 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
                   on ? "bg-t-panel-2 border-t-amber text-t-white" : "bg-t-panel border-t-line text-t-phos hover:border-t-amber"
                 }`}
               >
-                {rank ? `${rank}. ` : ""}{c.label}
+                {rank ? `${rank}. ` : ""}{th(`${nk}.c.${c.id}`)}
               </button>
             );
           })}
@@ -90,13 +95,13 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
           onClick={() => onAnswer(node.kind === "text" ? { text } : { choices: picked })}
           className="t-focus px-5 py-2.5 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
         >
-          Next
+          {tc("next")}
         </button>
         <button type="button" onClick={onSkip} className="t-focus px-3 py-2.5 text-sm text-t-phos-dim hover:text-t-white min-h-touch">
-          Skip this one
+          {t("skip")}
         </button>
         <button type="button" onClick={onBack} className="t-focus px-3 py-2.5 text-sm text-t-phos-dim hover:text-t-white min-h-touch ml-auto">
-          Back
+          {tc("back")}
         </button>
       </div>
     </section>

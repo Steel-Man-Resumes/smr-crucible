@@ -1,0 +1,950 @@
+{
+  "statusBadges": {
+    "resume": "Currículum",
+    "coverLetter": "Carta de presentación",
+    "disclosure": "Divulgación",
+    "ready": "{label}: listo",
+    "notStarted": "{label}: sin empezar"
+  },
+  "baselineSelector": {
+    "searchingAs": "Buscando con",
+    "baseResume": "Currículum base",
+    "current": "(actual)",
+    "whichResumeAria": "Con qué currículum estoy buscando",
+    "manage": "Administrar currículums base"
+  },
+  "savedJobs": {
+    "heading": "Tus empleos guardados",
+    "openTracker": "Abrir seguimiento",
+    "intro": "Empleos guardados en todas tus rutas. Abre uno para trabajar con su propio currículum y su solicitud.",
+    "status": {
+      "applied": "Postulado",
+      "heard_back": "Con respuesta",
+      "interviewing": "En entrevistas",
+      "offered": "Con oferta"
+    },
+    "tailorResume": "Adaptar currículum",
+    "openAndApply": "Abrir y postular",
+    "open": "Abrir",
+    "more": "+ {count, plural, =1 {1 empleo guardado más} other {# empleos guardados más}}"
+  },
+  "mySharedTasks": {
+    "heading": "De tu administrador de casos",
+    "yourCaseManager": "Tu administrador de casos",
+    "by": "para el {day}"
+  },
+  "mySuggestions": {
+    "heading": "Sugerencias de tu administrador de casos",
+    "yourCaseManager": "Tu administrador de casos",
+    "jobAt": "{title} en {company}",
+    "commentOn": "Un comentario sobre {label}",
+    "aDocumentYouShared": "un documento que compartiste",
+    "about": "Sobre esto: “{quote}”",
+    "fromSuggestion": "{name}. Es solo una sugerencia; tú decides qué hacer con ella.",
+    "saveToJobs": "Guardar en mis empleos",
+    "seePosting": "Ver la oferta de trabajo",
+    "gotIt": "Entendido",
+    "notForMe": "No es para mí"
+  },
+  "dashboard": {
+    "choiceNotSaved": "No se guardó tu elección. Intenta de nuevo.",
+    "nudge": {
+      "summary": "Agrega un número de teléfono al encabezado de tu currículum",
+      "hint": "Adaptar para un trabajo se abre cuando tu nombre y tu teléfono estén guardados. Los empleadores llaman a este número."
+    },
+    "overview": "Resumen",
+    "applicationsHeading": "Solicitudes para seguir moviendo",
+    "foundationHeading": "El trabajo sobre el que puedes construir",
+    "yourProgress": "Tu progreso",
+    "skillsAria": "Habilidades de la historia que compartiste",
+    "savedAcross": "Guardado en todas tus rutas: {list}.",
+    "types": {
+      "resume": "{count} currículums",
+      "cover_letter": "{count} cartas de presentación",
+      "disclosure_plan": "{count} planes de divulgación",
+      "hurdle_plan": "{count} planes para superar obstáculos",
+      "interview_prep": "{count} sesiones de entrevista"
+    },
+    "anotherLane": "¿Apuntas a otro tipo de trabajo? <link>Empieza una ruta en Mis currículums</link>. Tu historial de trabajo se queda junto, y cada meta tiene sus propios documentos.",
+    "profile": {
+      "needBoth": "Agrega un nombre y un número de teléfono para guardar estos datos.",
+      "required": "El nombre y el número de teléfono son necesarios para tu currículum.",
+      "couldNotSave": "No se pudo guardar. Intenta de nuevo.",
+      "wentWrong": "Algo salió mal. Intenta de nuevo.",
+      "nudgeTitle": "Tus datos de contacto",
+      "nudgeIntro": "Estos van en el encabezado de tu currículum. Nada más.",
+      "welcomeName": "Te damos la bienvenida, {name}",
+      "welcome": "Te damos la bienvenida a The Refinery",
+      "analyzed": "Analicé tu historia en The Forge. Ahora la ponemos a trabajar. Estos datos van en el encabezado de tu currículum. Nada más.",
+      "fullNameQuiet": "Nombre completo",
+      "fullName": "Nombre completo *",
+      "namePlaceholder": "Tu nombre completo (como aparece en un currículum)",
+      "nameHint": "Va arriba en cada currículum que armamos para ti.",
+      "email": "Correo electrónico",
+      "emailHint": "Encabezado del currículum y cómo te contactan los empleadores.",
+      "phoneQuiet": "Número de teléfono",
+      "phone": "Número de teléfono *",
+      "phoneHintQuiet": "Los empleadores llaman a este número.",
+      "phoneHint": "Es obligatorio en los currículums. Los empleadores llaman a este número.",
+      "city": "Ciudad",
+      "state": "Estado",
+      "localMatching": "Para encontrar trabajos cerca de ti.",
+      "privacy": "Tus datos de contacto se guardan en tu cuenta y se usan en tus documentos. Tu ubicación también ayuda a encontrar trabajos y apoyo cerca de ti. Tú decides qué compartir con tu programa. Puedes actualizar o borrar todo cuando quieras en Ajustes.",
+      "saving": "guardando...",
+      "saveQuiet": "Guardar",
+      "saveContinue": "guardar y continuar"
+    },
+    "miniForge": {
+      "welcome": "Te damos la bienvenida. Empezaste esto desde adentro.",
+      "loaded": "Tu plan de carrera de The Mini Forge ya está cargado. Tus herramientas están listas.",
+      "dismissAria": "Cerrar",
+      "done": "Listo"
+    }
+  },
+  "help": {
+    "loading": "Cargando Ayuda y opiniones...",
+    "title": "Ayuda y opiniones",
+    "intro": "Un solo lugar para pedir ayuda, reportar un problema, compartir una idea o enviarle una nota a Troy. Elige lo que te sirva.",
+    "contactNotSaved": "No se guardó tu decisión sobre el contacto. Intenta de nuevo.",
+    "replayRefinery": "Volver a ver el recorrido de The Refinery",
+    "replaySettings": "Volver a ver el recorrido de los ajustes",
+    "learnSettings": "Conoce tus ajustes",
+    "orientationCheck": "Hacer la verificación de orientación",
+    "modes": {
+      "bug": {
+        "label": "Reportar un error",
+        "blurb": "Algo se rompió o no funcionó como esperabas. Cuéntanos qué pasó."
+      },
+      "confusing": {
+        "label": "Algo no se entiende",
+        "blurb": "Algo fue difícil de seguir. Cuéntanos qué no tuvo sentido."
+      },
+      "help": {
+        "label": "Pedir ayuda",
+        "blurb": "¿Te atoraste con algo? Haz tu pregunta. Quizás tengamos una respuesta rápida."
+      },
+      "idea": {
+        "label": "Compartir una idea",
+        "blurb": "Tú ves cosas que otros no ven. Cuéntale a Troy de un problema que conoces de primera mano o de una idea que quieres ver crecer. Puede darle forma al sitio, a un curso, a un boletín o a una investigación. A veces el siguiente paso es encontrar a la persona indicada con quien hablar."
+      },
+      "message": {
+        "label": "Mensaje para Troy",
+        "blurb": "Escríbele una nota directa a Troy, una persona de verdad. Él mismo las lee."
+      }
+    },
+    "ideaLabel": "Tu idea o el problema que ves",
+    "messageLabel": "Tu mensaje",
+    "placeholder": {
+      "help": "¿Con qué necesitas ayuda?",
+      "idea": "¿Qué has notado? ¿Qué podría ayudar y a quién le ayudaría? Una idea a medias también sirve.",
+      "bug": "¿Qué pasó y qué esperabas que pasara?",
+      "message": "¿Qué quieres que sepa Troy?",
+      "other": "Escribe aquí..."
+    },
+    "ideaNoPlan": "No necesitas un plan terminado. Comparte solo lo que te sientas a gusto enviándole a Troy. Esto llega al buzón privado de Ayuda, no a un tablero público.",
+    "ideaContact": "Troy puede contactarme sobre esta idea. Más adelante puedo cambiar esta decisión abajo.",
+    "ideaPermission": "Este permiso es solo para contactarte sobre tu idea. Publicar tu historia, compartir tus datos o presentarte con alguien requiere otra conversación y tu permiso.",
+    "ideaNoPromise": "Enviar una idea no promete un proyecto ni una respuesta en una fecha determinada. Las novedades aparecerán abajo.",
+    "includeContext": "Incluir en qué página estoy y mi actividad reciente para ayudar a encontrar el error (opcional)",
+    "willInclude": "Esto es lo que incluiremos:",
+    "contextPage": "Página: {page}",
+    "contextPlan": "Tu plan: {tier}",
+    "contextActions": "Hasta 3 acciones recientes de IA (sin el texto de tus mensajes ni datos personales)",
+    "working": "Trabajando...",
+    "lookQuick": "Buscar una respuesta rápida",
+    "sending": "Enviando...",
+    "sendToTroy": "Enviar a Troy",
+    "send": "Enviar",
+    "answeredIt": "Eso resolvió mi duda",
+    "sendToPerson": "No, envíalo a una persona",
+    "glad": "Qué bueno que te ayudó.",
+    "sentForced": "Esto necesita a una persona, así que lo enviamos por ti. Tu solicitud ya está (#{id}), con estado <strong>recibida</strong>. La respuesta de Troy aparecerá abajo.",
+    "sent": "Listo. Tu solicitud ya está (#{id}), con estado <strong>recibida</strong>. Cualquier respuesta de Troy aparecerá abajo.",
+    "error": "No se pudo enviar. Intenta de nuevo en un momento.",
+    "submissions": "Tus envíos",
+    "submissionCount": "{count, plural, =1 {# envío} other {# envíos}}",
+    "nothingYet": "Todavía nada. Cuando envíes algo, aparecerá aquí con su estado.",
+    "messageFallback": "Mensaje",
+    "stages": {
+      "received": "Recibida",
+      "exploring": "En exploración",
+      "next_step": "Siguiente paso",
+      "closed": "Cerrada"
+    },
+    "status": {
+      "received": "recibida",
+      "seen": "vista",
+      "fixed": "resuelta",
+      "replied": "respondida",
+      "closed": "cerrada"
+    },
+    "ideaContactShort": "Troy puede contactarme sobre esta idea",
+    "troyReplied": "Troy respondió:"
+  },
+  "myHandoffs": {
+    "loadFailed": "No se pudo cargar lo que te envió tu administrador de casos. Intenta de nuevo.",
+    "retry": "Reintentar",
+    "empty": "No hay nada nuevo de tu administrador de casos en los últimos 30 días.",
+    "yourCaseManager": "Tu administrador de casos",
+    "openIt": "{count, plural, =1 {Abrir (1 cosa)} other {Abrir (# cosas)}}",
+    "by": "Para el {day}",
+    "seeWhereToApply": "Ver dónde postularte",
+    "pass": "No es para mí",
+    "passed": "Descartado.",
+    "youPassed": "Descartaste este.",
+    "saveFailed": "No se guardó. Intenta de nuevo.",
+    "saveFailedConnection": "No se guardó. Revisa tu conexión e intenta de nuevo.",
+    "saveJobsFailed": "No se guardó en tus empleos. Intenta de nuevo.",
+    "saveHelpFailed": "No se guardó en tu lista de ayuda. Intenta de nuevo.",
+    "noLongerListedCannotSave": "Ese lugar ya no aparece en la lista, así que no se puede guardar. Pregúntale a tu administrador de casos.",
+    "listingCheckFailed": "No pudimos revisar este lugar ahora mismo.",
+    "noLongerListed": "Ya no aparece en la lista.",
+    "take": {
+      "employer": "Guardar en mis empleos",
+      "job": "Guardar en mis empleos",
+      "resource": "Guardar en mi lista de ayuda",
+      "next_step": "Agregar a mi lista"
+    },
+    "taken": {
+      "employer": "Guardado en tus empleos.",
+      "job": "Guardado en tus empleos.",
+      "resource": "Guardado en tu lista de ayuda.",
+      "next_step": "Agregado a tu lista de tu administrador de casos."
+    },
+    "evidence": {
+      "employer": {
+        "A": "Tiene la marca de contratación",
+        "B": "Hay indicios de contratación, pero sin llegar a la marca",
+        "none": "No se muestran indicios de contratación"
+      },
+      "resource": {
+        "A": "Verificado",
+        "B": "En la lista, aún sin verificar por nosotros",
+        "C": "Encontrado en una lista pública, sin confirmar",
+        "none": "Sin verificar"
+      },
+      "employerChecked": "{line}, verificado el {when}",
+      "resourceChecked": "Verificado el {when}",
+      "resourceReviewed": "{line}, fuente revisada el {when}"
+    },
+    "fromHeading": "De tu administrador de casos",
+    "foundHeading": "Tu administrador de casos encontró algo para ti",
+    "promise": "Son solo sugerencias. Tú decides qué hacer con cada una. Tu administrador de casos ve si la abriste y si la tomaste o la descartaste.",
+    "seeEverything": "Ver todo lo que te envió tu administrador de casos",
+    "loading": "Cargando..."
+  },
+  "laneHome": {
+    "today": "Hoy: {task}",
+    "task": {
+      "resume": "Tener un currículum que pueda usar",
+      "job": "Ir por un trabajo",
+      "interview": "Prepararme para una entrevista",
+      "documents": "Trabajo creativo, un CV o una página de artista",
+      "explore": "Todavía no sé qué quiero",
+      "support": "Conseguir apoyo"
+    },
+    "laneDocuments": "Los documentos de esta ruta",
+    "currentResume": "Currículum actual",
+    "loading": "Cargando...",
+    "loadError": "No pudimos cargar tu currículum guardado. Intenta de nuevo para ver tu trabajo más reciente.",
+    "tryAgain": "Intentar de nuevo",
+    "openDocs": "Abrir {name}",
+    "yourDocuments": "tus documentos",
+    "version": "Versión {number}",
+    "finishedSuffix": ", terminada",
+    "draftBadge": "Borrador: revísalo antes de enviarlo.",
+    "myResumes": "Mis currículums",
+    "unversioned": "Tienes un currículum guardado en esta ruta. Todavía no tiene una versión revisada.",
+    "noVersion": "Todavía no hay una versión guardada de tu currículum en esta ruta.",
+    "next": "Siguiente",
+    "reload": "Recarga tu espacio de trabajo para ver el siguiente paso.",
+    "loadingNext": "Cargando tu siguiente paso...",
+    "docs": {
+      "creative": "Trabajo creativo",
+      "cv": "Un CV",
+      "performer": "Una página de artista"
+    },
+    "support": "Apoyo",
+    "supportBody": "Transporte, identificación, un lugar donde quedarte, comida y ayuda legal con antecedentes penales.",
+    "getSupport": "Conseguir apoyo",
+    "action": {
+      "reviewResume": "Revisar este currículum",
+      "findJob": "Buscar un trabajo al que ir",
+      "checkAndFinish": "Revisar y terminar",
+      "buildWithTroy": "Armarlo con t.ROY",
+      "saveProfile": "Guardar tu perfil",
+      "practiceThisInterview": "Practicar para esta entrevista",
+      "openApplication": "Abrir esta solicitud",
+      "prepareInterview": "Prepararte para tu entrevista",
+      "prepareInterviewAt": "Prepararte para tu entrevista en {company}",
+      "practiceInterview": "Practicar para tu entrevista",
+      "findHelp": "Buscar ayuda cerca de ti",
+      "seePaths": "Ver caminos de trabajo",
+      "pickJob": "Elegir un trabajo al que ir",
+      "openLaneDocs": "Abrir los documentos de esta ruta",
+      "chooseDocs": "Elegir documentos en Mis currículums",
+      "startResume": "Empezar tu currículum",
+      "getFiles": "Conseguir tus archivos en Mis currículums",
+      "openCreative": "Abrir trabajo creativo"
+    }
+  },
+  "next": {
+    "station": "Estación 7",
+    "title": "Lo que sigue",
+    "tip": "Un trabajo es solo una pieza. La escuela, el dinero, tu salud, un aventón, tu identificación... eso es lo que sostiene el trabajo. Elige lo que se te atraviesa y busca ayuda local por lugar y por necesidad.",
+    "coverage": "Todavía no hemos revisado todas las zonas. Donde no lo hemos hecho, la búsqueda lo dice y te muestra ayuda que sirve en cualquier lugar.",
+    "searchHeading": "Buscar ayuda local",
+    "searchWillUse": "La búsqueda usará <strong>{place}</strong>. Puedes cambiarlo en la siguiente pantalla.",
+    "addPlace": "Agrega tu ciudad y estado, o tu código postal, en la siguiente pantalla.",
+    "categories": {
+      "education": {
+        "label": "Estudios y capacitación",
+        "line": "Programas de estudio y capacitación."
+      },
+      "financial": {
+        "label": "Dinero y beneficios",
+        "line": "Beneficios, cuentas y cómo estabilizar tu dinero."
+      },
+      "legal": {
+        "label": "Ayuda legal con antecedentes penales",
+        "line": "Asistencia legal, eliminación de antecedentes penales y ayuda con la corte."
+      },
+      "mental_health": {
+        "label": "Salud mental",
+        "line": "Alguien con quien hablar."
+      },
+      "substance": {
+        "label": "Apoyo para la recuperación",
+        "line": "Apoyo para tu recuperación, cuando lo quieras."
+      },
+      "health": {
+        "label": "Atención médica",
+        "line": "Clínicas, chequeos y cómo tener cobertura."
+      },
+      "housing": {
+        "label": "Un lugar donde quedarte",
+        "line": "Refugio y ayuda con la vivienda."
+      },
+      "transportation": {
+        "label": "Llegar al trabajo",
+        "line": "Aventones y formas de llegar al trabajo."
+      },
+      "id_documents": {
+        "label": "Identificación y documentos",
+        "line": "Identificación estatal, acta de nacimiento, tarjeta del Seguro Social."
+      },
+      "faith": {
+        "label": "Fe y comunidad",
+        "line": "Si la fe es parte de tu vida. Primero aparecen los lugares interreligiosos y de capellanes."
+      }
+    },
+    "seeEvery": "Ver todos los tipos de ayuda local",
+    "nationalHeading": "Puntos de partida a nivel nacional",
+    "nationalSub": "Páginas oficiales de programas. Cada enlace se revisó en la fecha que se muestra.",
+    "national": {
+      "0": "FAFSA, ayuda federal para estudiantes (studentaid.gov)",
+      "1": "Beneficios de alimentos SNAP (USDA)",
+      "2": "Buscador de beneficios del gobierno (USA.gov)",
+      "3": "Reemplazar una identificación perdida (USA.gov)",
+      "4": "Cobertura de salud (HealthCare.gov)",
+      "5": "Tratamiento para salud mental o consumo de sustancias (FindTreatment.gov)",
+      "6": "211, ayuda local por teléfono o en línea (211.org)"
+    },
+    "checked": "Revisado el {date}"
+  },
+  "orientation": {
+    "signIn": "Inicia sesión para hacer la verificación de orientación.",
+    "kicker": "Conoce el proceso",
+    "title": "Tu siguiente paso empieza aquí.",
+    "intro": "Repasa las lecciones, comprueba lo que entendiste y luego usa las herramientas con un propósito claro.",
+    "navAria": "Orientación",
+    "tour": "Hacer el recorrido guiado",
+    "settings": "Explorar los ajustes",
+    "review": "Repasa el proceso antes de la verificación",
+    "lessons": {
+      "0": {
+        "label": "Un proceso que puedes seguir usando",
+        "idea": "La meta es un trabajo que puedas conseguir y mantener. El currículum es solo una parte de ese proceso.",
+        "explanation": "Empieza con lo que de verdad has hecho. Elige una dirección, encuentra una vacante real, prepara los documentos adecuados, postula y practica. El Resumen conecta tu trabajo guardado con una siguiente acción. Puedes volver a un paso anterior cuando algo cambie.",
+        "example": "Una nueva invitación a una entrevista cambia lo que importa hoy. No borra tu trabajo anterior."
+      },
+      "1": {
+        "label": "Tu base de hechos",
+        "idea": "Una historia verdadera puede apoyar varias direcciones.",
+        "explanation": "Tu currículum de partida te da una base. Arma tu Borrador maestro con trabajo que puedas explicar: qué hiciste, dónde, cuándo y qué pasó. Los detalles que no son seguros déjalos como preguntas por revisar. Una frase más fuerte sirve solo si sigue describiendo tu trabajo.",
+        "example": "“Ayudaba con las entregas” puede esconder planear rutas o revisar pedidos. Pregúntate qué hiciste de verdad antes de ponerle nombre a esas habilidades."
+      },
+      "2": {
+        "label": "Conoce a tu coach",
+        "idea": "t.ROY te ayuda a pensar. Tú decides al final.",
+        "explanation": "Pídele que te explique una pantalla, que te ayude a describir tu experiencia o que te haga una pregunta a la vez. Revisa lo que t.ROY sugiere. Una IA puede entender mal, pasar por alto un detalle o inventar uno. Nunca dejes una afirmación solo porque suena segura.",
+        "example": "Prueba con: “Pregúntame qué hice antes de reescribir esta línea.” Una sugerencia no es un cambio guardado ni una solicitud enviada."
+      },
+      "3": {
+        "label": "Elige trabajo con un motivo",
+        "idea": "Una vacante real le da un propósito a tu preparación.",
+        "explanation": "Compara las tareas y los requisitos con tu experiencia y tus necesidades prácticas. Separa un requisito de una preferencia y de algo que todavía tienes que preguntar. Que coincidan palabras es un punto de partida, no una prueba de que calificas.",
+        "example": "Un trabajo puede encajar con tus habilidades pero empezar antes de que pase el autobús. Revisa eso antes de gastar tiempo en la solicitud."
+      },
+      "4": {
+        "label": "Un trabajo, un paquete",
+        "idea": "Adaptar cambia el énfasis. Nunca cambia los hechos.",
+        "explanation": "Elige el trabajo real y la versión del currículum. Pon al frente lo que viene al caso, revisa cada línea que se sugiere y mira los documentos que vas a enviar. Guarda junto el paquete de cada trabajo para saber qué versión recibió el empleador.",
+        "example": "La misma experiencia en un almacén puede mostrar precisión con los pedidos para una vacante y capacitación de compañeros nuevos para otra, si de verdad hiciste las dos cosas."
+      },
+      "5": {
+        "label": "Termina la acción de verdad",
+        "idea": "Preparar una solicitud y enviarla son pasos distintos.",
+        "explanation": "Lee las instrucciones del empleador. Revisa la vista previa y los archivos descargados. Envía por el medio que pide el empleador y luego anota lo que pasó en Solicitudes. Enviarte el paquete a ti mismo no es postular con el empleador.",
+        "example": "Marca Postulado después de enviar de verdad. Si llega una entrevista, actualiza ese trabajo para que la preparación quede junto a él."
+      },
+      "6": {
+        "label": "Practica lo que puedes defender",
+        "idea": "Debes poder explicar cada línea con tus propias palabras.",
+        "explanation": "Elige el trabajo para el que te estás preparando. Practica con un ejemplo concreto, escucha la pregunta de seguimiento y busca los detalles que faltan. Usa los comentarios para intentar una respuesta más clara. Un guion pulido que no puedes explicar no te ayudará en una conversación real.",
+        "example": "“Trabajo bien bajo presión” sirve cuando puedes describir un turno real con mucho trabajo, qué hiciste y qué pasó."
+      },
+      "7": {
+        "label": "Deja espacio para la vida real",
+        "idea": "Un obstáculo práctico merece un siguiente paso práctico.",
+        "explanation": "Usa las herramientas de apoyo para necesidades como transporte, vivienda o capacitación. Lee a quién atiende un servicio, de dónde sale la información y qué falta por confirmar. Un lugar verificado no garantiza que califiques ni que haya cupo. Planear qué contar sobre tus antecedentes penales es decisión tuya.",
+        "example": "Si tu problema es el transporte, pregunta por la ruta y el horario del turno. No supongas que una respuesta más segura resuelve el viaje."
+      },
+      "8": {
+        "label": "Otra dirección, la misma persona",
+        "idea": "Explora sin perder el trabajo que ya armaste.",
+        "explanation": "Una ruta mantiene juntas una dirección y sus documentos. Puedes explorar un oficio, trabajo independiente, un camino creativo o un CV. Revisa qué ruta y qué trabajo están seleccionados antes de pedir cambios. La historia de fondo se mantiene igual.",
+        "example": "Un portafolio creativo y un currículum para un empleo pueden mostrar partes distintas de tu trabajo. Ninguno necesita un pasado inventado."
+      },
+      "9": {
+        "label": "Los ajustes son parte del trabajo",
+        "idea": "Haz que el espacio de trabajo se adapte a cómo lees, piensas y decides compartir.",
+        "explanation": "Los ajustes cubren tu coach, la ayuda para leer, el movimiento, tus datos de contacto, la privacidad, la seguridad, tus datos y el uso. Estas decisiones afectan toda la experiencia. La lección aparte sobre los ajustes recorre cada grupo y señala los controles reales. Leer una lección no cambia ningún ajuste.",
+        "example": "¿Prefieres menos movimiento? Elige Reducir movimiento. ¿Quieres explicaciones más cortas? Prueba Lenguaje sencillo. Las decisiones sobre qué compartir merecen una mirada cuidadosa aparte."
+      },
+      "10": {
+        "label": "Tener acceso no es lo mismo que estar preparado",
+        "idea": "Abrir una herramienta no significa que el trabajo esté terminado.",
+        "explanation": "La guía de progreso recomienda un orden, y tu acceso y tus acciones de IA restantes determinan lo que puedes usar. Puedes pedir que se abra antes una herramienta guiada. El apoyo y la práctica básica siguen disponibles. Los demás límites de herramientas, voz y gasto siguen aplicando.",
+        "example": "Pasar la verificación opcional abre de inmediato las herramientas guiadas para adaptar y postular. No envía ninguna solicitud, no agrega un plan de pago ni quita los límites de uso."
+      },
+      "11": {
+        "label": "Llévalo a la práctica",
+        "idea": "Ya viste el proceso. Ahora elige tu siguiente paso.",
+        "explanation": "Prueba la verificación opcional de seis preguntas que aparece abajo. Si respondes todas bien, obtienes acceso inmediato a las herramientas guiadas. No hay cronómetro, no hay límite de intentos y hay explicaciones de lo que falles. También puedes salir y volver desde Ayuda o Ajustes.",
+        "example": "Esto mide si entiendes las herramientas. No es una evaluación de contratación, ni una credencial, ni un juicio sobre tu capacidad."
+      }
+    }
+  },
+  "quiz": {
+    "accessSavedLessonFailed": "Tu acceso quedó guardado, pero no se pudo completar la lección. Intenta de nuevo.",
+    "resultNotConfirmed": "No se pudo confirmar el resultado. Tus respuestas siguen aquí. Intenta de nuevo.",
+    "upgradeNotConfirmed": "No se pudo confirmar la mejora. Puedes reintentar sin riesgo.",
+    "timedOut": "La solicitud tardó demasiado. Tus respuestas siguen aquí. Reintenta para revisar y recuperar la mejora.",
+    "earnedEyebrow": "Entendimiento logrado. Listo para usar.",
+    "knowWay": "Ya sabes cómo seguir.",
+    "toolsOpen": "Tus herramientas están abiertas.",
+    "passConfirmed": "Tu aprobación de la orientación está confirmada. El acceso que ya tenías se mantiene.",
+    "passedAll": "Respondiste bien todas las preguntas. Las herramientas guiadas para adaptar y postular están abiertas en tu cuenta. El acceso que ya tenías se mantiene.",
+    "tailorReal": "Adaptar para un trabajo real",
+    "prepareApp": "Preparar mi solicitud",
+    "limitsUnchanged": "Tus límites de uso y las funciones patrocinadas no cambian. Tus logros de empleo siguen viniendo del trabajo que haces.",
+    "allowMotion": "Permitir el movimiento de la celebración",
+    "keepStill": "Celebración sin movimiento",
+    "checkAria": "Verificación de orientación opcional",
+    "questionOf": "Pregunta {number} de {total}",
+    "upgradeSaved": "Tu mejora está guardada. Practica otra vez si quieres.",
+    "sixQuestions": "Seis preguntas cortas. Si respondes bien las seis, se abren las herramientas guiadas. Sin cronómetro. Reintenta las veces que quieras.",
+    "earlierUnknown": "No se pudo revisar tu resultado anterior. Si respondes otra vez, se confirma la misma mejora sin riesgo.",
+    "reviewLesson": "Repasa: {lesson}.",
+    "scoreResult": "{correct} de {total} correctas. Lee las explicaciones e inténtalo de nuevo. El acceso que ya tenías se mantiene.",
+    "checkingAnswers": "Revisando tus respuestas y confirmando el acceso",
+    "back": "Atrás",
+    "confirming": "Confirmando…",
+    "nextQuestion": "Siguiente pregunta",
+    "retryRecover": "Reintentar y recuperar mi resultado",
+    "checkRevised": "Revisar mis respuestas corregidas",
+    "checkUnlock": "Revisar respuestas y desbloquear",
+    "pauseResume": "Puedes pausar y seguir en esta pestaña. Si recargas, se borran las respuestas sin terminar.",
+    "leavingClears": "Si sales de esta verificación, se borran las respuestas sin terminar.",
+    "earnedStays": "El acceso que ganaste se queda en tu cuenta.",
+    "questions": {
+      "facts": {
+        "prompt": "t.ROY agrega una afirmación que no puedes comprobar. ¿Qué va en tu currículum?",
+        "choices": {
+          "0": "Cualquier cosa que suene bien.",
+          "1": "Datos que puedo explicar y respaldar.",
+          "2": "Lo que escriba t.ROY."
+        }
+      },
+      "target": {
+        "prompt": "Quieres otro trabajo. ¿Qué cambia?",
+        "choices": {
+          "0": "Mi historial de trabajo.",
+          "1": "Nada. Envío la misma página.",
+          "2": "Elijo detalles para este trabajo. Los hechos se quedan."
+        }
+      },
+      "application": {
+        "prompt": "¿Cuándo marcas un trabajo como Postulado?",
+        "choices": {
+          "0": "Después de enviarlo al empleador.",
+          "1": "Cuando el paquete está listo.",
+          "2": "Cuando guardo el trabajo."
+        }
+      },
+      "privacy": {
+        "prompt": "Una organización te da acceso. Antes de compartir, revisa:",
+        "choices": {
+          "0": "Solo su nombre.",
+          "1": "Nada. Tener acceso significa compartirlo todo.",
+          "2": "Qué se comparte y quién lo ve."
+        }
+      },
+      "limits": {
+        "prompt": "¿Qué hace pasar esta verificación?",
+        "choices": {
+          "0": "Da IA ilimitada.",
+          "1": "Abre las herramientas guiadas. Los límites de uso siguen aplicando.",
+          "2": "Completa mi preparación para el trabajo."
+        }
+      },
+      "practice": {
+        "prompt": "No puedes explicar una línea de tu respuesta. ¿Qué ayuda?",
+        "choices": {
+          "0": "Memorizarla.",
+          "1": "Corregirla. Practicar un ejemplo real con mis palabras.",
+          "2": "Agregar afirmaciones más fuertes."
+        }
+      }
+    },
+    "lessonNames": {
+      "facts": "Lo fuerte empieza con lo verdadero",
+      "target": "Mis currículums",
+      "application": "Solicitudes",
+      "privacy": "Ajustes",
+      "limits": "Prueba lo que aprendiste",
+      "practice": "Preparación para entrevistas"
+    }
+  },
+  "accessRequest": {
+    "titleReply": "Responder a Troy sobre {label}",
+    "titleFeedback": "Cuéntanos tu opinión sincera",
+    "titleBug": "Reportar un problema",
+    "titleAiBonus": "Pedir más acciones de IA",
+    "titleUnlock": "Pídele a t.ROY que abra {label}",
+    "saveFailed": "Tu solicitud no se guardó. Intenta de nuevo.",
+    "resultUnconfirmed": "No se pudo confirmar el resultado. Intenta de nuevo con la misma solicitud.",
+    "requestUnconfirmed": "No se pudo confirmar la solicitud. Intenta de nuevo; se usará la misma solicitud.",
+    "coachLine": "t.ROY · tu coach de IA",
+    "closeAria": "Cerrar la solicitud de acceso",
+    "close": "Cerrar",
+    "descReply": "Responde la pregunta de Troy con tus propias palabras. Tú decides qué compartir.",
+    "descFeedback": "Cuéntanos qué pasó y qué ayudaría. Revisarás el resumen antes de enviárselo a Troy.",
+    "descAiBonus": "Dime qué quieres terminar. Las acciones extra dependen de las recompensas aprobadas y de los límites de tu cuenta.",
+    "descUnlock": "Esta herramienta guiada normalmente viene después de tu preparación guardada. Dime por qué te ayudaría abrirla ahora.",
+    "earlyAccessNote": "El acceso anticipado abre una herramienta. No marca la preparación como terminada. No tienes que contar tus dificultades personales.",
+    "troyAsked": "Troy preguntó: {note}",
+    "yourReply": "Tu respuesta",
+    "whatNeed": "¿Qué necesitas hacer?",
+    "addMore": "Agrega un poco más para que sepa qué necesitas.",
+    "shortEnough": "Con una frase corta basta.",
+    "needsReview": "Troy tiene que revisar esta solicitud.",
+    "summaryLabel": "Resumen que verá Troy",
+    "sharesNote": "Esto comparte la solicitud y la herramienta elegida. No se adjunta tu conversación. No hay un tiempo de respuesta prometido.",
+    "agreeShare": "Acepto compartir este resumen con Troy para que lo revise.",
+    "editReason": "Editar mi motivo",
+    "replyNote": "Tu respuesta se agregará a esta solicitud que ya existe. No se adjunta tu conversación.",
+    "agreeReply": "Acepto enviarle esta respuesta a Troy.",
+    "keepWorking": "Seguir trabajando",
+    "checking": "Revisando...",
+    "sendReply": "Enviar respuesta a Troy",
+    "sendRequest": "Enviar solicitud a Troy",
+    "askTroy": "Pedirle a t.ROY",
+    "allowanceUpdated": "Se actualizaron tus acciones disponibles.",
+    "earlyOpen": "El acceso anticipado está abierto.",
+    "savedForReview": "Tu solicitud quedó guardada para revisión.",
+    "notGranted": "Esta solicitud no fue aprobada.",
+    "progressNote": "Tu progreso sigue reflejando el trabajo que has guardado.",
+    "keepGoing": "Seguir adelante"
+  },
+  "celebration": {
+    "dismissAria": "Cerrar el logro",
+    "close": "Cerrar",
+    "earned": "Te lo ganaste",
+    "keepStill": "Celebraciones sin movimiento"
+  },
+  "progressOverview": {
+    "aiActions": "acciones de IA",
+    "leftToday": "restantes en el conteo de hoy",
+    "availableCount": "disponibles",
+    "until": "hasta el {when}",
+    "currentAllowance": "Tus acciones disponibles",
+    "limitsApply": "Siguen aplicando los límites de la cuenta y de cada operación.",
+    "extraNoRemove": "Las acciones extra no quitan este límite.",
+    "askExtra": "Pedir más acciones de IA",
+    "processAria": "Tu proceso",
+    "loadFailed": "No se pudo cargar tu proceso. Tu trabajo guardado sigue ahí.",
+    "tryAgain": "Intentar de nuevo",
+    "loading": "Cargando tu proceso...",
+    "yourNextAction": "Tu siguiente acción",
+    "yourProcess": "Tu proceso",
+    "chosenFirst": "Primero va el trabajo que elegiste. Abajo ves tu proceso guardado.",
+    "oneStep": "Un paso guardado a la vez. El acceso anticipado y la preparación terminada se muestran por separado.",
+    "askOpen": "Pedirle a t.ROY que abra esto",
+    "seeSteps": "Ver tus pasos, recompensas y acceso",
+    "careerProcessAria": "Proceso de empleo",
+    "appRecorded": "Solicitud registrada por ti.",
+    "existingAccess": "Conservas el acceso que ya tenías a las herramientas. El proceso muestra la preparación sobre la que puedes seguir construyendo.",
+    "nextReward": "Siguiente recompensa",
+    "sooner": "¿Necesitas una herramienta guiada antes? Usa su candado para pedírselo a t.ROY. El apoyo, la práctica y tus documentos guardados siguen disponibles. Las reseñas públicas son opcionales y no dan créditos de IA.",
+    "shareFeedback": "Cuéntanos tu opinión sincera",
+    "reportProblem": "Reportar un problema",
+    "bonusNote": "Una opinión útil o un error que se pueda repetir puede dar un pequeño bono de IA después de revisarlo. Sea bueno o malo, cuéntanos qué pasó.",
+    "yourRequests": "Tus solicitudes de acceso",
+    "accountRequest": "Solicitud de la cuenta",
+    "replyToTroy": "Responder a Troy",
+    "keepMoving": "Sigue avanzando con tu trabajo",
+    "steps": {
+      "foundation": {
+        "label": "Tu currículum de partida",
+        "reason": "Guarda tu currículum de partida."
+      },
+      "direction": {
+        "label": "Elegir un trabajo",
+        "reason": "Guarda una vacante real que quieras buscar."
+      },
+      "tailor": {
+        "label": "Adaptar tu currículum",
+        "reason": "Elige un trabajo y un currículum para que los cambios tengan un propósito claro."
+      },
+      "apply": {
+        "label": "Prepararte y postular",
+        "reason": "Guarda un currículum adaptado al trabajo que elegiste."
+      },
+      "interview": {
+        "label": "Prepararte para la entrevista",
+        "reason": "Registra una solicitud o dinos que tienes una entrevista. Puedes practicar cuando quieras."
+      },
+      "offer": {
+        "label": "Tu siguiente paso",
+        "reason": "Actualiza la solicitud cuando recibas una oferta."
+      }
+    },
+    "state": {
+      "completed": "Completado",
+      "recommendedEarly": "Recomendado ahora · acceso anticipado",
+      "early": "Acceso anticipado",
+      "recommended": "Recomendado ahora",
+      "nextLocked": "Siguiente · bloqueado",
+      "nextAvailable": "Siguiente · disponible",
+      "available": "Disponible"
+    }
+  },
+  "progress": {
+    "loading": "Cargando tu progreso...",
+    "milestoneHit": "Acabas de lograr una meta: {title}",
+    "title": "Tu progreso",
+    "intro": "Cada paso cuenta. Aquí ves lo que has logrado y qué sigue.",
+    "whatNext": "Qué hacer ahora",
+    "upcoming": "Próximamente",
+    "manageApps": "Administrar solicitudes",
+    "followUpWith": "Dar seguimiento con {company}",
+    "followUp": "Dar seguimiento",
+    "due": "vence",
+    "noFollowUps": "Todavía no hay seguimientos programados. Guarda un trabajo y pon una fecha de seguimiento en Solicitudes, y aparecerá aquí.",
+    "roadmap": "Tu ruta de trabajo",
+    "roadmapSteps": "{completed}/{total} pasos ({percent}%)",
+    "phases": {
+      "foundation": "Base",
+      "preparation": "Preparación",
+      "action": "Acción",
+      "momentum": "Impulso"
+    },
+    "pipeline": "Tus solicitudes",
+    "openTracker": "Abrir seguimiento",
+    "stages": {
+      "saved": "Guardadas",
+      "applied": "Postuladas",
+      "heard_back": "Con respuesta",
+      "interviewing": "En entrevistas",
+      "offered": "Con oferta"
+    },
+    "milestones": "Metas logradas",
+    "milestonesSub": "Solo para ti. Cada una se apoya en algo que de verdad hiciste.",
+    "byNumbers": "En números",
+    "skillsFound": "Habilidades encontradas",
+    "careerPaths": "Caminos profesionales",
+    "interviews": "Entrevistas",
+    "actionsTaken": "Acciones realizadas",
+    "activityDetail": "Detalle de actividad",
+    "resumesBuilt": "Currículums armados",
+    "disclosurePlans": "Planes de divulgación",
+    "practiceInterviews": "Entrevistas de práctica",
+    "startedCount": "{count} empezadas",
+    "jobSearches": "Búsquedas de trabajo",
+    "applicationsSent": "Solicitudes enviadas",
+    "boardVisits": "Visitas a la bolsa de empleos",
+    "enc0": "Tu camino empieza con un paso. Mira las sugerencias de arriba y elige la que te parezca bien.",
+    "enc1": "Estás agarrando impulso. Cada acción que haces hace más fácil la siguiente.",
+    "enc2": "Estás poniendo trabajo de verdad. Esta preparación te da una ventaja real.",
+    "enc3": "Has mostrado un compromiso serio con tu futuro. Esa dedicación dice mucho ante cualquier empleador.",
+    "nodeDone": "Hecho",
+    "nodeInProgress": "En curso",
+    "nodeNotStarted": "Todavía sin empezar",
+    "nodeStatus": "Estado:",
+    "revisit": "Volver a {tool}",
+    "goTo": "Ir a {tool}",
+    "tools": {
+      "forge": "The Forge",
+      "dashboard": "tu panel",
+      "resources": "Recursos",
+      "tailor": "el Adaptador de currículum",
+      "disclosure": "Divulgación",
+      "interview": "Práctica de entrevistas",
+      "jobs": "la bolsa de empleos",
+      "thisTool": "esta herramienta"
+    }
+  },
+  "steelMan": {
+    "components": {
+      "facts": {
+        "label": "Datos de trabajo",
+        "why": "Cada dato verdadero que confirmas sobre tu trabajo hace más sólido cada currículum."
+      },
+      "lines": {
+        "label": "Líneas que respaldas",
+        "why": "Cada línea que puedes explicar con tus propias palabras es una línea que puedes defender en una entrevista."
+      },
+      "resumes": {
+        "label": "Currículums terminados",
+        "why": "Un currículum terminado pasó todas las revisiones y está listo para enviar."
+      },
+      "lanes": {
+        "label": "Rutas en uso",
+        "why": "Cada tipo de trabajo al que apuntas tiene su propio currículum, armado con los mismos datos verdaderos. Una ruta cuenta cuando tiene un currículum terminado."
+      },
+      "tailored": {
+        "label": "Adaptado a un trabajo real",
+        "why": "Un currículum adaptado a un trabajo real le habla a la persona que lo lee."
+      },
+      "sent": {
+        "label": "Solicitudes enviadas",
+        "why": "Cada solicitud que envías te mete en la competencia."
+      },
+      "practice": {
+        "label": "Práctica de entrevistas",
+        "why": "Practicar en voz alta hace más pequeña la entrevista de verdad."
+      },
+      "disclosure": {
+        "label": "Divulgación lista",
+        "why": "Tener tus palabras listas para la pregunta sobre tus antecedentes penales te da el control."
+      },
+      "proof": {
+        "label": "Pruebas reunidas",
+        "why": "Cada documento de prueba que consigues es un dato que nadie puede discutir."
+      },
+      "feedback": {
+        "label": "Opiniones compartidas",
+        "why": "Contarnos qué funcionó y qué falló mejora esto para la siguiente persona."
+      }
+    },
+    "units": {
+      "facts": "{count, plural, =1 {dato} other {datos}}",
+      "lines": "{count, plural, =1 {línea} other {líneas}}",
+      "resumes": "{count, plural, =1 {currículum} other {currículums}}",
+      "lanes": "{count, plural, =1 {ruta} other {rutas}}",
+      "tailored": "{count, plural, =1 {trabajo} other {trabajos}}",
+      "sent": "{count, plural, =1 {solicitud} other {solicitudes}}",
+      "practice": "{count, plural, =1 {sesión} other {sesiones}}",
+      "disclosure": "{count, plural, =1 {paso} other {pasos}}",
+      "proof": "{count, plural, =1 {documento} other {documentos}}",
+      "feedback": "{count, plural, =1 {nota} other {notas}}"
+    },
+    "actions": {
+      "facts": {
+        "first": "Confirma un dato de trabajo más en tu Borrador maestro",
+        "more": "Confirma un dato de trabajo más en tu Borrador maestro"
+      },
+      "lines": {
+        "first": "Explica una línea más del currículum con tus propias palabras",
+        "more": "Explica una línea más del currículum con tus propias palabras"
+      },
+      "resumes": {
+        "first": "Termina tu primer currículum",
+        "more": "Termina otro currículum"
+      },
+      "lanes": {
+        "first": "Termina un currículum en una ruta para el trabajo que quieres",
+        "more": "Termina un currículum para otro tipo de trabajo"
+      },
+      "tailored": {
+        "first": "Adapta un currículum a un trabajo real",
+        "more": "Adapta un currículum a un trabajo real"
+      },
+      "sent": {
+        "first": "Registra tu primera solicitud",
+        "more": "Registra una solicitud más que enviaste"
+      },
+      "practice": {
+        "first": "Practica una entrevista en voz alta",
+        "more": "Practica una entrevista en voz alta"
+      },
+      "disclosure": {
+        "first": "Arma tu plan de divulgación",
+        "more": "Ensaya tus palabras en voz alta"
+      },
+      "proof": {
+        "first": "Agrega un documento de prueba",
+        "more": "Agrega un documento de prueba"
+      },
+      "feedback": {
+        "first": "Cuéntanos qué funcionó y qué falló",
+        "more": "Cuéntanos qué funcionó y qué falló"
+      }
+    },
+    "toastUnit": {
+      "facts": "un dato confirmado",
+      "lines": "una línea que respaldas",
+      "resumes": "un currículum terminado",
+      "lanes": "una ruta en uso",
+      "tailored": "un currículum adaptado a un trabajo",
+      "sent": "una solicitud enviada",
+      "practice": "práctica de entrevista",
+      "disclosure": "tus palabras listas",
+      "proof": "un documento de prueba reunido",
+      "feedback": "opinión compartida"
+    },
+    "gainLine": "{action}: +{points} {points, plural, =1 {punto} other {puntos}}, unos {minutes} minutos.",
+    "allFull": "Todas las partes del medidor están llenas. Sigue usando las herramientas con cada trabajo nuevo.",
+    "toastOne": "+{total}: {unit}.",
+    "toastMany": "+{total}: trabajo nuevo guardado.",
+    "barScore": "Puntaje {score} de {max}. Nivel: {band}.",
+    "barNext": "Siguiente marca: {label} en {score}",
+    "barAway": ", a {count} puntos",
+    "scoreAria": "Puntaje Steel Man",
+    "loading": "Cargando tu medidor Steel Man.",
+    "resting": "Tu medidor está descansando. Tu trabajo está guardado.",
+    "nextPoints": "{count} puntos para {label}.",
+    "nextThere": "Los puntos para {label} ya están. La lista muestra lo que falta.",
+    "steelManRunning": "Steel Man: toda tu búsqueda de trabajo está armada y en marcha.",
+    "meter": "Medidor Steel Man",
+    "honesty": "Tu puntaje Steel Man cuenta el trabajo real que has hecho aquí. No es una calificación sobre ti y no predice si te contratan.",
+    "of": "de {max}",
+    "forgeCounts": "Armaste esto en The Forge. Cuenta.",
+    "bands": {
+      "showing_up": {
+        "label": "Empezando",
+        "why": "Empezaste. Cada pedazo de trabajo real mueve esta barra."
+      },
+      "in_the_game": {
+        "label": "En el juego",
+        "why": "Armaste un currículum, lo dirigiste a un trabajo real y lo enviaste.",
+        "whyList": "Un currículum terminado, dirigido a un trabajo real y enviado.",
+        "neutral": "Tu trabajo se va sumando. Esta marca representa el primer currículum terminado, adaptado y enviado."
+      },
+      "covering_ground": {
+        "label": "Ganando terreno",
+        "why": "Más partes de The Refinery están trabajando para ti."
+      },
+      "putting_in_work": {
+        "label": "Trabajando duro",
+        "why": "Tu trabajo está llegando lejos y a fondo."
+      },
+      "steel_man": {
+        "label": "Steel Man",
+        "why": "Toda tu búsqueda de trabajo está armada y en marcha."
+      },
+      "title": "Las marcas en la barra",
+      "sub": "Cada marca sale de las cuentas del propio medidor, no de números redondos. Abajo en esta página se explica cómo funciona.",
+      "andUp": "{from} o más",
+      "range": "{from} a {to}",
+      "here": "Tu puntaje está aquí",
+      "checklistTitle": "La lista de Steel Man",
+      "checklistSub": "Steel Man pide variedad, no una sola herramienta usada una y otra vez. Todo esto, al mismo tiempo:",
+      "srDone": ": listo",
+      "srTodo": ": por hacer",
+      "done": "Listo",
+      "whatLeft": "Lo que falta: {left}"
+    },
+    "more": {
+      "points": "{count, plural, =1 {# punto más} other {# puntos más}}",
+      "facts": "{count, plural, =1 {# dato más} other {# datos más}}",
+      "lines": "{count, plural, =1 {# línea más} other {# líneas más}}",
+      "lanes": "{count, plural, =1 {# ruta más} other {# rutas más}}",
+      "resumes": "{count, plural, =1 {# currículum terminado más} other {# currículums terminados más}}"
+    },
+    "req": {
+      "score": {
+        "label": "Un puntaje de {score} o más"
+      },
+      "facts": {
+        "label": "Al menos {min} datos de trabajo confirmados"
+      },
+      "lines": {
+        "label": "Al menos {min} líneas que respaldas en un currículum terminado"
+      },
+      "breadth": {
+        "label": "{lanes} rutas en uso, o {resumes} currículums terminados",
+        "left": "{lanes} con un currículum, o {resumes}"
+      },
+      "every_part": {
+        "label": "Trabajo en las diez partes del medidor",
+        "left": "Todavía sin empezar: {list}"
+      },
+      "feedback": {
+        "label": "Opinión sincera compartida con nosotros",
+        "left": "Cuéntanos qué funcionó y qué falló"
+      }
+    },
+    "breakdown": {
+      "title": "De dónde vienen tus puntos",
+      "sub": "Cada barra se llena con tu trabajo. La marca delgada es lo máximo que cabe en esa parte.",
+      "aria": "{label}: {value} de {max}, {count} {unit}",
+      "valueOf": "{value} de {max}",
+      "points": "puntos"
+    },
+    "strip": {
+      "title": "Tus últimos 30 días",
+      "summary": "Agregaste trabajo en {days} de los últimos 30 días. Más el {day}: {units} {units, plural, =1 {elemento} other {elementos}}.",
+      "none": "Todavía no hay trabajo con fecha en los últimos 30 días. Lo que agregues después aparecerá aquí.",
+      "undated": "Los datos de trabajo confirmados antes de que se guardaran las fechas siguen contando en tu puntaje. Solo que no aparecen en esta tira."
+    },
+    "gains": {
+      "title": "Lo que más te hace avanzar",
+      "sub": "Ordenado por puntos según el tiempo que suele tomar. Elige lo que le quede a tu día."
+    },
+    "moments": {
+      "title": "Momentos",
+      "sub": "Cada uno se apoya en algo que hiciste y guardaste.",
+      "first": "Tu primer momento llega con tu primer trabajo guardado.",
+      "review": "¿Nos dejaste una reseña en Google? Márcalo aquí para poder darte las gracias. Las reseñas sinceras ayudan, digan lo que digan. Aquí no se paga nada por una reseña.",
+      "leftReview": "Dejé una reseña"
+    },
+    "streak": {
+      "title": "Semanas activas",
+      "inARow": "semanas activas seguidas.",
+      "reserveLeft": "{count, plural, =1 {Te queda # semana de reserva, así que una semana tranquila no la termina.} other {Te quedan # semanas de reserva, así que una semana tranquila no la termina.}}",
+      "reserveBack": "Tus semanas de reserva vuelven con el paso de las semanas.",
+      "explain": "Una semana cuenta cuando agregas cualquier trabajo en ella. Dos semanas seguidas empiezan una racha, y las semanas tranquilas tienen reservas."
+    },
+    "how": {
+      "title": "Cómo funciona el medidor",
+      "units": "Cada parte cuenta unidades reales de trabajo. La primera unidad vale más, cada vez que duplicas suma lo mismo otra vez, y cada parte deja de sumar en su límite. Así que la forma más rápida de subir es usar una parte que todavía no has tocado, no repetir una.",
+      "marks": "Las marcas salen de esas cuentas: {firstLoop} es tu primer currículum, tu primer currículum adaptado y tu primera solicitud; {everyPart} es cada parte empezada una vez; {breadth} es cada parte usada más allá de sus primeros pasos; {depth} es cada parte usada a fondo.",
+      "firstOne": "(el primero vale {points} puntos).",
+      "nothing": "Aquí nada mide la velocidad, los inicios de sesión ni el tiempo en pantalla. Ir despacio no te cuesta nada. Quitar tu propio trabajo es tu derecho; la barra solo sigue lo que está guardado.",
+      "counts": "El medidor cuenta el trabajo que hiciste. No predice si te contratan."
+    }
+  },
+  "tierGate": {
+    "title": "Para tener acceso completo necesitas un código de organización",
+    "body": "Esta herramienta es para clientes y organizaciones aliadas. Prueba The Forge primero. Es gratis y te muestra lo que hacemos.",
+    "tryForge": "Prueba The Forge",
+    "enterCode": "Escribir un código de organización"
+  },
+  "roleProvider": {
+    "loadFailed": "No se pudo cargar tu cuenta.",
+    "tryAgain": "Intentar de nuevo"
+  }
+}

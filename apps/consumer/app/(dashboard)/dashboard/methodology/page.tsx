@@ -8,12 +8,14 @@
  * Observer: headline view + CTA to get partner access
  */
 
+import { useTranslations } from "next-intl";
 import { useUserTier } from "@/lib/useUserTier";
 import { DisclosureSection } from "@/components/DisclosureSection";
 import { TBtn } from "@crucible/consumer-ui";
 import { WallText } from "@/components/forge/WallText";
 
 export default function MethodologyPage() {
+  const t = useTranslations("refineryInterview.methodology");
   const tier = useUserTier();
   const isPartnerOrAdmin = tier === "partner" || tier === "admin";
   const isObserver = tier === "observer";
@@ -22,12 +24,12 @@ export default function MethodologyPage() {
     <div className="max-w-3xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-t-white mb-2">
-          {isPartnerOrAdmin ? "Methodology Playbook" : "How The Forge Works"}
+          {isPartnerOrAdmin ? "Methodology Playbook" : t("title")}
         </h1>
         <p className="text-base text-t-phos-dim">
           {isPartnerOrAdmin
             ? "The research, rules, and implementation guide behind The Forge."
-            : "The thinking behind the tools you’re using."}
+            : t("subtitle")}
         </p>
       </div>
 
@@ -35,12 +37,11 @@ export default function MethodologyPage() {
       {isObserver && (
         <div className="mb-8 bg-t-panel p-5 border border-t-line">
           <p className="text-sm text-t-phos mb-3">
-            You&apos;re seeing a summary view. The full methodology playbook is
-            available to partner organizations.
+            {t("observerNote")}
           </p>
           <div className="flex gap-3">
-            <TBtn href="https://forge.steelmanresumes.com" size="sm">try The Forge</TBtn>
-            <TBtn href="/dashboard/settings" variant="ghost" size="sm">enter partner code</TBtn>
+            <TBtn href="https://forge.steelmanresumes.com" size="sm">{t("tryForge")}</TBtn>
+            <TBtn href="/dashboard/settings" variant="ghost" size="sm">{t("enterPartnerCode")}</TBtn>
           </div>
         </div>
       )}
@@ -48,37 +49,37 @@ export default function MethodologyPage() {
       {/* How to use with clients — always visible, useful for everyone */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-t-white mb-4">
-          {isPartnerOrAdmin ? "How to Use With Your Clients" : "What Happens When You Use The Forge"}
+          {isPartnerOrAdmin ? "How to Use With Your Clients" : t("useTitle")}
         </h2>
         <div className="space-y-4 text-sm text-t-phos leading-relaxed">
           <div className="bg-t-panel p-4 border border-t-line">
             <h3 className="font-semibold text-t-white mb-1">
-              {isPartnerOrAdmin ? "Before the session" : "Getting started"}
+              {isPartnerOrAdmin ? "Before the session" : t("gettingStarted")}
             </h3>
             <p className="text-t-phos-dim">
-              No prep needed. <WallText open="The Forge requires no login, no paperwork, and no prior resume." up="The Forge needs one free sign-in, and no paperwork and no prior resume." />{" "}{isPartnerOrAdmin
+              {isPartnerOrAdmin ? "No prep needed." : t("noPrep")} <WallText open={isPartnerOrAdmin ? "The Forge requires no login, no paperwork, and no prior resume." : t("wallOpen")} up={isPartnerOrAdmin ? "The Forge needs one free sign-in, and no paperwork and no prior resume." : t("wallUp")} />{" "}{isPartnerOrAdmin
                 ? "Clients can start on any device with internet access. Point them to steelmanresumes.com and let t.ROY guide them."
-                : "Just start answering questions honestly. t.ROY guides you through every step."}
+                : t("justStart")}
             </p>
           </div>
           <div className="bg-t-panel p-4 border border-t-line">
             <h3 className="font-semibold text-t-white mb-1">
-              {isPartnerOrAdmin ? "During the session" : "The process"}
+              {isPartnerOrAdmin ? "During the session" : t("process")}
             </h3>
             <p className="text-t-phos-dim">
               {isPartnerOrAdmin
                 ? "Can be done independently or with a facilitator present. The AI assistant (t.ROY) is available on every page but never auto-opens. Clients can ask questions, talk through decisions, or skip sections they’re not ready for."
-                : "You’ll share your resume (or build one), tell us what matters to you, and describe what’s in your way. t.ROY is there on every page if you need help."}
+                : t("processBody")}
             </p>
           </div>
           <div className="bg-t-panel p-4 border border-t-line">
             <h3 className="font-semibold text-t-white mb-1">
-              {isPartnerOrAdmin ? "After the session" : "What you get"}
+              {isPartnerOrAdmin ? "After the session" : t("whatYouGet")}
             </h3>
             <p className="text-t-phos-dim">
               {isPartnerOrAdmin
                 ? "Output can be downloaded immediately. For continued engagement, clients create a free account to access The Refinery (resume builder, disclosure planner, interview practice, job board, resources). Designed for 6+ month engagement."
-                : "A personalized narrative about your strengths, skills matched to real careers, and resources for your specific situation. Download it or keep working in The Refinery."}
+                : t("whatYouGetBody")}
             </p>
           </div>
           {isPartnerOrAdmin && (
@@ -98,11 +99,11 @@ export default function MethodologyPage() {
       {!isObserver && (
         <section className="mb-10">
           <h2 className="text-xl font-semibold text-t-white mb-4">
-            {isPartnerOrAdmin ? "Research Foundation" : "The Science Behind It"}
+            {isPartnerOrAdmin ? "Research Foundation" : t("scienceTitle")}
           </h2>
           {!isPartnerOrAdmin && (
             <p className="text-sm text-t-phos-dim mb-4">
-              Every feature is grounded in real research. Expand any section to learn more.
+              {t("scienceNote")}
             </p>
           )}
           {isPartnerOrAdmin && (
@@ -113,28 +114,28 @@ export default function MethodologyPage() {
           )}
           <div className="space-y-2">
             <DisclosureSection
-              title="Behavioral Science Foundations"
-              summary="How naming emotions and building self-efficacy drives real change"
+              title={t("ws1.title")}
+              summary={t("ws1.blurb")}
               defaultOpen={isPartnerOrAdmin}
             >
               <ResearchBlock
                 ws="WS1"
                 researchers="Lieberman, Kircanski, Bandura, Prochaska & DiClemente"
-                summary="Affect labeling reduces amygdala reactivity by up to 50% (Lieberman et al., 2007). Self-efficacy is built through mastery experiences, not encouragement (Bandura, 1977). Readiness for change follows predictable stages (Prochaska & DiClemente, 1983)."
+                summary={t("ws1.summary")}
                 application="Every free-text input in The Forge serves a dual purpose: data collection and therapeutic affect labeling. The readiness page maps to Stages of Change without clinical language."
                 showApplication={isPartnerOrAdmin}
               />
             </DisclosureSection>
 
             <DisclosureSection
-              title="Narrative Identity & Desistance"
-              summary="Why telling your story in a new way changes outcomes"
+              title={t("ws2.title")}
+              summary={t("ws2.blurb")}
               defaultOpen={isPartnerOrAdmin}
             >
               <ResearchBlock
                 ws="WS2"
                 researchers="McAdams, Maruna, Deci & Ryan"
-                summary="People who construct redemption sequences (bad→good arcs) show higher well-being and generativity (McAdams, 2013). Desistance from crime correlates with generative identity construction (Maruna, 2001). Autonomy is a core psychological need (Deci & Ryan, 2000)."
+                summary={t("ws2.summary")}
                 application="Forge output uses narrative-first framing. Strengths presented before barriers. Career paths framed as possibilities, never prescriptions. User autonomy preserved at every step."
                 showApplication={isPartnerOrAdmin}
               />
@@ -203,7 +204,7 @@ export default function MethodologyPage() {
       {!isObserver && (
         <section className="mb-10">
           <h2 className="text-xl font-semibold text-t-white mb-4">
-            {isPartnerOrAdmin ? "The 10 Behavioral Rules" : "How t.ROY Is Built to Help"}
+            {isPartnerOrAdmin ? "The 10 Behavioral Rules" : t("rulesTitle")}
           </h2>
           {isPartnerOrAdmin && (
             <p className="text-sm text-t-phos-dim mb-4">
@@ -212,15 +213,14 @@ export default function MethodologyPage() {
           )}
           {!isPartnerOrAdmin && (
             <p className="text-sm text-t-phos-dim mb-4">
-              t.ROY follows strict rules designed to respect your time, your
-              autonomy, and your privacy.
+              {t("rulesNote")}
             </p>
           )}
           <div className="space-y-3">
             {RULES.map((rule, i) => (
               <div key={i} className="bg-t-panel p-4 border border-t-line">
                 <p className="font-medium text-t-white text-sm">
-                  {i + 1}. {rule.name}
+                  {i + 1}. {isPartnerOrAdmin ? rule.name : t(`rules.r${i + 1}.name`)}
                 </p>
                 {isPartnerOrAdmin ? (
                   <>
@@ -230,7 +230,7 @@ export default function MethodologyPage() {
                     )}
                   </>
                 ) : (
-                  <p className="text-sm text-t-phos-dim mt-1">{rule.clientFacing}</p>
+                  <p className="text-sm text-t-phos-dim mt-1">{t(`rules.r${i + 1}.clientFacing`)}</p>
                 )}
               </div>
             ))}

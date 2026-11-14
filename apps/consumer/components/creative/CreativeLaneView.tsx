@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { CareerLane } from "@crucible/core/src/careerLaneShared";
 import type { PracticeEntry, TitleMode } from "@crucible/core/src/practiceRecordShared";
 import { applyPhraseAnswer, buildArtistResumeModel, buildWorkSampleList, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
@@ -15,7 +16,7 @@ import type { BioContent } from "@crucible/core/src/creativeBio";
 import type { StatementVersion } from "@crucible/core/src/creativeStatement";
 import { getCreativeStatus } from "@crucible/core/src/creativeChecks";
 import type { Hurdle, HelpSource, PairPlan } from "@crucible/core/src/twoPathPlan";
-import { CREATIVE_ERRORS, CREATIVE_TABS, TROY_CREATIVE_LINE, sendJson, type CreativeTab } from "@/lib/creative";
+import { CREATIVE_TABS, sendJson, type CreativeTab } from "@/lib/creative";
 import { PracticeRecordPanel } from "./PracticeRecordPanel";
 import { ArtistResumePanel } from "./ArtistResumePanel";
 import { BioPanel } from "./BioPanel";
@@ -59,6 +60,8 @@ export function CreativeLaneView({
   onLanesChanged: () => void;
   onAdoptLane: (lane: CareerLane) => void;
 }) {
+  const t = useTranslations("refineryResume.creative.laneView");
+  const ts = useTranslations("refineryResume.creative.shared");
   const [ctx, setCtx] = useState<CreativeCtx | null>(null);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<CreativeTab>(startTab ?? "record");
@@ -96,12 +99,12 @@ export function CreativeLaneView({
         setNotice("");
       } else {
         // Changed elsewhere (or refused): show what is really saved, and say so.
-        setNotice(r.data.message || CREATIVE_ERRORS.failed);
+        setNotice(r.data.message || ts("didntSave"));
         load();
       }
       return r.ok;
     },
-    [laneId, load]
+    [laneId, load, ts]
   );
 
   const saveSettings = useCallback(
@@ -148,24 +151,24 @@ export function CreativeLaneView({
     [ctx, model, pages, samples]
   );
 
-  if (failed && !ctx) return <p className="mt-6 text-sm text-t-red" role="alert">{CREATIVE_ERRORS.loadFailed}</p>;
+  if (failed && !ctx) return <p className="mt-6 text-sm text-t-red" role="alert">{ts("loadFailed")}</p>;
   if (!ctx || !model || !status) return <div className="mt-6 h-40 border border-t-line bg-t-panel" aria-hidden="true" />;
 
   return (
     <OpenItemAnswersContext.Provider value={answers}>
-    <section className="mt-6" data-testid="creative-lane" aria-label={`${ctx.lane.name} creative lane`}>
+    <section className="mt-6" data-testid="creative-lane" aria-label={t("ariaLane", { name: ctx.lane.name })}>
       <div className="border border-t-line bg-t-panel p-3 sm:p-4">
         <p className="text-sm text-t-white">
           <span className="font-semibold">{ctx.lane.name}</span>
           {ctx.lane.target_role ? <span className="text-t-phos-dim">. {ctx.lane.target_role}</span> : null}
           {ctx.lane.path ? (
             <span className="ml-2 inline-block border border-t-line px-2 text-xs uppercase text-t-phos" data-testid="creative-path">
-              {ctx.lane.path === "dream" ? "Dream" : "Realistic"}
+              {ctx.lane.path === "dream" ? t("pathDream") : t("pathRealistic")}
             </span>
           ) : null}
         </p>
         <p className="mt-1 text-xs text-t-phos-dim">
-          <span className="font-semibold text-t-phos">t.ROY:</span> {TROY_CREATIVE_LINE}
+          <span className="font-semibold text-t-phos">t.ROY:</span> {ts("troyLine")}
         </p>
       </div>
 
@@ -175,21 +178,21 @@ export function CreativeLaneView({
         </p>
       )}
 
-      <nav aria-label="Creative lane tools" className="mt-3 -mx-4 overflow-x-auto px-4">
+      <nav aria-label={t("toolsAria")} className="mt-3 -mx-4 overflow-x-auto px-4">
         <ul className="flex gap-1 min-w-max" role="tablist">
-          {CREATIVE_TABS.map((t) => (
-            <li key={t.key}>
+          {CREATIVE_TABS.map((tabDef) => (
+            <li key={tabDef.key}>
               <button
                 type="button"
                 role="tab"
-                aria-selected={tab === t.key}
-                data-testid={`creative-tab-${t.key}`}
-                onClick={() => setTab(t.key)}
+                aria-selected={tab === tabDef.key}
+                data-testid={`creative-tab-${tabDef.key}`}
+                onClick={() => setTab(tabDef.key)}
                 className={`t-focus min-h-touch px-3 text-sm border ${
-                  tab === t.key ? "border-t-amber bg-t-panel-2 text-t-amber-bright font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"
+                  tab === tabDef.key ? "border-t-amber bg-t-panel-2 text-t-amber-bright font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"
                 }`}
               >
-                {t.label}
+                {ts(`tab.${tabDef.key}`)}
               </button>
             </li>
           ))}

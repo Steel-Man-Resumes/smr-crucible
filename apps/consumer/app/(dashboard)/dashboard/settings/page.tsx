@@ -12,6 +12,7 @@
  */
 
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
 import { DeleteDataControls } from "@/components/settings/DeleteDataControls";
 import { useServerSwitches } from "@/components/ServerSwitches";
@@ -37,14 +38,14 @@ import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { STAFF_DATA_WORDS, accountChipText, staffUsageLine } from "@/lib/staff-settings-words";
-import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
+import { passwordProblem, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
 import { PackageEmailSetting } from "@/components/PackageEmailSetting";
 import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
 import { usageWords, type UsageView } from "@/lib/usage-view";
-import { ALL_TICKED, DOCUMENTS_DOWNLOAD_FAILED, EXPORT_BOXES, OWN_DEVICE_LABEL, SHARED_COMPUTER_WARNING, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
+import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
 
 const STAFF_HIDDEN_EXPORT_BOXES = new Set<string>(["resumes", "applications", "record_check"]);
 
@@ -52,7 +53,8 @@ type UsageData = UsageView | { error: string };
 
 /** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
 function UsageCard({ usage, staff = false }: { usage: UsageData | null; staff?: boolean }) {
-  if (!usage) return <p className="text-sm text-t-phos-dim">Loading usage...</p>;
+  const t = useTranslations("refineryAccount.settings.usage");
+  if (!usage) return <p className="text-sm text-t-phos-dim">{t("loading")}</p>;
   if ("error" in usage) return <p className="text-sm text-t-phos-dim">{usage.error}</p>;
   const raw = usageWords(usage);
   const words = staff ? { ...raw, line: staffUsageLine(raw.line), bonusLine: raw.bonusLine ? staffUsageLine(raw.bonusLine) : null } : raw;
@@ -70,10 +72,10 @@ function UsageCard({ usage, staff = false }: { usage: UsageData | null; staff?: 
       {usage.blockedReason && <p className="text-sm text-t-amber-bright mt-2">{usage.blockedReason}</p>}
       {usage.ceilings.length > 0 && (
         <div className="mt-3">
-          <p className="text-xs font-medium text-t-white mb-1">{usage.kind === "per-tool" ? "Used today" : "Tools with a lower limit of their own"}</p>
+          <p className="text-xs font-medium text-t-white mb-1">{usage.kind === "per-tool" ? t("usedToday") : t("lowerLimit")}</p>
           <ul className="text-xs text-t-phos-dim space-y-0.5">
             {usage.ceilings.map((c) => (
-              <li key={c.tool}>{c.label}: {c.paused ? "paused" : `${c.left} left today`}</li>
+              <li key={c.tool}>{c.label}: {c.paused ? t("paused") : t("leftToday", { count: c.left })}</li>
             ))}
           </ul>
         </div>
@@ -91,6 +93,7 @@ interface RedeemedCode {
 }
 
 export default function SettingsPage() {
+  const t = useTranslations("refineryAccount.settings.page");
   // Shared-computer rule: the export includes the local Forge run only when
   // it is marked as this user's (lib/forge-carry.ts).
   const ownerUid = useSession().data?.user?.id;
@@ -173,7 +176,7 @@ export default function SettingsPage() {
     fetch("/api/usage")
       .then((r) => r.json())
       .then(setUsage)
-      .catch(() => setUsage({ error: "Your allowance could not be read right now." }));
+      .catch(() => setUsage({ error: t("usageError") }));
 
     fetch("/api/access-code/mine")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("codes"))))
@@ -231,12 +234,12 @@ export default function SettingsPage() {
         setTimeout(() => setCodeStatus("idle"), 3000);
       } else {
         const data = await res.json();
-        setCodeError(data.error || "Could not redeem code");
+        setCodeError(data.error || t("redeemError"));
         setCodeStatus("error");
         setTimeout(() => setCodeStatus("idle"), 5000);
       }
     } catch {
-      setCodeError("Something went wrong. Try again.");
+      setCodeError(t("wentWrong"));
       setCodeStatus("error");
       setTimeout(() => setCodeStatus("idle"), 5000);
     }
@@ -261,7 +264,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || "Failed to export data. Please try again.");
+        alert(data.error || t("exportFailed"));
         setExportStatus("idle");
         return;
       }
@@ -296,7 +299,7 @@ export default function SettingsPage() {
       setExportStatus("done");
       setTimeout(() => setExportStatus("idle"), 3000);
     } catch {
-      alert("Failed to export data. Please try again.");
+      alert(t("exportFailed"));
       setExportStatus("idle");
     }
   }
@@ -314,7 +317,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setDocsMessage(data.error || DOCUMENTS_DOWNLOAD_FAILED);
+        setDocsMessage(data.error || t("documentsFailed"));
         setDocsStatus("idle");
         return;
       }
@@ -327,7 +330,7 @@ export default function SettingsPage() {
       setDocsStatus("done");
       setTimeout(() => setDocsStatus("idle"), 3000);
     } catch {
-      setDocsMessage(DOCUMENTS_DOWNLOAD_FAILED);
+      setDocsMessage(t("documentsFailed"));
       setDocsStatus("idle");
     }
   }
@@ -395,50 +398,50 @@ export default function SettingsPage() {
   const SECTIONS: { id: string; label: string }[] = isOrgStaff
     ? [
         { id: "workflow", label: "My setup" },
-        { id: "account", label: "Account" },
-        { id: "accessibility", label: "Accessibility" },
+        { id: "account", label: t("sections.account") },
+        { id: "accessibility", label: t("sections.accessibility") },
         { id: "privacy", label: "AI transparency" },
-        { id: "security", label: "Security" },
-        { id: "data", label: "Data" },
-        { id: "usage", label: "Usage" },
-        { id: "help", label: "Help & About" },
+        { id: "security", label: t("sections.security") },
+        { id: "data", label: t("sections.data") },
+        { id: "usage", label: t("sections.usage") },
+        { id: "help", label: t("sections.help") },
       ]
     : [
-        { id: "account", label: "Account" },
-        { id: "coach", label: "Coach & AI" },
-        { id: "accessibility", label: "Accessibility" },
-        { id: "privacy", label: "Privacy & Consent" },
-        { id: "security", label: "Security" },
-        { id: "data", label: "Data" },
-        { id: "usage", label: "Usage" },
-        { id: "help", label: "Help & About" },
+        { id: "account", label: t("sections.account") },
+        { id: "coach", label: t("sections.coach") },
+        { id: "accessibility", label: t("sections.accessibility") },
+        { id: "privacy", label: t("sections.privacy") },
+        { id: "security", label: t("sections.security") },
+        { id: "data", label: t("sections.data") },
+        { id: "usage", label: t("sections.usage") },
+        { id: "help", label: t("sections.help") },
       ];
 
   return (
     <div className="max-w-2xl">
       <div className="flex items-start justify-between gap-3 mb-2">
-        <h1 className="text-2xl font-bold text-t-white">Settings</h1>
+        <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
         {/* The Settings tour (SETTINGS-TOUR.md): a quiet way in for people who skipped the chip. Never for staff or under view-as or assist. */}
         {!isOrgStaff && !impersonating && (
           <button type="button" onClick={openSettingsTour} data-tour-open="settings"
             className="t-focus flex-shrink-0 text-xs text-t-phos-dim underline hover:text-t-amber-bright py-1">
-            Show me around
+            {t("showMeAround")}
           </button>
         )}
       </div>
       <p className="text-base text-t-phos-dim mb-4">
         {isOrgStaff
           ? "How you work here, and your account."
-          : "Your data, your control. Manage your information and privacy."}
+          : t("subtitle")}
       </p>
 
       {impersonating && (
         <div id="settings-impersonating" role="status" className="mb-6 border border-t-amber bg-t-panel p-4 text-sm text-t-white">
           <p className="font-semibold mb-1">
-            {impersonating.mode === "view" ? "You are viewing this person's Settings. Nothing here can be changed." : "You are assisting this person in Settings."}
+            {impersonating.mode === "view" ? t("viewing") : t("assisting")}
           </p>
           <p className="text-t-phos-dim">
-            These are their settings, not yours. Sharing and consent switches, program codes and the tours stay theirs to change. Security, photo, export and delete are hidden.
+            {t("impersonatingNote")}
           </p>
         </div>
       )}
@@ -449,7 +452,7 @@ export default function SettingsPage() {
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
       <nav
         id="refinery-tool-settings-map"
-        aria-label="Settings sections"
+        aria-label={t("sectionsAria")}
         className="sticky top-[72px] z-10 -mx-1 mb-8 flex flex-wrap gap-1 border-b border-t-line bg-t-bg/95 py-2 backdrop-blur"
       >
         {SECTIONS.map((s) => (
@@ -484,18 +487,18 @@ export default function SettingsPage() {
 
       {/* ── 1. Account ─────────────────────────────────────────────── */}
       <div id="account" className="scroll-mt-32 mb-10">
-        <GroupHeading>Account</GroupHeading>
+        <GroupHeading>{t("sections.account")}</GroupHeading>
         <AccountSection />
         {!impersonating && <AvatarSettingsSection />}
         {pendingPolicy && (
-          <div role="dialog" aria-label="What this program requires" className="mb-4">
+          <div role="dialog" aria-label={t("programRequiresAria")} className="mb-4">
             <RequirementCard policy={pendingPolicy.policy} text={pendingPolicy.text} items={pendingPolicy.policy.items} compact />
             <p className="text-sm text-t-phos-dim mb-3">
-              Joining does not open anything by itself. After you join you will be asked to acknowledge this, and you can read it again first.
+              {t("joiningNote")}
             </p>
             <div className="flex gap-3 mb-6">
-              <button onClick={(e) => redeemCode(e, true)} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2">Join {pendingPolicy.policy.orgName}</button>
-              <button onClick={() => setPendingPolicy(null)} className="t-focus border border-t-line text-sm text-t-phos px-4 py-2">Not now</button>
+              <button onClick={(e) => redeemCode(e, true)} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2">{t("join", { org: pendingPolicy.policy.orgName })}</button>
+              <button onClick={() => setPendingPolicy(null)} className="t-focus border border-t-line text-sm text-t-phos px-4 py-2">{t("notNow")}</button>
             </div>
           </div>
         )}
@@ -522,28 +525,28 @@ export default function SettingsPage() {
       {/* ── 2. Coach & AI ──────────────────────────────────────────── */}
       {!isOrgStaff && (
       <div id="coach" className="scroll-mt-32 mb-10">
-        <GroupHeading>Coach &amp; AI</GroupHeading>
+        <GroupHeading>{t("sections.coach")}</GroupHeading>
         <CoachSettingsSection />
       </div>
       )}
 
       {/* ── 3. Accessibility ───────────────────────────────────────── */}
       <div id="accessibility" className="scroll-mt-32 mb-10">
-        <GroupHeading>Accessibility</GroupHeading>
-        <h2 className="text-lg font-bold text-t-white mb-1">Make it easier to use</h2>
+        <GroupHeading>{t("sections.accessibility")}</GroupHeading>
+        <h2 className="text-lg font-bold text-t-white mb-1">{t("easierTitle")}</h2>
         <p className="text-sm text-t-phos-dim mb-4">
-          Bigger text, less motion, and reading help. Changes take effect right away.
+          {t("easierBody")}
         </p>
         <AccessibilitySettingsSection />
       </div>
 
       {/* ── 4. Privacy & Consent ───────────────────────────────────── */}
       <div id="privacy" className="scroll-mt-32 mb-10">
-        <GroupHeading>{isOrgStaff ? "AI transparency" : "Privacy & Consent"}</GroupHeading>
+        <GroupHeading>{isOrgStaff ? "AI transparency" : t("sections.privacy")}</GroupHeading>
         {/* The progress switch reaches a program, so it shows only to a member (S7). */}
         {!isOrgStaff && codesLoaded && (redeemedCodes.length > 0
           ? <SharingConsentSection />
-          : <p id="settings-share-progress" className="text-sm text-t-phos-dim mb-8">No program is linked to your account, so no program can see your progress.</p>)}
+          : <p id="settings-share-progress" className="text-sm text-t-phos-dim mb-8">{t("noProgram")}</p>)}
         {!isOrgStaff && <SharingControls />}
         {!isOrgStaff && <ConsentPanel />}
         {/* AI transparency: t.ROY's recorded reasoning */}
@@ -552,14 +555,14 @@ export default function SettingsPage() {
 
       {/* ── 5. Security ────────────────────────────────────────────── */}
       <div id="security" className="scroll-mt-32 mb-10">
-        <GroupHeading>Security</GroupHeading>
-        {impersonating ? <p className="text-sm text-t-phos-dim">Hidden while you view or assist as this person.</p> : <SecuritySection />}
+        <GroupHeading>{t("sections.security")}</GroupHeading>
+        {impersonating ? <p className="text-sm text-t-phos-dim">{t("hiddenWhileViewing")}</p> : <SecuritySection />}
       </div>
 
       {/* ── 6. Data ────────────────────────────────────────────────── */}
       <div id="data" className="scroll-mt-32 mb-10">
-        <GroupHeading>Data</GroupHeading>
-        {impersonating ? <p className="text-sm text-t-phos-dim">Hidden while you view or assist as this person.</p> : <DataSection
+        <GroupHeading>{t("sections.data")}</GroupHeading>
+        {impersonating ? <p className="text-sm text-t-phos-dim">{t("hiddenWhileViewing")}</p> : <DataSection
           exportCats={exportCats}
           setExportCats={setExportCats}
           reauthPassword={reauthPassword}
@@ -577,12 +580,12 @@ export default function SettingsPage() {
 
       {/* ── 7. Usage ───────────────────────────────────────────────── */}
       <div id="usage" className="scroll-mt-32 mb-10">
-        <GroupHeading>Usage</GroupHeading>
+        <GroupHeading>{t("sections.usage")}</GroupHeading>
 
         {/* Daily Usage: the allowance the tools spend from (S5) */}
         <section className="mb-8" id="settings-usage-today">
           <h2 className="text-lg font-bold text-t-white mb-4">
-            Daily Usage
+            {t("dailyUsage")}
           </h2>
           <div className="bg-t-panel p-5 border border-t-line">
             <UsageCard usage={usage} staff={isOrgStaff} />
@@ -595,22 +598,20 @@ export default function SettingsPage() {
 
       {/* ── 8. Help & About ────────────────────────────────────────── */}
       <div id="help" className="scroll-mt-32 mb-10">
-        <GroupHeading>Help &amp; About</GroupHeading>
+        <GroupHeading>{t("sections.help")}</GroupHeading>
 
         {/* Get help */}
         <section className="mb-8">
-          <h2 className="text-lg font-bold text-t-white mb-4">Get help</h2>
+          <h2 className="text-lg font-bold text-t-white mb-4">{t("getHelp")}</h2>
           <div className="bg-t-panel p-5 border border-t-line space-y-3">
             <p className="text-sm text-t-phos-dim">
-              Stuck on something? Ask t.ROY on any page, or open Help &amp;
-              Feedback to search for an answer, report a problem, or message
-              Troy. A real person reads every message.
+              {t("helpBody")}
             </p>
             <a
               href="/dashboard/help"
               className="t-focus inline-flex items-center px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 transition-colors min-h-touch"
             >
-              Open Help &amp; Feedback
+              {t("openHelp")}
             </a>
             {isOrgStaff ? (
               <p className="text-xs text-t-phos-dim pt-1">
@@ -622,9 +623,9 @@ export default function SettingsPage() {
               </p>
             ) : (
             <p className="text-xs text-t-phos-dim pt-1">
-              Want to know exactly how we protect your data?{" "}
+              {t("trustQuestion")}{" "}
               <a href="/dashboard/security" className="text-t-amber-bright hover:text-t-amber underline">
-                Read our trust page
+                {t("trustLink")}
               </a>
               .
             </p>
@@ -634,7 +635,7 @@ export default function SettingsPage() {
 
         {/* About */}
         <section>
-          <h2 className="text-lg font-bold text-t-white mb-4">About</h2>
+          <h2 className="text-lg font-bold text-t-white mb-4">{t("about")}</h2>
           <div className="bg-t-panel p-5 border border-t-line">
             <h3 className="font-semibold text-t-white mb-2">
               Steel Man Resumes
@@ -642,11 +643,10 @@ export default function SettingsPage() {
             <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
               {isOrgStaff
                 ? "Built by people who believe a past doesn't define a paycheck. You use it to support the people you work with; they use it to take the next step on their own terms."
-                : "Built by people who believe your past doesn't define your paycheck. The Forge and Refinery are tools designed to help you take the next step on your own terms."}
+                : t("aboutBody")}
             </p>
             <p className="text-xs text-t-phos-dim">
-              All AI-powered features are designed with transparency, consent, and
-              your dignity in mind.
+              {t("aboutAi")}
             </p>
           </div>
         </section>
@@ -692,6 +692,7 @@ function DataSection({
   docsMessage: string;
   onDeleted: () => Promise<void>;
 }) {
+  const t = useTranslations("refineryAccount.settings.data");
   // Read the role here rather than threading a prop through several layers.
   const dataSectionRole = useEffectiveRole();
   const isOrgStaff = !!dataSectionRole?.orgRole;
@@ -702,7 +703,11 @@ function DataSection({
   // stay ticked (a full copy still carries anything there) but are not shown.
   const EXPORT_CATS = isOrgStaff ? EXPORT_BOXES.filter((b) => !STAFF_HIDDEN_EXPORT_BOXES.has(b.key)) : EXPORT_BOXES;
   const anyChecked = Object.values(exportCats).some(Boolean);
-  const leftOut = exportLeavesOut(exportCats);
+  const lcFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+  const leftOut = exportLeavesOut(exportCats).length === 0 ? [] : [
+    ...EXPORT_BOXES.filter((b) => !exportCats[b.key]).map((b) => lcFirst(t(`boxes.${b.key}`))),
+    ...FULL_COPY_ONLY.map((c) => t(`fullCopyOnly.${c.key}`)),
+  ];
 
   return (
     <section className="mb-8">
@@ -710,37 +715,32 @@ function DataSection({
         {/* How we handle your data */}
         <div className="bg-t-panel p-5 border border-t-line">
           <h3 className="font-semibold text-t-white mb-2">
-            How we handle your data
+            {t("handleTitle")}
           </h3>
           <ul className="space-y-2 text-sm text-t-phos-dim">
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
               {isOrgStaff
                 ? "Your settings, saved views and drafts are saved to your account so your work is here when you come back"
-                : "Your Forge answers and results are saved to your account so your work is here when you come back"}
+                : t("handleForge")}
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              Conversations with t.ROY are saved to your account so he can
-              remember your recent work. Deleting your data clears them.
+              {t("handleChats")}
             </li>
             {recordStep && !isOrgStaff && (
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              In the record check, what you type about your record goes to
-              the AI only after you say yes on that screen. A saved checklist
-              keeps the list and the state. What you typed is kept only if
-              you tick the box for it. Taking back your yes deletes your
-              saved checklists.
+              {t("handleRecordCheck")}
             </li>
             )}
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              {isOrgStaff ? STAFF_DATA_WORDS.sharing : "We never sell your personal information. It goes only to the services that run the app, and to a program when you choose to share with it"}
+              {isOrgStaff ? STAFF_DATA_WORDS.sharing : t("handleSell")}
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              You can export or delete your data at any time
+              {t("handleAnytime")}
             </li>
           </ul>
         </div>
@@ -748,16 +748,16 @@ function DataSection({
         {/* Export data -- per category, then the document files */}
         <div className="bg-t-panel p-5 border border-t-line" id="settings-export">
           <h3 className="font-semibold text-t-white">
-            Download your data
+            {t("downloadTitle")}
           </h3>
           <p className="text-sm text-t-phos-dim mt-1 mb-3">
             {isOrgStaff
               ? `Get a copy of what we have stored, as one file. ${STAFF_DATA_WORDS.exportScope}`
-              : "Get a copy of what we have stored, as one file. Keep every box ticked for a full copy. Your document files come separately, with the button further down."}
+              : t("downloadBody")}
           </p>
           <div className="mb-4 space-y-2">
-            <label htmlFor="export-password" className="block text-sm text-t-white">Password for downloads</label>
-            <p id="export-password-help" className="text-sm text-t-phos-dim">If your account has a password, enter it here. If it has no password, leave this blank. Confirm the device below before downloading.</p>
+            <label htmlFor="export-password" className="block text-sm text-t-white">{t("passwordLabel")}</label>
+            <p id="export-password-help" className="text-sm text-t-phos-dim">{t("passwordHelp")}</p>
             <PasswordInput id="export-password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} autoComplete="current-password" aria-describedby="export-password-help" className="w-full min-h-touch border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white" />
           </div>
           <div className="space-y-2 mb-4">
@@ -771,17 +771,17 @@ function DataSection({
                   }
                   className="h-4 w-4 accent-t-amber"
                 />
-                {c.label}
+                {t(`boxes.${c.key}`)}
               </label>
             ))}
           </div>
           {leftOut.length > 0 && (
             <p className="text-sm text-t-amber-bright mb-4" data-testid="export-leaves-out">
-              This copy leaves out {leftOut.join(", ")}. Tick every box for a full copy.
+              {t("leavesOut", { list: leftOut.join(", ") })}
             </p>
           )}
           <div className="border border-t-amber bg-t-panel-2 p-3 mb-4" role="note">
-            <p className="text-sm text-t-white">{SHARED_COMPUTER_WARNING}</p>
+            <p className="text-sm text-t-white">{t("sharedWarning")}</p>
             <label className="mt-2 flex items-center gap-3 text-sm text-t-white cursor-pointer">
               <input
                 type="checkbox"
@@ -789,7 +789,7 @@ function DataSection({
                 onChange={(e) => setOwnDevice(e.target.checked)}
                 className="h-4 w-4 accent-t-amber"
               />
-              {OWN_DEVICE_LABEL}
+              {t("ownDevice")}
             </label>
           </div>
           <button
@@ -798,24 +798,22 @@ function DataSection({
             className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
           >
             {exportStatus === "exporting"
-              ? "Preparing..."
+              ? t("preparing")
               : exportStatus === "done"
-                ? "Downloaded"
-                : "Export"}
+                ? t("downloaded")
+                : t("export")}
           </button>
           {!isOrgStaff && <div className="mt-5 border-t border-t-line pt-4">
-            <h4 className="text-sm font-semibold text-t-white">Your document files</h4>
+            <h4 className="text-sm font-semibold text-t-white">{t("docsTitle")}</h4>
             <p className="text-sm text-t-phos-dim mt-1 mb-3">
-              Every file in Private records and documents, in one ZIP, up to about
-              4 MB at a time. If you have more than that, download them one at a
-              time from that page.
+              {t("docsBody")}
             </p>
             <button
               onClick={downloadDocuments}
               disabled={docsStatus !== "idle" || !ownDevice}
               className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
             >
-              {docsStatus === "working" ? "Preparing..." : docsStatus === "done" ? "Downloaded" : "Download my documents"}
+              {docsStatus === "working" ? t("preparing") : docsStatus === "done" ? t("downloaded") : t("docsButton")}
             </button>
             {docsMessage && <p role="alert" className="text-sm text-t-amber-bright mt-2">{docsMessage}</p>}
           </div>}
@@ -859,42 +857,40 @@ function AccountExtras({
   hideBusy: boolean;
   unhideEmployer: (id: string) => void;
 }) {
+  const t = useTranslations("refineryAccount.settings.accountExtras");
+  const locale = useLocale();
   return (
     <>
       {/* Program code: joins a program's seat (S6). It promises no extra AI calls and shares nothing on its own. */}
       <section className="mb-8 mt-8" id="settings-program-code">
         <h2 className="text-lg font-bold text-t-white mb-4">
-          Join a program with a code
+          {t("joinTitle")}
         </h2>
         <div className="space-y-4">
           <div className="bg-t-panel p-5 border border-t-line">
             <h3 className="font-semibold text-t-white mb-2">
-              Enter a code
+              {t("enterCode")}
             </h3>
             <p className="text-sm text-t-phos-dim mb-3">
-              If a program (like a job center or nonprofit) gave you a code, enter it
-              here. The code joins you to a program&apos;s seat. If the program has
-              rules about sharing, you see them before you join, and joining shares
-              nothing by itself. If the code changes your AI allowance, Usage below
-              shows the new number.
+              {t("enterCodeBody")}
             </p>
             <form onSubmit={redeemCode} className="flex gap-2">
               <input
                 type="text"
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                placeholder="Your code"
-                aria-label="Program code"
+                placeholder={t("codePlaceholder")}
+                aria-label={t("codeAria")}
                 className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
                 disabled={codeStatus === "redeeming"}
               />
               <TBtn type="submit" disabled={codeStatus === "redeeming" || !codeInput.trim()}>
-                {codeStatus === "redeeming" ? "..." : "join"}
+                {codeStatus === "redeeming" ? "..." : t("join")}
               </TBtn>
             </form>
             {codeStatus === "success" && (
               <p className="text-sm text-t-amber-bright mt-2">
-                You joined. Your program is listed below.
+                {t("joined")}
               </p>
             )}
             {codeStatus === "error" && (
@@ -906,7 +902,7 @@ function AccountExtras({
           {redeemedCodes.length > 0 && (
             <div className="bg-t-panel p-5 border border-t-line">
               <h3 className="font-semibold text-t-white mb-3">
-                Your programs
+                {t("yourPrograms")}
               </h3>
               <div className="space-y-2">
                 {redeemedCodes.map((code, i) => (
@@ -918,11 +914,11 @@ function AccountExtras({
                       <p className="text-sm font-medium text-t-white">
                         {code.partner_name}
                       </p>
-                      <p className="text-xs text-t-phos-dim">Joined with a code</p>
+                      <p className="text-xs text-t-phos-dim">{t("joinedWithCode")}</p>
                     </div>
                     <div className="text-right">
                       <span className="block text-xs text-t-phos-dim">
-                        {new Date(code.redeemed_at).toLocaleDateString()}
+                        {new Date(code.redeemed_at).toLocaleDateString(locale === "es" ? "es" : undefined)}
                       </span>
                       {code.org_id && <LeaveOrgButton orgId={code.org_id} orgName={code.partner_name} />}
                     </div>
@@ -936,11 +932,10 @@ function AccountExtras({
 
       {/* N1: Hidden Employers */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-t-white mb-4">Hidden Employers</h2>
+        <h2 className="text-lg font-bold text-t-white mb-4">{t("hiddenTitle")}</h2>
         <div className="bg-t-panel p-5 border border-t-line">
           <p className="text-sm text-t-phos-dim mb-4">
-            Employers you hide never show up in your job search. Hide a former employer, or
-            anywhere you have already applied. You can un-hide any of them here.
+            {t("hiddenBody")}
           </p>
 
           <form onSubmit={addHiddenEmployer} className="space-y-2 mb-4">
@@ -948,7 +943,7 @@ function AccountExtras({
               type="text"
               value={hideInput}
               onChange={(e) => setHideInput(e.target.value)}
-              placeholder="Employer name to hide"
+              placeholder={t("hideNamePlaceholder")}
               maxLength={200}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
@@ -956,17 +951,17 @@ function AccountExtras({
               type="text"
               value={hideReasonInput}
               onChange={(e) => setHideReasonInput(e.target.value)}
-              placeholder="Reason (optional)"
+              placeholder={t("hideReasonPlaceholder")}
               maxLength={280}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
             <TBtn type="submit" disabled={hideBusy || !hideInput.trim()}>
-              {hideBusy ? "..." : "hide employer"}
+              {hideBusy ? "..." : t("hideButton")}
             </TBtn>
           </form>
 
           {hiddenEmployers.length === 0 ? (
-            <p className="text-sm text-t-phos-dim">You have not hidden any employers.</p>
+            <p className="text-sm text-t-phos-dim">{t("noneHidden")}</p>
           ) : (
             <div className="space-y-2">
               {hiddenEmployers.map((e) => (
@@ -982,7 +977,7 @@ function AccountExtras({
                     onClick={() => unhideEmployer(e.id)}
                     className="t-focus flex-shrink-0 text-xs font-medium text-t-amber-bright hover:text-t-amber"
                   >
-                    Un-hide
+                    {t("unhide")}
                   </button>
                 </div>
               ))}
@@ -995,14 +990,16 @@ function AccountExtras({
   );
 }
 
-function fmtWhen(s: string | null): string {
+function fmtWhen(s: string | null, locale?: string): string {
   if (!s) return "";
   const d = new Date(s);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString(locale === "es" ? "es" : undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function SecuritySection() {
+  const t = useTranslations("refineryAccount.settings.security");
+  const locale = useLocale();
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [current, setCurrent] = useState("");
@@ -1038,7 +1035,7 @@ function SecuritySection() {
       return;
     }
     if (pw !== confirm) {
-      setErrorMsg("Those two don't match yet.");
+      setErrorMsg(t("noMatch"));
       setStatus("error");
       return;
     }
@@ -1062,12 +1059,12 @@ function SecuritySection() {
         setTimeout(() => setStatus("idle"), 3500);
       } else {
         const data = await res.json().catch(() => ({}));
-        setErrorMsg(data.error || "Could not save that. Try again.");
+        setErrorMsg(data.error || t("saveError"));
         setNeedsCurrent(!!data.needsCurrent);
         setStatus("error");
       }
     } catch {
-      setErrorMsg("Something went wrong. Try again.");
+      setErrorMsg(t("wentWrong"));
       setStatus("error");
     }
   }
@@ -1075,28 +1072,28 @@ function SecuritySection() {
   const creating = hasPassword === false;
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-t-white mb-1">Security</h2>
+      <h2 className="text-lg font-bold text-t-white mb-1">{t("title")}</h2>
       <p className="text-sm text-t-phos-dim mb-4">
-        Manage your password, two-step verification and signed-in devices.
+        {t("intro")}
       </p>
 
       <div className="bg-t-panel p-5 border border-t-line" id="settings-password">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <h3 className="font-semibold text-t-white">
-              {creating ? "Create a password" : "Password"}
+              {creating ? t("createTitle") : t("passwordTitle")}
             </h3>
             <p className="text-sm text-t-phos-dim mt-0.5">
               {creating
-                ? "Set a password so you can sign in instantly without waiting for an email link."
+                ? t("createBody")
                 : updatedAt
-                  ? `Last changed ${fmtWhen(updatedAt)}.`
-                  : "Sign in with your email and password."}
+                  ? t("lastChanged", { date: fmtWhen(updatedAt, locale) })
+                  : t("signInWithPassword")}
             </p>
           </div>
           {!creating && hasPassword !== null && (
             <span className="flex-shrink-0 text-[11px] px-2 py-0.5 border border-t-phos text-t-phos">
-              Password set
+              {t("passwordSet")}
             </span>
           )}
         </div>
@@ -1105,10 +1102,10 @@ function SecuritySection() {
           {hasPassword && (
             <PasswordInput
               id="settings-current-password"
-              aria-label="Current password"
+              aria-label={t("currentPassword")}
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
-              placeholder="Current password"
+              placeholder={t("currentPassword")}
               autoComplete="current-password"
               className={`w-full px-4 py-3 border text-sm bg-t-panel-2 text-t-white focus:outline-none transition-colors min-h-touch ${
                 needsCurrent ? "border-t-red focus:border-t-red" : "border-t-line focus:border-t-amber"
@@ -1117,24 +1114,24 @@ function SecuritySection() {
           )}
           <PasswordInput
             id="settings-new-password"
-            aria-label="New password"
+            aria-label={t("newPassword")}
             value={pw}
             onChange={(e) => setPw(e.target.value)}
-            placeholder={creating ? "New password (10+ characters)" : "New password"}
+            placeholder={creating ? t("newPasswordCreate", { min: PASSWORD_MIN_LENGTH }) : t("newPassword")}
             autoComplete="new-password"
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
 
           <p className="text-xs text-t-phos-dim">
-            {PASSWORD_HINT}. Use a password you don&apos;t use on another site. A password manager can make and remember one for you.
+            {t("passwordHint", { min: PASSWORD_MIN_LENGTH })}
           </p>
 
           <PasswordInput
             id="settings-confirm-password"
-            aria-label="Confirm new password"
+            aria-label={t("confirmPassword")}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Confirm new password"
+            placeholder={t("confirmPassword")}
             autoComplete="new-password"
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
@@ -1142,12 +1139,12 @@ function SecuritySection() {
           {status === "error" && <p className="text-sm text-t-red">{errorMsg}</p>}
           {status === "done" && (
             <p className="text-sm text-t-phos">
-              {creating ? "Password created." : "Password updated."}
+              {creating ? t("created") : t("updated")}
             </p>
           )}
 
           <TBtn type="submit" disabled={status === "saving" || !pw || !confirm || (hasPassword === true && !current)}>
-            {status === "saving" ? "saving..." : creating ? "create password" : "update password"}
+            {status === "saving" ? t("saving") : creating ? t("createButton") : t("updateButton")}
           </TBtn>
         </form>
       </div>
@@ -1171,6 +1168,8 @@ interface DeviceSession {
 }
 
 function ActiveDevicesCard() {
+  const t = useTranslations("refineryAccount.settings.devices");
+  const locale = useLocale();
   const [sessions, setSessions] = useState<DeviceSession[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -1224,10 +1223,9 @@ function ActiveDevicesCard() {
     <div className="bg-t-panel p-5 border border-t-line mt-3" id="settings-devices">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
-          <h3 className="font-semibold text-t-white">Active devices</h3>
+          <h3 className="font-semibold text-t-white">{t("title")}</h3>
           <p className="text-sm text-t-phos-dim mt-0.5">
-            Where you&apos;re signed in. Revoke anything you don&apos;t recognize. It gets
-            signed out right away.
+            {t("intro")}
           </p>
         </div>
         {hasOthers && (
@@ -1237,12 +1235,12 @@ function ActiveDevicesCard() {
             disabled={busy === "others"}
             className="t-focus flex-shrink-0 text-xs px-3 py-1.5 border border-t-line text-t-phos-dim hover:text-t-amber-bright disabled:opacity-50"
           >
-            {busy === "others" ? "..." : "Sign out others"}
+            {busy === "others" ? "..." : t("signOutOthers")}
           </button>
         )}
       </div>
       {sessions === null ? (
-        <p className="text-sm text-t-phos-dim">Loading...</p>
+        <p className="text-sm text-t-phos-dim">{t("loading")}</p>
       ) : (
         <ul className="space-y-2">
           {sessions.map((s) => (
@@ -1255,12 +1253,12 @@ function ActiveDevicesCard() {
                   {s.device}
                   {s.current && (
                     <span className="ml-2 text-[10px] px-1.5 py-0.5 border border-t-phos text-t-phos">
-                      This device
+                      {t("thisDevice")}
                     </span>
                   )}
                 </div>
                 <div className="text-xs text-t-phos-dim">
-                  {s.location ? `${s.location} · ` : ""}last active {fmtWhen(s.lastSeenAt)}
+                  {s.location ? `${s.location} · ` : ""}{t("lastActive", { date: fmtWhen(s.lastSeenAt, locale) })}
                 </div>
               </div>
               {!s.current && (
@@ -1270,7 +1268,7 @@ function ActiveDevicesCard() {
                   disabled={busy === s.jti}
                   className="t-focus text-xs px-3 py-1.5 border border-t-line text-t-phos-dim hover:text-t-amber-bright disabled:opacity-50"
                 >
-                  {busy === s.jti ? "..." : "Revoke"}
+                  {busy === s.jti ? "..." : t("revoke")}
                 </button>
               )}
             </li>
@@ -1288,6 +1286,7 @@ function TwoFactorCard({
   enabled: boolean;
   refresh: () => Promise<void> | void;
 }) {
+  const t = useTranslations("refineryAccount.settings.twoFactor");
   const [mode, setMode] = useState<"idle" | "setup" | "backup">("idle");
   const [qr, setQr] = useState("");
   const [secret, setSecret] = useState("");
@@ -1316,7 +1315,7 @@ function TwoFactorCard({
       } else if (r.status === 409 && d.needsEmailProof) {
         setNeedsEmailProof(true);
       } else {
-        setErr(d.error || "Could not start setup.");
+        setErr(d.error || t("startError"));
       }
     } finally {
       setBusy(false);
@@ -1358,7 +1357,7 @@ function TwoFactorCard({
         await updateSession().catch(() => {});
         await refresh();
       } else {
-        setErr(d.error || "That code didn't match.");
+        setErr(d.error || t("codeMismatch"));
       }
     } finally {
       setBusy(false);
@@ -1380,7 +1379,7 @@ function TwoFactorCard({
         setDisableToken("");
         await refresh();
       } else {
-        setErr(d.error || "Could not turn it off.");
+        setErr(d.error || t("turnOffError"));
       }
     } finally {
       setBusy(false);
@@ -1399,11 +1398,11 @@ function TwoFactorCard({
     <div className="bg-t-panel p-5 border border-t-line mt-3" id="settings-two-step">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-t-white">Two-step verification</h3>
+          <h3 className="font-semibold text-t-white">{t("title")}</h3>
           <p className="text-sm text-t-phos-dim mt-0.5">
             {enabled
-              ? "On. You'll enter a code from your authenticator app every time you sign in, whether you use a password, an email link, or Google."
-              : "Add a second step at sign-in with an authenticator app (Google Authenticator, Authy, 1Password)."}
+              ? t("onBody")
+              : t("offBody")}
           </p>
         </div>
         <span
@@ -1411,7 +1410,7 @@ function TwoFactorCard({
             enabled ? "border-t-phos text-t-phos" : "border-t-line text-t-phos-dim"
           }`}
         >
-          {enabled ? "On" : "Off"}
+          {enabled ? t("on") : t("off")}
         </span>
       </div>
 
@@ -1421,7 +1420,7 @@ function TwoFactorCard({
       {!enabled && mode === "idle" && !needsEmailProof && (
         <div className="mt-4">
           <TBtn onClick={startSetup} disabled={busy}>
-            {busy ? "starting..." : "turn on two-step"}
+            {busy ? t("starting") : t("turnOn")}
           </TBtn>
         </div>
       )}
@@ -1429,21 +1428,19 @@ function TwoFactorCard({
       {/* S1: email not confirmed yet -> send a sign-in link to the account's own address */}
       {!enabled && needsEmailProof && (
         <div className="mt-4 space-y-3 border border-t-line p-4">
-          <p className="font-semibold text-t-white">Confirm your email first</p>
+          <p className="font-semibold text-t-white">{t("confirmEmailTitle")}</p>
           <p className="text-sm text-t-phos-dim">
-            Two-step verification needs a confirmed email address. We&apos;ll send a sign-in
-            link to {accountEmail || "your email address"}. Open it, and then you can turn on
-            two-step here.
+            {t("confirmEmailBody", { email: accountEmail || t("yourEmail") })}
           </p>
           {proofLink === "sent" ? (
-            <p className="text-sm text-t-phos">Check your email for the link.</p>
+            <p className="text-sm text-t-phos">{t("checkEmail")}</p>
           ) : (
             <TBtn onClick={sendProofLink} disabled={proofLink === "sending" || !accountEmail}>
-              {proofLink === "sending" ? "sending..." : "Email me a link"}
+              {proofLink === "sending" ? t("sending") : t("emailLink")}
             </TBtn>
           )}
           {proofLink === "failed" && (
-            <p className="text-sm text-t-red">We couldn&apos;t send the link. Try again in a few minutes.</p>
+            <p className="text-sm text-t-red">{t("sendFailed")}</p>
           )}
         </div>
       )}
@@ -1452,17 +1449,17 @@ function TwoFactorCard({
       {!enabled && mode === "setup" && (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-t-phos-dim">
-            1. Scan this with your authenticator app.
+            {t("scan")}
           </p>
           {qr && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={qr} alt="Two-factor QR code" className="border border-t-line bg-white p-2" width={200} height={200} />
+            <img src={qr} alt={t("qrAlt")} className="border border-t-line bg-white p-2" width={200} height={200} />
           )}
           <p className="text-xs text-t-phos-dim">
-            Can&apos;t scan? Enter this key manually:
+            {t("cantScan")}
             <span className="block mt-1 font-mono text-t-white break-all">{secret}</span>
           </p>
-          <p className="text-sm text-t-phos-dim">2. Enter the 6-digit code it shows.</p>
+          <p className="text-sm text-t-phos-dim">{t("enterCode")}</p>
           <div className="flex flex-wrap gap-2">
             <input
               type="text"
@@ -1473,14 +1470,14 @@ function TwoFactorCard({
               className="px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white tracking-widest focus:border-t-amber focus:outline-none min-h-touch w-40"
             />
             <TBtn onClick={confirmEnable} disabled={busy || code.length < 6}>
-              {busy ? "verifying..." : "verify & turn on"}
+              {busy ? t("verifying") : t("verify")}
             </TBtn>
             <button
               type="button"
               onClick={() => { setMode("idle"); setErr(""); }}
               className="text-sm text-t-phos-dim hover:text-t-white px-3"
             >
-              cancel
+              {t("cancel")}
             </button>
           </div>
         </div>
@@ -1490,8 +1487,7 @@ function TwoFactorCard({
       {mode === "backup" && (
         <div className="mt-4 space-y-3">
           <p className="text-sm text-t-phos">
-            Two-step is on. Save these backup codes somewhere safe. Each one works once if you
-            ever lose your phone. You won&apos;t see them again.
+            {t("backupIntro")}
           </p>
           <div className="grid grid-cols-2 gap-2 bg-t-panel-2 border border-t-line p-3 font-mono text-sm text-t-white">
             {backup.map((c) => (
@@ -1499,13 +1495,13 @@ function TwoFactorCard({
             ))}
           </div>
           <div className="flex gap-2">
-            <TBtn onClick={copyBackup}>copy codes</TBtn>
+            <TBtn onClick={copyBackup}>{t("copyCodes")}</TBtn>
             <button
               type="button"
               onClick={() => setMode("idle")}
               className="text-sm text-t-phos-dim hover:text-t-white px-3"
             >
-              I saved them
+              {t("savedThem")}
             </button>
           </div>
         </div>
@@ -1520,7 +1516,7 @@ function TwoFactorCard({
               onClick={() => { setShowDisable(true); setErr(""); }}
               className="text-sm text-t-phos-dim hover:text-t-amber-bright underline"
             >
-              Turn off two-step verification
+              {t("turnOff")}
             </button>
           ) : (
             <div className="flex flex-wrap gap-2 items-center">
@@ -1528,18 +1524,18 @@ function TwoFactorCard({
                 type="text"
                 value={disableToken}
                 onChange={(e) => setDisableToken(e.target.value)}
-                placeholder="Current code or a backup code"
+                placeholder={t("disablePlaceholder")}
                 className="px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch flex-1 min-w-[220px]"
               />
               <TBtn onClick={disable} disabled={busy || !disableToken.trim()}>
-                {busy ? "..." : "confirm turn off"}
+                {busy ? "..." : t("confirmTurnOff")}
               </TBtn>
               <button
                 type="button"
                 onClick={() => { setShowDisable(false); setDisableToken(""); setErr(""); }}
                 className="text-sm text-t-phos-dim hover:text-t-white px-3"
               >
-                cancel
+                {t("cancel")}
               </button>
             </div>
           )}
@@ -1550,9 +1546,10 @@ function TwoFactorCard({
 }
 
 function AccountSection() {
+  const t = useTranslations("refineryAccount.settings.account");
   const { data: session } = useSession();
   const accountRole = useEffectiveRole();
-  const contactHeading = accountRole?.orgRole ? "Your contact info" : "Resume Contact Info";
+  const contactHeading = accountRole?.orgRole ? "Your contact info" : t("contactHeading");
   const [contact, setContact] = useState<{
     name: string; phone: string; email: string; city: string; state: string;
   } | null>(null);
@@ -1593,13 +1590,13 @@ function AccountSection() {
 
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-t-white mb-4">Account</h2>
+      <h2 className="text-lg font-bold text-t-white mb-4">{t("title")}</h2>
       <div className="bg-t-panel p-5 border border-t-line">
         {/* Auth email */}
         <div className="flex items-center justify-between pb-3 border-b border-t-line mb-3">
           <div>
-            <p className="text-xs text-t-phos-dim uppercase">Signed in as</p>
-            <p className="text-sm font-medium text-t-white">{session?.user?.email || "Unknown"}</p>
+            <p className="text-xs text-t-phos-dim uppercase">{t("signedInAs")}</p>
+            <p className="text-sm font-medium text-t-white">{session?.user?.email || t("unknown")}</p>
           </div>
           <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">
             {accountChipText({ orgRole: accountRole?.orgRole, capabilities: accountRole?.capabilities ?? [], tier: (session?.user as { tier?: string } | undefined)?.tier })}
@@ -1615,40 +1612,40 @@ function AccountSection() {
                 onClick={() => setEditing(true)}
                 className="text-xs text-t-amber-bright hover:text-t-amber font-medium"
               >
-                Edit
+                {t("edit")}
               </button>
             </div>
             {contact ? (
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-t-phos-dim">Name:</span> <span className="text-t-white">{contact.name || "Not set"}</span></div>
-                <div><span className="text-t-phos-dim">Phone:</span> <span className="text-t-white">{contact.phone || "Not set"}</span></div>
-                <div><span className="text-t-phos-dim">Email:</span> <span className="text-t-white">{contact.email || "Not set"}</span></div>
-                <div><span className="text-t-phos-dim">Location:</span> <span className="text-t-white">{[contact.city, contact.state].filter(Boolean).join(", ") || "Not set"}</span></div>
+                <div><span className="text-t-phos-dim">{t("name")}</span> <span className="text-t-white">{contact.name || t("notSet")}</span></div>
+                <div><span className="text-t-phos-dim">{t("phone")}</span> <span className="text-t-white">{contact.phone || t("notSet")}</span></div>
+                <div><span className="text-t-phos-dim">{t("email")}</span> <span className="text-t-white">{contact.email || t("notSet")}</span></div>
+                <div><span className="text-t-phos-dim">{t("location")}</span> <span className="text-t-white">{[contact.city, contact.state].filter(Boolean).join(", ") || t("notSet")}</span></div>
               </div>
             ) : (
-              <p className="text-sm text-t-phos-dim">{accountRole?.orgRole ? "No contact info set yet. Use Edit to add it." : "No contact info set. Complete your profile on the dashboard."}</p>
+              <p className="text-sm text-t-phos-dim">{accountRole?.orgRole ? "No contact info set yet. Use Edit to add it." : t("noContact")}</p>
             )}
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-3">
-            <p className="text-xs text-t-phos-dim uppercase mb-1">Edit {contactHeading}</p>
+            <p className="text-xs text-t-phos-dim uppercase mb-1">{t("editHeading", { heading: contactHeading })}</p>
             <input
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              placeholder="Full name"
+              placeholder={t("fullName")}
               className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />
             <input
               value={editForm.phone}
               onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              placeholder="Phone"
+              placeholder={t("phonePlaceholder")}
               type="tel"
               className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />
             <input
               value={editForm.email}
               onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              placeholder={accountRole?.orgRole ? "Email" : "Resume email"}
+              placeholder={accountRole?.orgRole ? "Email" : t("resumeEmail")}
               type="email"
               className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />
@@ -1656,27 +1653,27 @@ function AccountSection() {
               <input
                 value={editForm.city}
                 onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                placeholder="City"
+                placeholder={t("city")}
                 className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
               />
               <input
                 value={editForm.state}
                 onChange={(e) => setEditForm({ ...editForm, state: e.target.value.toUpperCase() })}
-                placeholder="State"
+                placeholder={t("state")}
                 maxLength={2}
                 className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors uppercase"
               />
             </div>
             <div className="flex gap-2 items-center">
               <TBtn type="submit" disabled={saving} size="sm">
-                {saving ? "saving..." : "save"}
+                {saving ? t("saving") : t("save")}
               </TBtn>
               <button
                 type="button"
                 onClick={() => { setEditing(false); setEditForm(contact || { name: "", phone: "", email: "", city: "", state: "" }); }}
                 className="px-4 py-2 text-sm text-t-phos-dim hover:text-t-white transition-colors"
               >
-                Cancel
+                {t("cancel")}
               </button>
             </div>
           </form>
@@ -1685,25 +1682,24 @@ function AccountSection() {
 
       {/* Sign-in methods */}
       <div className="bg-t-panel p-5 border border-t-line mt-4">
-        <h3 className="font-semibold text-t-white mb-3">Sign-in Methods</h3>
+        <h3 className="font-semibold text-t-white mb-3">{t("methodsTitle")}</h3>
         <div className="space-y-3 text-sm">
           <div className="flex items-center justify-between py-2 border-b border-t-line">
             <div>
-              <p className="font-medium text-t-white">Email & Password</p>
-              <p className="text-xs text-t-phos-dim">Sign in with your email and a password you set</p>
+              <p className="font-medium text-t-white">{t("emailPassword")}</p>
+              <p className="text-xs text-t-phos-dim">{t("emailPasswordBody")}</p>
             </div>
-            <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">Active</span>
+            <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">{t("active")}</span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-t-line">
             <div>
-              <p className="font-medium text-t-white">Magic Link</p>
-              <p className="text-xs text-t-phos-dim">One-time sign-in link sent to your email. No password needed.</p>
+              <p className="font-medium text-t-white">{t("magicLink")}</p>
+              <p className="text-xs text-t-phos-dim">{t("magicLinkBody")}</p>
             </div>
-            <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">Available</span>
+            <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">{t("available")}</span>
           </div>
           <p className="text-xs text-t-phos-dim leading-relaxed pt-1">
-            Lost your device? Use the magic link option on the sign-in page to get back in.
-            You can set a new password anytime below.
+            {t("lostDevice")}
           </p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { useUserTier, type UserTier } from "@/lib/useUserTier";
 
 const TIER_RANK: Record<string, number> = {
@@ -19,26 +20,27 @@ interface TierGateProps {
 }
 
 function DefaultFallback() {
+  const t = useTranslations("refineryHome.tierGate");
   return (
     <div className="border border-dashed border-t-line p-8 text-center">
       <p className="text-lg font-semibold text-t-white mb-2">
-        Full access requires a partner code
+        {t("title")}
       </p>
       <p className="font-body text-sm text-t-bone-dim mb-4">
-        This tool is available to clients and partners. Try The Forge first. It&apos;s free and shows you what we do.
+        {t("body")}
       </p>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <a
           href="https://forge.steelmanresumes.com"
           className="t-focus px-6 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors"
         >
-          Try The Forge
+          {t("tryForge")}
         </a>
         <a
           href="/dashboard/settings"
           className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors"
         >
-          Enter a Partner Code
+          {t("enterCode")}
         </a>
       </div>
     </div>

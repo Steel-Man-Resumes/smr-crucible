@@ -11,21 +11,23 @@ import { useState } from "react";
 import Link from "next/link";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { TBtn } from "@crucible/consumer-ui";
+import { useTranslations } from "next-intl";
 
 const CATEGORIES = [
-  { value: "housing", label: "Housing & Shelter" },
-  { value: "transportation", label: "Transportation" },
-  { value: "legal", label: "Legal Aid" },
-  { value: "id_documents", label: "ID & Documents" },
-  { value: "mental_health", label: "Mental Health" },
-  { value: "substance", label: "Recovery Support" },
-  { value: "education", label: "Education & Training" },
-  { value: "financial", label: "Financial Literacy" },
-  { value: "employment", label: "Employment Help" },
-  { value: "other", label: "Other" },
+  { value: "housing" },
+  { value: "transportation" },
+  { value: "legal" },
+  { value: "id_documents" },
+  { value: "mental_health" },
+  { value: "substance" },
+  { value: "education" },
+  { value: "financial" },
+  { value: "employment" },
+  { value: "other" },
 ];
 
 export default function GetListedPage() {
+  const t = useTranslations("refineryShell.getListed");
   const [form, setForm] = useState({
     orgName: "",
     category: "",
@@ -69,12 +71,12 @@ export default function GetListedPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrors(data.errors || [data.error || "Something went wrong"]);
+        setErrors(data.errors || [data.error || t("wentWrongShort")]);
       } else {
         setSubmitted(true);
       }
     } catch {
-      setErrors(["Something went wrong. Please try again."]);
+      setErrors([t("wentWrong")]);
     } finally {
       setSubmitting(false);
     }
@@ -102,17 +104,16 @@ export default function GetListedPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-t-white mb-3">
-            Thank you!
+            {t("thanks")}
           </h1>
           <p className="text-base text-t-phos-dim mb-6 leading-relaxed">
-            We&apos;ll review your submission and add your organization within
-            48 hours. We may reach out if we need more information.
+            {t("thanksBody")}
           </p>
           <Link
             href="/intro"
             className="text-sm text-t-amber-bright hover:text-t-amber font-medium"
           >
-            &larr; Back to Steel Man Resumes
+            &larr; {t("back")}
           </Link>
         </div>
       </div>
@@ -123,39 +124,36 @@ export default function GetListedPage() {
     <div className="min-h-screen bg-t-bg px-4 py-12">
       <div className="max-w-lg mx-auto">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Get Your Organization Listed
+          {t("title")}
         </h1>
         <p className="text-base text-t-phos-dim mb-8 leading-relaxed">
-          We&apos;re building a network of verified resources for people
-          rebuilding their careers in Milwaukee and Waukesha. If your
-          organization offers support services, we want to connect people to
-          you.
+          {t("lead")}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Org name */}
           <Field
-            label="Organization Name"
+            label={t("orgName")}
             required
             value={form.orgName}
             onChange={(v) => update("orgName", v)}
-            placeholder="e.g., Milwaukee Community Services"
+            placeholder={t("orgNamePlaceholder")}
           />
 
           {/* Category */}
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Category <span className="text-t-red">*</span>
+              {t("category")} <span className="text-t-red">*</span>
             </label>
             <select
               value={form.category}
               onChange={(e) => update("category", e.target.value)}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             >
-              <option value="">Select a category</option>
+              <option value="">{t("categoryPlaceholder")}</option>
               {CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>
-                  {c.label}
+                  {t(`categories.${c.value}`)}
                 </option>
               ))}
             </select>
@@ -163,16 +161,16 @@ export default function GetListedPage() {
 
           {/* City */}
           <Field
-            label="City"
+            label={t("city")}
             required
             value={form.city}
             onChange={(v) => update("city", v)}
-            placeholder="e.g., Milwaukee"
+            placeholder={t("cityPlaceholder")}
           />
 
           {/* Phone */}
           <Field
-            label="Phone"
+            label={t("phone")}
             value={form.phone}
             onChange={(v) => update("phone", v)}
             placeholder="(414) 555-0100"
@@ -180,7 +178,7 @@ export default function GetListedPage() {
 
           {/* Website */}
           <Field
-            label="Website"
+            label={t("website")}
             value={form.website}
             onChange={(v) => update("website", v)}
             placeholder="https://yourorg.com"
@@ -189,13 +187,13 @@ export default function GetListedPage() {
           {/* Description */}
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Describe Your Services{" "}
+              {t("description")}{" "}
               <span className="text-t-red">*</span>
             </label>
             <textarea
               value={form.description}
               onChange={(e) => update("description", e.target.value)}
-              placeholder="What services do you offer? Who can access them? Any eligibility requirements?"
+              placeholder={t("descriptionPlaceholder")}
               rows={4}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none resize-none"
             />
@@ -204,21 +202,21 @@ export default function GetListedPage() {
           <hr className="t-rule" />
 
           <p className="text-xs text-t-phos-dim">
-            We&apos;ll use this to reach you if we have questions.
+            {t("contactNote")}
           </p>
 
           {/* Contact name */}
           <Field
-            label="Your Name"
+            label={t("yourName")}
             required
             value={form.contactName}
             onChange={(v) => update("contactName", v)}
-            placeholder="Jane Smith"
+            placeholder={t("yourNamePlaceholder")}
           />
 
           {/* Contact email */}
           <Field
-            label="Your Email"
+            label={t("yourEmail")}
             required
             type="email"
             value={form.contactEmail}
@@ -242,12 +240,11 @@ export default function GetListedPage() {
 
           {/* Submit */}
           <TBtn type="submit" disabled={submitting} className="w-full">
-            {submitting ? "submitting..." : "submit for review"}
+            {submitting ? t("submitting") : t("submit")}
           </TBtn>
 
           <p className="text-xs text-t-phos-dim text-center">
-            We verify every submission. Your organization will be live within
-            48 hours.
+            {t("verifyNote")}
           </p>
         </form>
       </div>

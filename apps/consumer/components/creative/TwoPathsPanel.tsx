@@ -8,9 +8,10 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { laneKindOf, type CareerLane } from "@crucible/core/src/careerLaneShared";
 import { PLAN_MAX_STEPS } from "@crucible/core/src/twoPathPlan";
-import { PAIR_OFFER, PLAN_HOW, sendJson } from "@/lib/creative";
+import { sendJson } from "@/lib/creative";
 import type { CreativeCtx } from "./CreativeLaneView";
 
 const inputCls =
@@ -28,6 +29,8 @@ export function TwoPathsPanel({
   onChanged: () => Promise<void>;
   onAdoptLane: (lane: CareerLane) => void;
 }) {
+  const t = useTranslations("refineryResume.creative.twoPaths");
+  const ts = useTranslations("refineryResume.creative.shared");
   const lane = ctx.lane;
   const myPath = lane.path ?? "dream";
   const otherPath = myPath === "dream" ? "realistic" : "dream";
@@ -47,7 +50,7 @@ export function TwoPathsPanel({
   async function pairWith(partnerId: string) {
     const r = await sendJson(`/api/lanes/${lane.id}/pair`, "POST", { partnerId, path: myPath });
     if (!r.ok) {
-      setError(r.data.message || "Those two lanes can't be paired.");
+      setError(r.data.message || t("cantPair"));
       return false;
     }
     await onChanged();
@@ -57,7 +60,7 @@ export function TwoPathsPanel({
   if (!ctx.partner || !plan) {
     return (
       <div className="space-y-4" data-testid="two-paths-offer">
-        <p className="text-sm text-t-white">{PAIR_OFFER}</p>
+        <p className="text-sm text-t-white">{ts("pairOffer")}</p>
         <form
           className="border border-t-line bg-t-panel p-4 space-y-3"
           data-testid="pair-new-form"
@@ -76,40 +79,40 @@ export function TwoPathsPanel({
             if (r.ok && r.data.lane) {
               onAdoptLane(r.data.lane);
               await pairWith(r.data.lane.id);
-            } else setError(r.data.message || "That didn't save. Try again.");
+            } else setError(r.data.message || ts("didntSave"));
             setBusy(false);
           }}
         >
-          <h3 className="text-sm font-semibold uppercase text-t-phos">{otherPath === "realistic" ? "Start a realistic lane" : "Start a dream lane"}</h3>
+          <h3 className="text-sm font-semibold uppercase text-t-phos">{otherPath === "realistic" ? t("startRealistic") : t("startDream")}</h3>
           <label className="block text-sm text-t-white">
-            {otherPath === "realistic" ? "What job could you go after now?" : "What's the dream?"}{" "}
-            <span className="text-t-phos-dim">(you can fill this in later)</span>
+            {otherPath === "realistic" ? t("askRealistic") : t("askDream")}{" "}
+            <span className="text-t-phos-dim">{t("fillLater")}</span>
             <input className={`${inputCls} mt-1`} value={newTarget} maxLength={200} onChange={(e) => setNewTarget(e.target.value)} data-testid="pair-new-target" />
           </label>
           <label className="block text-sm text-t-white">
-            Lane name <span className="text-t-phos-dim">(optional)</span>
+            {t("nameLabel")} <span className="text-t-phos-dim">{t("optional")}</span>
             <input className={`${inputCls} mt-1`} value={newName} maxLength={40} onChange={(e) => setNewName(e.target.value)} />
           </label>
           <button type="submit" disabled={busy} data-testid="pair-new-submit" className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50">
-            {busy ? "Saving..." : "Start it and pair them"}
+            {busy ? ts("saving") : t("startPair")}
           </button>
         </form>
 
         {candidates.length > 0 && (
           <div className="border border-t-line bg-t-panel p-4 space-y-2" data-testid="pair-existing">
             <label className="block text-sm text-t-white">
-              Or pair with a lane you already have
+              {t("pairExisting")}
               <select className={`${inputCls} mt-1`} value={pick} onChange={(e) => setPick(e.target.value)}>
                 {candidates.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.name}
-                    {laneKindOf(l) === "creative" ? " (creative)" : laneKindOf(l) === "performer" ? " (performer)" : laneKindOf(l) === "cv" ? " (CV)" : ""}
+                    {laneKindOf(l) === "creative" ? ` (${t("kindCreative")})` : laneKindOf(l) === "performer" ? ` (${t("kindPerformer")})` : laneKindOf(l) === "cv" ? ` (${t("kindCv")})` : ""}
                   </option>
                 ))}
               </select>
             </label>
             <button type="button" disabled={busy || !pick} className="t-focus min-h-touch px-3 border border-t-line text-sm text-t-white" onClick={() => pairWith(pick)}>
-              Pair as my {otherPath} lane
+              {otherPath === "realistic" ? t("pairAsRealistic") : t("pairAsDream")}
             </button>
           </div>
         )}
@@ -122,15 +125,15 @@ export function TwoPathsPanel({
   const dream = lane.path === "dream" ? lane : ctx.partner;
   return (
     <div className="space-y-4" data-testid="plan-card">
-      <p className="text-xs text-t-phos-dim">{PLAN_HOW}</p>
+      <p className="text-xs text-t-phos-dim">{ts("planHow")}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="border border-t-line bg-t-panel p-3">
-          <p className="text-xs font-mono uppercase text-t-phos-dim">Realistic</p>
+          <p className="text-xs font-mono uppercase text-t-phos-dim">{t("realistic")}</p>
           <p className="text-sm font-semibold text-t-white" data-testid="plan-realistic">{realistic.name}</p>
           {plan.realisticAim && plan.realisticAim !== realistic.name && <p className="text-xs text-t-phos-dim">{plan.realisticAim}</p>}
         </div>
         <div className="border border-t-line bg-t-panel p-3">
-          <p className="text-xs font-mono uppercase text-t-phos-dim">Dream</p>
+          <p className="text-xs font-mono uppercase text-t-phos-dim">{t("dream")}</p>
           <p className="text-sm font-semibold text-t-white" data-testid="plan-dream">{dream.name}</p>
           {plan.goalFromLane && plan.goalFromLane !== dream.name && <p className="text-xs text-t-phos-dim">{plan.goalFromLane}</p>}
         </div>
@@ -142,29 +145,29 @@ export function TwoPathsPanel({
         onSubmit={async (e) => {
           e.preventDefault();
           const r = await sendJson(`/api/lanes/${lane.id}/plan`, "PUT", { goal, steps, helpNotes });
-          setMsg(r.ok ? "Plan saved." : r.data.message || "That didn't save. Try again.");
+          setMsg(r.ok ? t("planSaved") : r.data.message || ts("didntSave"));
           if (r.ok) await onChanged();
         }}
       >
         <label className="block text-sm text-t-white">
-          The goal, in your words
+          {t("goal")}
           <input className={`${inputCls} mt-1`} value={goal} maxLength={200} placeholder={plan.goalFromLane ?? ""} onChange={(e) => setGoal(e.target.value)} data-testid="plan-goal" />
         </label>
         <div>
-          <p className="text-sm text-t-white">Next steps on the realistic lane</p>
+          <p className="text-sm text-t-white">{t("nextSteps")}</p>
           <ol className="mt-1 list-decimal space-y-1 pl-5 text-sm text-t-white" data-testid="plan-steps">
             {steps.map((s, i) => (
               <li key={`${i}-${s}`}>
                 <span className="break-words">{s}</span>{" "}
                 <button type="button" className="t-focus text-xs text-t-phos-dim underline" onClick={() => setSteps(steps.filter((_, k) => k !== i))}>
-                  Remove
+                  {t("remove")}
                 </button>
               </li>
             ))}
           </ol>
           {steps.length < PLAN_MAX_STEPS && (
             <div className="mt-2 flex gap-2">
-              <input className={inputCls} value={step} maxLength={200} placeholder="Apply at two sign shops this week" onChange={(e) => setStep(e.target.value)} data-testid="plan-step" aria-label="A next step" />
+              <input className={inputCls} value={step} maxLength={200} placeholder={t("stepPlaceholder")} onChange={(e) => setStep(e.target.value)} data-testid="plan-step" aria-label={t("stepAria")} />
               <button
                 type="button"
                 className="t-focus min-h-touch px-3 border border-t-line text-sm text-t-white"
@@ -174,14 +177,14 @@ export function TwoPathsPanel({
                   setStep("");
                 }}
               >
-                Add
+                {t("add")}
               </button>
             </div>
           )}
         </div>
 
-        <section aria-label="Hurdles" data-testid="plan-hurdles">
-          <p className="text-sm text-t-white">Hurdles to know about</p>
+        <section aria-label={t("hurdlesAria")} data-testid="plan-hurdles">
+          <p className="text-sm text-t-white">{t("hurdles")}</p>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-t-phos">
             {plan.hurdles.map((h) => (
               <li key={h.id}>{h.text}</li>
@@ -190,8 +193,8 @@ export function TwoPathsPanel({
           <p className="mt-1 text-xs text-t-phos-dim">{plan.notAVerdict}</p>
         </section>
 
-        <section aria-label="Where to get help" data-testid="plan-help">
-          <p className="text-sm text-t-white">Where to get help</p>
+        <section aria-label={t("helpAria")} data-testid="plan-help">
+          <p className="text-sm text-t-white">{t("helpTitle")}</p>
           <ul className="mt-1 space-y-1 text-sm">
             {plan.help.map((h) => (
               <li key={h.id}>
@@ -203,25 +206,25 @@ export function TwoPathsPanel({
             ))}
           </ul>
           <label className="mt-2 block text-sm text-t-white">
-            People or programs helping you (optional)
+            {t("helpNotes")}
             <textarea className={`${inputCls} mt-1`} rows={2} value={helpNotes} maxLength={600} onChange={(e) => setHelpNotes(e.target.value)} data-testid="plan-help-notes" />
           </label>
         </section>
 
         <div className="flex flex-wrap gap-2">
           <button type="submit" className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright" data-testid="plan-save">
-            Save plan
+            {t("savePlan")}
           </button>
           <button
             type="button"
             className="t-focus min-h-touch px-3 text-sm text-t-phos-dim underline"
             onClick={async () => {
               const r = await sendJson(`/api/lanes/${lane.id}/pair`, "DELETE");
-              setMsg(r.ok ? "Unpaired. Your plan stays with the dream lane." : r.data.message || "That didn't work.");
+              setMsg(r.ok ? t("unpaired") : r.data.message || t("didntWork"));
               if (r.ok) await onChanged();
             }}
           >
-            Unpair
+            {t("unpair")}
           </button>
         </div>
         <p aria-live="polite" className="text-sm text-t-phos" data-testid="plan-msg">{msg}</p>

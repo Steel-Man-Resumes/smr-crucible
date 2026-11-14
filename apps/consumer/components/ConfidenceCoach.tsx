@@ -22,6 +22,7 @@
 
 import { TroyWork } from "@crucible/consumer-ui";
 import { useEffect, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import {
   REHEARSAL_PERSONAS,
   GENTLENESS_LEVELS,
@@ -73,6 +74,8 @@ export function ConfidenceCoach({
   recordWords,
   onBack,
 }: ConfidenceCoachProps) {
+  const t = useTranslations("refineryInterview.coach");
+  const locale = useLocale();
   const [personaId, setPersonaId] = useState("hiring_warm");
   const [askVariant, setAskVariant] = useState<"asks" | "does_not_ask">("asks");
   const [gentlenessId, setGentlenessId] = useState("balanced");
@@ -202,7 +205,7 @@ export function ConfidenceCoach({
   }
 
   function beginPractice() {
-    const opener = openerFor(personaId, targetJob);
+    const opener = openerFor(t, personaId, targetJob);
     setMessages([{ role: "assistant", content: opener }]);
     setStarted(true);
     setTakeaways(null);
@@ -212,7 +215,7 @@ export function ConfidenceCoach({
   function startVoice() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      alert("Voice input requires Chrome or Edge.");
+      alert(t("voiceUnsupported"));
       return;
     }
     if (recording) {
@@ -221,7 +224,7 @@ export function ConfidenceCoach({
       return;
     }
     const r = new SR();
-    r.lang = "en-US";
+    r.lang = locale === "es" ? "es-US" : "en-US";
     r.interimResults = false;
     recognitionRef.current = r;
     r.onresult = (e: any) => {
@@ -289,7 +292,7 @@ export function ConfidenceCoach({
           const content = contentMatch
             ? contentMatch.map((m) => m.slice(3, -1)).join("").replace(/\\n/g, "\n")
             : text;
-          const reply = content || "Tell me a little more about that.";
+          const reply = content || t("fallbackReply");
           setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
           await persistTurn("assistant", reply);
         }
@@ -297,7 +300,7 @@ export function ConfidenceCoach({
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "I had trouble responding. Let's try again." },
+        { role: "assistant", content: t("errorReply") },
       ]);
     } finally {
       setSending(false);
@@ -313,18 +316,18 @@ export function ConfidenceCoach({
         body: JSON.stringify({ messages, personaLabel: persona.label, hurdleLabel }),
       });
       const data = res.ok ? await res.json() : { went_well: [], try_next: "" };
-      const t: Takeaways = {
+      const result: Takeaways = {
         went_well: Array.isArray(data.went_well) ? data.went_well : [],
         try_next: typeof data.try_next === "string" ? data.try_next : "",
       };
-      setTakeaways(t);
+      setTakeaways(result);
 
       // If this run was saved, store the takeaways on the session and close it.
       if (savingOn && sessionIdRef.current) {
         await fetch("/api/conversation/session/end", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ purpose: PURPOSE, sessionId: sessionIdRef.current, takeaways: t }),
+          body: JSON.stringify({ purpose: PURPOSE, sessionId: sessionIdRef.current, takeaways: result }),
         }).catch(() => {});
         loadHistory();
       }
@@ -355,18 +358,18 @@ export function ConfidenceCoach({
     return (
       <div className="max-w-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-t-white">Confidence Coach</h1>
+          <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
           <button onClick={onBack} className="text-sm text-t-phos-dim hover:text-t-white">
-            Back to plan
+            {t("backToPlan")}
           </button>
         </div>
 
         <SafetyBanner />
 
         {/* Persona picker */}
-        <h2 className="font-semibold text-t-white mt-6 mb-1">Who do you want to practice with?</h2>
+        <h2 className="font-semibold text-t-white mt-6 mb-1">{t("setup.whoTitle")}</h2>
         <p className="text-xs text-t-phos-dim mb-3">
-          Pick whoever feels right to start. You can change it and go again anytime.
+          {t("setup.whoNote")}
         </p>
         <div className="grid grid-cols-2 gap-2 mb-6">
           {REHEARSAL_PERSONAS.map((p) => (
@@ -379,16 +382,16 @@ export function ConfidenceCoach({
                   : "bg-t-panel border-t-line hover:border-t-amber"
               }`}
             >
-              <span className="block text-sm font-medium text-t-white">{p.label}</span>
-              <span className="block text-xs text-t-phos-dim mt-0.5">{p.blurb}</span>
+              <span className="block text-sm font-medium text-t-white">{t(`personas.${p.id}.label`)}</span>
+              <span className="block text-xs text-t-phos-dim mt-0.5">{t(`personas.${p.id}.blurb`)}</span>
             </button>
           ))}
         </div>
 
         {/* Gentleness dial */}
-        <h2 className="font-semibold text-t-white mb-1">How hard should they push?</h2>
+        <h2 className="font-semibold text-t-white mb-1">{t("setup.pushTitle")}</h2>
         <p className="text-xs text-t-phos-dim mb-3">
-          Start gentle if you want. You can turn it up when you are ready.
+          {t("setup.pushNote")}
         </p>
         <div className="flex gap-2 mb-6">
           {GENTLENESS_LEVELS.map((g) => (
@@ -401,23 +404,23 @@ export function ConfidenceCoach({
                   : "bg-t-panel text-t-white border-t-line hover:border-t-amber"
               }`}
             >
-              {g.label}
+              {t(`gentleness.${g.id}`)}
             </button>
           ))}
         </div>
 
         {(preparedScript || recordWords) && (
           <div className="bg-t-panel p-4 border border-t-line mb-4" data-testid="prepared-plan">
-            <h2 className="font-semibold text-t-white mb-1">You are practicing the plan you just made</h2>
+            <h2 className="font-semibold text-t-white mb-1">{t("setup.planTitle")}</h2>
             <p className="text-sm text-t-phos whitespace-pre-line">{[recordWords, preparedScript].filter(Boolean).join("\n")}</p>
-            <p className="text-xs text-t-phos-dim mt-2">Say it your way. It does not have to match word for word.</p>
+            <p className="text-xs text-t-phos-dim mt-2">{t("setup.planNote")}</p>
           </div>
         )}
 
-        <h2 className="font-semibold text-t-white mb-1">Does this person ask about it?</h2>
-        <p className="text-xs text-t-phos-dim mb-3">Practice both. Some people ask, some never do, and you still get to choose.</p>
+        <h2 className="font-semibold text-t-white mb-1">{t("setup.askTitle")}</h2>
+        <p className="text-xs text-t-phos-dim mb-3">{t("setup.askNote")}</p>
         <div className="flex gap-2 mb-6">
-          {([["asks", "They ask"], ["does_not_ask", "They never ask"]] as const).map(([id, label]) => (
+          {([["asks", t("setup.theyAsk")], ["does_not_ask", t("setup.theyNeverAsk")]] as const).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setAskVariant(id)}
@@ -442,7 +445,7 @@ export function ConfidenceCoach({
           onClick={beginPractice}
           className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch mt-6"
         >
-          Start practicing
+          {t("setup.start")}
         </button>
 
         <SessionHistory
@@ -460,14 +463,14 @@ export function ConfidenceCoach({
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-t-white">Confidence Coach</h1>
+          <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
           <p className="text-sm text-t-phos-dim">
-            Practicing with a {persona.label.toLowerCase()}
-            {savingOn ? ". Saving this practice" : ". Not saving"}.
+            {t("practice.with", { persona: t(`personas.${persona.id}.label`).toLowerCase() })}
+            {savingOn ? t("practice.saving") : t("practice.notSaving")}
           </p>
         </div>
         <button onClick={() => setStarted(false)} className="text-sm text-t-phos-dim hover:text-t-white">
-          Change setup
+          {t("practice.changeSetup")}
         </button>
       </div>
 
@@ -476,7 +479,7 @@ export function ConfidenceCoach({
       {/* Strength reminders */}
       {strengths.length > 0 && (
         <div className="bg-t-panel px-4 py-3 border border-t-line my-4">
-          <p className="text-xs text-t-amber-bright font-medium mb-1.5">Pivot to your strengths:</p>
+          <p className="text-xs text-t-amber-bright font-medium mb-1.5">{t("practice.pivot")}</p>
           <div className="flex flex-wrap gap-1.5">
             {strengths.map((s, i) => (
               <span key={i} className="text-xs px-2 py-1 bg-t-panel-2 border border-t-line text-t-phos">
@@ -505,7 +508,7 @@ export function ConfidenceCoach({
           ))}
           {sending && (
             <div className="flex justify-start">
-              <TroyWork topic="coach" label="Preparing a response to your answer" />
+              <TroyWork topic="coach" label={t("practice.preparing")} />
             </div>
           )}
           <div ref={chatEndRef} />
@@ -521,7 +524,7 @@ export function ConfidenceCoach({
           <button
             type="button"
             onClick={startVoice}
-            title={recording ? "Stop recording" : "Speak your response"}
+            title={recording ? t("practice.stopRecording") : t("practice.speak")}
             className={`t-focus p-3 border transition-colors min-h-touch flex-shrink-0 ${
               recording
                 ? "bg-t-panel-2 border-t-red text-t-red animate-pulse"
@@ -538,7 +541,7 @@ export function ConfidenceCoach({
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={recording ? "Listening..." : "Say it in your own words..."}
+            placeholder={recording ? t("practice.listening") : t("practice.placeholder")}
             className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             disabled={sending}
           />
@@ -547,7 +550,7 @@ export function ConfidenceCoach({
             disabled={sending || !input.trim()}
             className="t-focus px-4 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
           >
-            Send
+            {t("practice.send")}
           </button>
         </form>
       </div>
@@ -564,14 +567,14 @@ export function ConfidenceCoach({
           disabled={finishing || messages.filter((m) => m.role === "user").length === 0}
           className="t-focus px-5 py-3 bg-t-steel text-white font-bold hover:opacity-90 disabled:opacity-40 transition-colors min-h-touch"
         >
-          {finishing ? "Building your takeaways..." : "I'm done"}
+          {finishing ? t("practice.finishing") : t("practice.done")}
         </button>
         {savingOn ? (
           <p className="text-xs text-t-phos-dim">
-            Saving this practice, encrypted and private to your account.
+            {t("practice.savingNote")}
           </p>
         ) : (
-          <p className="text-xs text-t-phos-dim">This practice is not being saved.</p>
+          <p className="text-xs text-t-phos-dim">{t("practice.notSavingNote")}</p>
         )}
       </div>
 
@@ -593,10 +596,11 @@ export function ConfidenceCoach({
 }
 
 function SafetyBanner() {
+  const t = useTranslations("refineryInterview.coach");
   return (
     <div className="bg-t-panel-2 border-l-4 border-t-red px-4 py-3">
       <p className="text-sm font-semibold text-t-red">
-        This is not a job interview. This is a private practice space for talking about hard things.
+        {t("safety")}
       </p>
     </div>
   );
@@ -613,14 +617,13 @@ function SaveControls({
   onToggleThisSession: (v: boolean) => void;
   onToggleAlways: (v: boolean) => void;
 }) {
+  const t = useTranslations("refineryInterview.coach");
   const savingOn = alwaysAllow || saveThisSession;
   return (
     <div className="bg-t-panel p-5 border border-t-line">
-      <h2 className="font-semibold text-t-white mb-1">Save this practice?</h2>
+      <h2 className="font-semibold text-t-white mb-1">{t("save.title")}</h2>
       <p className="text-xs text-t-phos-dim leading-relaxed mb-3">
-        By default nothing here is saved. If you turn saving on, the words from this practice are
-        stored encrypted and private to your account, so you can come back and read them. You can
-        delete saved practice anytime in Settings. Only the text is stored. Audio is never saved.
+        {t("save.note")}
       </p>
       <label className="flex items-start gap-2 mb-2 cursor-pointer">
         <input
@@ -631,9 +634,9 @@ function SaveControls({
           disabled={alwaysAllow}
         />
         <span className="text-sm text-t-white">
-          Save this practice conversation
+          {t("save.thisLabel")}
           <span className="block text-xs text-t-phos-dim">
-            Saved just for this run. Auto-saving stays off after.
+            {t("save.thisNote")}
           </span>
         </span>
       </label>
@@ -645,9 +648,9 @@ function SaveControls({
           className="mt-1"
         />
         <span className="text-sm text-t-white">
-          Always save my practice conversations
+          {t("save.alwaysLabel")}
           <span className="block text-xs text-t-phos-dim">
-            Keeps saving on until you turn it off here or in Settings.
+            {t("save.alwaysNote")}
           </span>
         </span>
       </label>
@@ -664,17 +667,18 @@ function TakeawaysCard({
   saved: boolean;
   onAgain: () => void;
 }) {
+  const t = useTranslations("refineryInterview.coach");
   return (
     <div className="bg-t-panel p-5 border border-t-amber mt-6">
-      <h2 className="font-semibold text-t-amber-bright mb-3">Your takeaways</h2>
+      <h2 className="font-semibold text-t-amber-bright mb-3">{t("takeaways.title")}</h2>
       {takeaways.went_well.length > 0 && (
         <>
-          <p className="text-sm font-medium text-t-white mb-1">What went well</p>
+          <p className="text-sm font-medium text-t-white mb-1">{t("takeaways.wentWell")}</p>
           <ul className="space-y-1.5 mb-4">
-            {takeaways.went_well.map((t, i) => (
+            {takeaways.went_well.map((item, i) => (
               <li key={i} className="text-sm text-t-phos flex gap-2">
                 <span className="text-t-amber flex-shrink-0">+</span>
-                {t}
+                {item}
               </li>
             ))}
           </ul>
@@ -682,20 +686,18 @@ function TakeawaysCard({
       )}
       {takeaways.try_next && (
         <>
-          <p className="text-sm font-medium text-t-white mb-1">One thing to try next</p>
+          <p className="text-sm font-medium text-t-white mb-1">{t("takeaways.tryNext")}</p>
           <p className="text-sm text-t-phos mb-4">{takeaways.try_next}</p>
         </>
       )}
       <p className="text-xs text-t-phos-dim mb-3">
-        {saved
-          ? "Saved with this practice, so you can pick up where you left off."
-          : "These takeaways are shown just for you now. Turn on saving next time to keep them."}
+        {saved ? t("takeaways.saved") : t("takeaways.notSaved")}
       </p>
       <button
         onClick={onAgain}
         className="t-focus px-4 py-2.5 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
       >
-        Practice again
+        {t("takeaways.again")}
       </button>
     </div>
   );
@@ -712,18 +714,21 @@ function SessionHistory({
   onOpen: (id: string) => void;
   onCloseDetail: () => void;
 }) {
+  const t = useTranslations("refineryInterview.coach");
+  const locale = useLocale();
   if (history.length === 0) return null;
   return (
     <div className="mt-8">
-      <h2 className="font-semibold text-t-white mb-1">Your saved practice</h2>
+      <h2 className="font-semibold text-t-white mb-1">{t("history.title")}</h2>
       <p className="text-xs text-t-phos-dim mb-3">
-        Only practices you chose to save show up here. Each one is encrypted and private to your
-        account. Delete saved practice anytime in Settings.
+        {t("history.note")}
       </p>
       <div className="space-y-2">
         {history.map((s) => {
-          const persona = (s.target_context?.persona as string) || "a practice partner";
-          const when = new Date(s.started_at).toLocaleDateString("en-US", {
+          const storedPersona = s.target_context?.persona as string | undefined;
+          const known = REHEARSAL_PERSONAS.find((x) => x.label === storedPersona);
+          const persona = known ? t(`personas.${known.id}.label`) : storedPersona || t("history.defaultPersona");
+          const when = new Date(s.started_at).toLocaleDateString(locale === "es" ? "es-US" : "en-US", {
             month: "short",
             day: "numeric",
             year: "numeric",
@@ -732,19 +737,19 @@ function SessionHistory({
             <div key={s.id} className="bg-t-panel border border-t-line px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm text-t-white font-medium">Practice with {persona}</p>
+                  <p className="text-sm text-t-white font-medium">{t("history.practiceWith", { persona })}</p>
                   <p className="text-xs text-t-phos-dim">{when}</p>
                 </div>
                 <button
                   onClick={() => (detail?.id === s.id ? onCloseDetail() : onOpen(s.id))}
                   className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
                 >
-                  {detail?.id === s.id ? "Hide" : "Read"}
+                  {detail?.id === s.id ? t("history.hide") : t("history.read")}
                 </button>
               </div>
               {s.takeaways?.try_next && (
                 <p className="text-xs text-t-phos mt-2">
-                  <span className="text-t-amber-bright">Next time:</span> {s.takeaways.try_next}
+                  <span className="text-t-amber-bright">{t("history.nextTime")}</span> {s.takeaways.try_next}
                 </p>
               )}
               {detail?.id === s.id && (
@@ -772,30 +777,30 @@ function SessionHistory({
   );
 }
 
-function openerFor(personaId: string, targetJob: string): string {
+function openerFor(t: ReturnType<typeof useTranslations>, personaId: string, targetJob: string): string {
   switch (personaId) {
     case "friend":
-      return "Hey, it's just me. Take your time. What's on your mind?";
+      return t("opener.friend");
     case "family":
-      return "I'm glad we're talking. Whenever you're ready, tell me what you wanted to share.";
+      return t("opener.family");
     case "mentor":
-      return "Good to see you. Walk me through what you want to work on today.";
+      return t("opener.mentor");
     case "hiring_warm":
       return targetJob
-        ? `Thanks for coming in. I see you're interested in the ${targetJob} role. Tell me a bit about yourself.`
-        : "Thanks for coming in. Tell me a bit about yourself and why you're interested in this role.";
+        ? t("opener.hiringWarmJob", { job: targetJob })
+        : t("opener.hiringWarm");
     case "hiring_skeptical":
       return targetJob
-        ? `Have a seat. So, the ${targetJob} position. Why should I consider you for this?`
-        : "Have a seat. So, tell me why I should consider you for this position.";
+        ? t("opener.hiringSkepticalJob", { job: targetJob })
+        : t("opener.hiringSkeptical");
     case "coworker":
-      return "Hey, welcome aboard! I'm on your team. How's your first day going?";
+      return t("opener.coworker");
     case "teacher":
-      return "Thanks for coming in. I always like meeting the families. What did you want to talk about?";
+      return t("opener.teacher");
     case "landlord":
-      return "Thanks for your interest in the unit. Tell me a little about yourself and your situation.";
+      return t("opener.landlord");
     default:
-      return "Whenever you're ready, go ahead and start.";
+      return t("opener.default");
   }
 }
 

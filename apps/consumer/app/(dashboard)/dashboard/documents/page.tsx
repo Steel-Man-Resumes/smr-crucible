@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import {
   VAULT_CATEGORIES,
   MAX_VAULT_FILE_BYTES,
@@ -59,6 +60,7 @@ const ACCEPT =
   ".pdf,.png,.jpg,.jpeg,.webp,.gif,.heic,.heif,.txt,.doc,.docx,application/pdf,image/*,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export default function VaultDocumentsPage() {
+  const t = useTranslations("refineryResume.documents");
   const [docs, setDocs] = useState<VaultDoc[]>([]);
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +123,7 @@ export default function VaultDocumentsPage() {
   function jobLabel(id: string | null): string | null {
     if (!id) return null;
     const j = jobs.find((x) => x.id === id);
-    return j ? `${j.job_title} at ${j.company}` : null;
+    return j ? t("jobAt", { job: j.job_title, company: j.company }) : null;
   }
 
   function onPickFile(f: File | null) {
@@ -139,19 +141,19 @@ export default function VaultDocumentsPage() {
     if (uploading) return;
     setUploadError("");
     if (!file) {
-      setUploadError("Choose a file to add.");
+      setUploadError(t("chooseFile"));
       return;
     }
     if (file.size > MAX_VAULT_FILE_BYTES) {
-      setUploadError("That file is over the 25 MB limit. Try a smaller photo or PDF.");
+      setUploadError(t("tooBig"));
       return;
     }
     if (!category) {
-      setUploadError("Pick a category so you can find this later.");
+      setUploadError(t("pickCategory"));
       return;
     }
     if (!label.trim()) {
-      setUploadError("Give this document a short name.");
+      setUploadError(t("needName"));
       return;
     }
 
@@ -168,7 +170,7 @@ export default function VaultDocumentsPage() {
       if (res.ok) {
         const { data } = await res.json();
         setDocs((prev) => [data, ...prev]);
-        setStatusMsg(`Added "${data.label}" to your vault.`);
+        setStatusMsg(t("added", { label: data.label }));
         // Reset the form.
         setFile(null);
         setCategory("");
@@ -178,10 +180,10 @@ export default function VaultDocumentsPage() {
         if (fileInputRef.current) fileInputRef.current.value = "";
       } else {
         const err = await res.json().catch(() => ({}));
-        setUploadError(err?.error || "Could not add that document. Please try again.");
+        setUploadError(err?.error || t("addFailed"));
       }
     } catch {
-      setUploadError("Could not add that document. Please try again.");
+      setUploadError(t("addFailed"));
     } finally {
       setUploading(false);
     }
@@ -224,14 +226,14 @@ export default function VaultDocumentsPage() {
               : d
           )
         );
-        setStatusMsg("Saved your changes.");
+        setStatusMsg(t("saved"));
         setEditing(null);
       } else {
         const err = await res.json().catch(() => ({}));
-        setStatusMsg(err?.error || "Could not save. Please try again.");
+        setStatusMsg(err?.error || t("saveFailed"));
       }
     } catch {
-      setStatusMsg("Could not save. Please try again.");
+      setStatusMsg(t("saveFailed"));
     } finally {
       setSavingEdit(false);
     }
@@ -244,13 +246,13 @@ export default function VaultDocumentsPage() {
       const res = await fetch(`/api/vault/documents/${id}`, { method: "DELETE" });
       if (res.ok) {
         setDocs((prev) => prev.filter((d) => d.id !== id));
-        setStatusMsg("Document deleted.");
+        setStatusMsg(t("deleted"));
       } else {
         const err = await res.json().catch(() => ({}));
-        setStatusMsg(err?.error || "Could not delete that document.");
+        setStatusMsg(err?.error || t("deleteFailed"));
       }
     } catch {
-      setStatusMsg("Could not delete that document. Please try again.");
+      setStatusMsg(t("deleteFailedRetry"));
     } finally {
       setDeleting(null);
       setConfirmDelete(null);
@@ -258,36 +260,31 @@ export default function VaultDocumentsPage() {
   }
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading your vault...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">{t("loading")}</div>;
   }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Private documents</h1>
+      <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
       <p className="text-t-phos-dim mt-1">
-        A safe home for the documents that prove who you are and what you have earned: your ID,
-        certificates, reference letters, records, and notes. It is encrypted and stays in your account
-        until you delete it. Only you can open it here. Programs and employers can't, even if you share
-        other things with them.
+        {t("intro")}
       </p>
       <p className="text-xs text-t-phos-dim mt-2" data-testid="vault-lanes-note">
-        One Vault for every lane. Your proof is the same whatever job you aim at.
+        {t("lanesNote")}
       </p>
       <div className="mt-3 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-phos-dim">
-        <span className="font-semibold text-t-phos">This is not a password keeper.</span> Do not put
-        passwords, your Social Security card, or bank logins here. Keep those somewhere built for
-        secrets. This vault is for documents.
+        <span className="font-semibold text-t-phos">{t("notPassword")}</span> {t("notPasswordBody")}
       </div>
 
       <p aria-live="polite" className="sr-only">{statusMsg}</p>
 
       {/* Upload */}
       <form onSubmit={upload} className="mt-8 border border-t-line bg-t-panel p-5 space-y-4">
-        <h2 className="text-sm font-semibold uppercase text-t-phos">Add a document</h2>
+        <h2 className="text-sm font-semibold uppercase text-t-phos">{t("addTitle")}</h2>
 
         <div>
           <label className="block text-xs text-t-phos-dim mb-1" htmlFor="v-file">
-            Choose a file (PDF, photo, Word document, or text, up to 25 MB)
+            {t("fileLabel")}
           </label>
           <input
             id="v-file"
@@ -306,7 +303,7 @@ export default function VaultDocumentsPage() {
 
         <div>
           <label className="block text-xs text-t-phos-dim mb-1" htmlFor="v-cat">
-            What kind of document is this?
+            {t("kindLabel")}
           </label>
           <select
             id="v-cat"
@@ -314,37 +311,37 @@ export default function VaultDocumentsPage() {
             onChange={(e) => setCategory(e.target.value as VaultCategory)}
             className="w-full px-3 py-2 text-sm bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none"
           >
-            <option value="">Pick a category</option>
+            <option value="">{t("pickCat")}</option>
             {VAULT_CATEGORIES.map((c) => (
               <option key={c.key} value={c.key}>
-                {c.label}
+                {t(`cat.${c.key}.label`)}
               </option>
             ))}
           </select>
           {category && (
             <p className="text-xs text-t-phos-dim mt-1">
-              {VAULT_CATEGORIES.find((c) => c.key === category)?.help}
+              {t(`cat.${category}.help`)}
             </p>
           )}
         </div>
 
         <div>
           <label className="block text-xs text-t-phos-dim mb-1" htmlFor="v-label">
-            Short name (so you can find it later)
+            {t("nameLabel")}
           </label>
           <input
             id="v-label"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             maxLength={200}
-            placeholder="e.g. State ID, OSHA-10 card, Letter from Mr. Reyes"
+            placeholder={t("namePlaceholder")}
             className="w-full px-3 py-2 text-sm bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none"
           />
         </div>
 
         <div>
           <label className="block text-xs text-t-phos-dim mb-1" htmlFor="v-note">
-            Note to yourself (optional)
+            {t("noteLabel")}
           </label>
           <textarea
             id="v-note"
@@ -359,7 +356,7 @@ export default function VaultDocumentsPage() {
         {jobs.length > 0 && (
           <div>
             <label className="block text-xs text-t-phos-dim mb-1" htmlFor="v-job">
-              Tie this to a saved job (optional)
+              {t("jobLabel")}
             </label>
             <select
               id="v-job"
@@ -367,10 +364,10 @@ export default function VaultDocumentsPage() {
               onChange={(e) => setLinkedJobId(e.target.value)}
               className="w-full px-3 py-2 text-sm bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none"
             >
-              <option value="">Not tied to a job</option>
+              <option value="">{t("noJob")}</option>
               {jobs.map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.job_title} at {j.company}
+                  {t("jobAt", { job: j.job_title, company: j.company })}
                 </option>
               ))}
             </select>
@@ -388,15 +385,14 @@ export default function VaultDocumentsPage() {
           disabled={uploading}
           className="t-focus px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:opacity-50"
         >
-          {uploading ? "Adding..." : "Add to vault"}
+          {uploading ? t("adding") : t("addToVault")}
         </button>
       </form>
 
       {/* List, grouped by category */}
       {docs.length === 0 ? (
         <div className="mt-8 text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
-          Your vault is empty. Add your ID, a certificate, or a reference letter above, and it will
-          be here whenever you need it for a job, a landlord, or a program.
+          {t("empty")}
         </div>
       ) : (
         <div className="mt-10 space-y-8">
@@ -413,10 +409,10 @@ export default function VaultDocumentsPage() {
                   className="t-focus flex w-full items-center justify-between text-left mb-3 text-t-phos-dim"
                 >
                   <span className="text-sm font-semibold uppercase">
-                    {cat.label} ({group.length})
+                    {t(`cat.${cat.key}.label`)} ({group.length})
                   </span>
                   <span className="text-xs" aria-hidden="true">
-                    {isCollapsed ? "Show" : "Hide"}
+                    {isCollapsed ? t("show") : t("hide")}
                   </span>
                 </button>
 
@@ -439,7 +435,7 @@ export default function VaultDocumentsPage() {
                             >
                               {VAULT_CATEGORIES.map((c) => (
                                 <option key={c.key} value={c.key}>
-                                  {c.label}
+                                  {t(`cat.${c.key}.label`)}
                                 </option>
                               ))}
                             </select>
@@ -448,7 +444,7 @@ export default function VaultDocumentsPage() {
                               onChange={(e) => setEditNote(e.target.value)}
                               maxLength={2000}
                               rows={2}
-                              placeholder="Note to yourself (optional)"
+                              placeholder={t("notePlaceholder")}
                               className="w-full px-3 py-2 text-sm bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none"
                             />
                             {jobs.length > 0 && (
@@ -457,10 +453,10 @@ export default function VaultDocumentsPage() {
                                 onChange={(e) => setEditJob(e.target.value)}
                                 className="w-full px-3 py-2 text-sm bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none"
                               >
-                                <option value="">Not tied to a job</option>
+                                <option value="">{t("noJob")}</option>
                                 {jobs.map((j) => (
                                   <option key={j.id} value={j.id}>
-                                    {j.job_title} at {j.company}
+                                    {t("jobAt", { job: j.job_title, company: j.company })}
                                   </option>
                                 ))}
                               </select>
@@ -471,13 +467,13 @@ export default function VaultDocumentsPage() {
                                 disabled={savingEdit || !editLabel.trim()}
                                 className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright disabled:opacity-50"
                               >
-                                {savingEdit ? "Saving..." : "Save"}
+                                {savingEdit ? t("saving") : t("save")}
                               </button>
                               <button
                                 onClick={() => setEditing(null)}
                                 className="text-xs text-t-phos-dim hover:text-t-white"
                               >
-                                Cancel
+                                {t("cancel")}
                               </button>
                             </div>
                           </div>
@@ -488,14 +484,14 @@ export default function VaultDocumentsPage() {
                                 <h3 className="font-medium text-t-white truncate">{d.label}</h3>
                                 <p className="text-xs text-t-phos-dim mt-0.5">
                                   {d.original_filename ? `${d.original_filename} · ` : ""}
-                                  {fmtSize(d.byte_size)} · Added {fmtDate(d.created_at)}
+                                  {t("added2", { size: fmtSize(d.byte_size), date: fmtDate(d.created_at) })}
                                 </p>
                                 {d.note && (
                                   <p className="text-sm text-t-phos mt-1 whitespace-pre-line">{d.note}</p>
                                 )}
                                 {jobLabel(d.linked_job_id) && (
                                   <p className="text-xs text-t-steel mt-1">
-                                    Tied to: {jobLabel(d.linked_job_id)}
+                                    {t("tiedTo", { job: jobLabel(d.linked_job_id) ?? "" })}
                                   </p>
                                 )}
                               </div>
@@ -504,13 +500,13 @@ export default function VaultDocumentsPage() {
                                   href={`/api/vault/documents/${d.id}/download`}
                                   className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright"
                                 >
-                                  Download
+                                  {t("download")}
                                 </a>
                                 <button
                                   onClick={() => startEdit(d)}
                                   className="t-focus px-3 py-1.5 text-xs font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
                                 >
-                                  Edit
+                                  {t("edit")}
                                 </button>
                                 {confirmDelete === d.id ? (
                                   <>
@@ -519,13 +515,13 @@ export default function VaultDocumentsPage() {
                                       disabled={deleting === d.id}
                                       className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-white hover:opacity-90 disabled:opacity-50"
                                     >
-                                      {deleting === d.id ? "..." : "Delete"}
+                                      {deleting === d.id ? "..." : t("delete")}
                                     </button>
                                     <button
                                       onClick={() => setConfirmDelete(null)}
                                       className="text-xs text-t-phos-dim hover:text-t-white"
                                     >
-                                      Cancel
+                                      {t("cancel")}
                                     </button>
                                   </>
                                 ) : (
@@ -533,7 +529,7 @@ export default function VaultDocumentsPage() {
                                     onClick={() => setConfirmDelete(d.id)}
                                     className="text-xs text-t-phos-dim hover:text-t-red"
                                   >
-                                    Delete
+                                    {t("delete")}
                                   </button>
                                 )}
                               </div>
@@ -551,12 +547,7 @@ export default function VaultDocumentsPage() {
       )}
 
       <p className="mt-10 text-xs text-t-phos-dim">
-        Everything here is encrypted and private to your account. To download every file at once, or
-        to remove all of your data, go to{" "}
-        <Link href="/dashboard/settings#settings-export" className="text-t-amber-bright hover:text-t-amber">
-          Settings, Data
-        </Link>
-        .
+        {t.rich("footer", { link: (chunks) => <Link href="/dashboard/settings#settings-export" className="text-t-amber-bright hover:text-t-amber">{chunks}</Link> })}
       </p>
     </div>
   );

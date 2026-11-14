@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useLanes } from "@/components/lanes/useLanes";
 
 interface ResumeArtifact {
@@ -26,14 +27,15 @@ interface ResumeArtifact {
   is_current?: boolean;
 }
 
-function labelFor(a: ResumeArtifact): string {
+function labelFor(a: ResumeArtifact, baseResume: string): string {
   if (a.lane && a.lane.trim()) return a.lane.trim();
   const job = a.target_context?.targetJob;
   if (job && job !== "General") return job;
-  return "Base resume";
+  return baseResume;
 }
 
 export function BaselineSelector({ className = "" }: { className?: string }) {
+  const t = useTranslations("refineryHome.baselineSelector");
   const lanes = useLanes();
   const selectedLane = lanes.active === "main" ? null : lanes.active;
   const [candidates, setCandidates] = useState<ResumeArtifact[]>([]);
@@ -100,23 +102,23 @@ export function BaselineSelector({ className = "" }: { className?: string }) {
 
   return (
     <div className={`flex items-center gap-2 flex-wrap text-xs ${className}`}>
-      <span className="text-t-phos-dim">Searching as</span>
+      <span className="text-t-phos-dim">{t("searchingAs")}</span>
       {candidates.length === 1 ? (
         <span className="font-semibold text-t-white">
-          {labelFor(active)}
-          {active.is_current ? " (current)" : ""}
+          {labelFor(active, t("baseResume"))}
+          {active.is_current ? ` ${t("current")}` : ""}
         </span>
       ) : (
         <select
           value={active.id}
           onChange={(e) => choose(e.target.value)}
           className="t-focus bg-t-panel border border-t-line text-t-white font-semibold px-2 py-1 focus:border-t-steel focus:outline-none"
-          aria-label="Which resume am I searching as"
+          aria-label={t("whichResumeAria")}
         >
           {candidates.map((c) => (
             <option key={c.id} value={c.id}>
-              {labelFor(c)}
-              {c.is_current ? " (current)" : ""}
+              {labelFor(c, t("baseResume"))}
+              {c.is_current ? ` ${t("current")}` : ""}
             </option>
           ))}
         </select>
@@ -125,7 +127,7 @@ export function BaselineSelector({ className = "" }: { className?: string }) {
         href="/dashboard/vault"
         className="t-focus text-t-steel hover:text-t-white transition-colors"
       >
-        Manage baselines
+        {t("manage")}
       </Link>
     </div>
   );

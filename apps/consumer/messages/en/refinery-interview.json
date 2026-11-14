@@ -1,0 +1,1242 @@
+{
+  "methodology": {
+    "title": "How The Forge Works",
+    "subtitle": "The thinking behind the tools you’re using.",
+    "observerNote": "You're seeing a summary view. The full methodology playbook is available to partner organizations.",
+    "tryForge": "try The Forge",
+    "enterPartnerCode": "enter partner code",
+    "useTitle": "What Happens When You Use The Forge",
+    "gettingStarted": "Getting started",
+    "noPrep": "No prep needed.",
+    "wallOpen": "The Forge requires no login, no paperwork, and no prior resume.",
+    "wallUp": "The Forge needs one free sign-in, and no paperwork and no prior resume.",
+    "justStart": "Just start answering questions honestly. t.ROY guides you through every step.",
+    "process": "The process",
+    "processBody": "You’ll share your resume (or build one), tell us what matters to you, and describe what’s in your way. t.ROY is there on every page if you need help.",
+    "whatYouGet": "What you get",
+    "whatYouGetBody": "A personalized narrative about your strengths, skills matched to real careers, and resources for your specific situation. Download it or keep working in The Refinery.",
+    "scienceTitle": "The Science Behind It",
+    "scienceNote": "Every feature is grounded in real research. Expand any section to learn more.",
+    "ws1": {
+      "title": "Behavioral Science Foundations",
+      "blurb": "How naming emotions and building self-efficacy drives real change",
+      "summary": "Affect labeling reduces amygdala reactivity by up to 50% (Lieberman et al., 2007). Self-efficacy is built through mastery experiences, not encouragement (Bandura, 1977). Readiness for change follows predictable stages (Prochaska & DiClemente, 1983)."
+    },
+    "ws2": {
+      "title": "Narrative Identity & Desistance",
+      "blurb": "Why telling your story in a new way changes outcomes",
+      "summary": "People who construct redemption sequences (bad→good arcs) show higher well-being and generativity (McAdams, 2013). Desistance from crime correlates with generative identity construction (Maruna, 2001). Autonomy is a core psychological need (Deci & Ryan, 2000)."
+    },
+    "rulesTitle": "How t.ROY Is Built to Help",
+    "rulesNote": "t.ROY follows strict rules designed to respect your time, your autonomy, and your privacy.",
+    "rules": {
+      "r1": {
+        "name": "Invite naming, prompt causal reasoning",
+        "clientFacing": "t.ROY helps you find the words for what you’re going through."
+      },
+      "r2": {
+        "name": "Offer options, never prescribe",
+        "clientFacing": "You always decide. t.ROY shows options, never tells you what to do."
+      },
+      "r3": {
+        "name": "Reflect and affirm",
+        "clientFacing": "t.ROY listens to what you say and reflects it back clearly."
+      },
+      "r4": {
+        "name": "Meet readiness level",
+        "clientFacing": "t.ROY meets you where you are. No pressure, no rushing."
+      },
+      "r5": {
+        "name": "Explain yourself",
+        "clientFacing": "t.ROY always tells you why it’s suggesting something."
+      },
+      "r6": {
+        "name": "Scaffold then fade",
+        "clientFacing": "More help when you’re starting out, less as you get comfortable."
+      },
+      "r7": {
+        "name": "Process praise only",
+        "clientFacing": "t.ROY celebrates what you do, not labels about who you are."
+      },
+      "r8": {
+        "name": "Cultural sensitivity",
+        "clientFacing": "No assumptions about your background. Plain language. Always."
+      },
+      "r9": {
+        "name": "Know when to connect humans",
+        "clientFacing": "If you need more than a tool can give, t.ROY connects you to real people."
+      },
+      "r10": {
+        "name": "Never share personal data in responses",
+        "clientFacing": "t.ROY never repeats your personal details back to you in chat."
+      }
+    }
+  },
+  "disclosure": {
+    "title": "Plan what to say",
+    "applicationLoadError": "This saved job could not be loaded. Check your applications before continuing.",
+    "accountLoading": "Your account is still loading.",
+    "wording": {
+      "failedApi": "The AI wording didn't come through. Your plan is built from your answers and is complete without it.",
+      "failedConnection": "The connection dropped before the wording came back. Your plan is built from your answers. Try the wording again."
+    },
+    "jobFilter": {
+      "loadFailed": "Your job search choices could not be loaded.",
+      "saveFailed": "Your job search choices didn't save.",
+      "added": "Added to your job search filters. You can change them on the Find work page.",
+      "failed": "{reason} Try again.",
+      "defaultReason": "That didn't save."
+    },
+    "copy": {
+      "done": "Copied. Paste it somewhere you keep private.",
+      "failed": "Copying did not work here. Use Download instead."
+    },
+    "consent": {
+      "yesNotSaved": "Your yes did not save, so record answers stay away from the AI. Try again.",
+      "notSaved": "That did not save. Try again.",
+      "title": "Your record answers and AI",
+      "p1": "The record questions ask where it comes up, the kind of record, how long ago, supervision, and your own words. Every one can be skipped. This plan never asks what happened.",
+      "p2": "With your yes, those answers can go to an AI service (our main one, or a backup if it is down) to read your plan back to you, and your own record words go into practice with t.ROY. AI never rewrites your record lines. Without your yes, no record answer goes to any AI.",
+      "p3": "Your yes is saved to your account with the date, and you can take it back here any time.",
+      "p4": "Your record answers and your record words are never saved: not in your plan, not in your Library, not with a job application. Copy or download them before you leave the page.",
+      "yes": "Yes, an AI service can use them",
+      "no": "No, keep my record answers away from AI"
+    },
+    "beforeRecord": {
+      "title": "Before the record questions",
+      "body": "Your answers added the record conversation to your plan. One question first."
+    },
+    "done": {
+      "title": "That's everything on your path",
+      "answered": "{count} answered",
+      "skipped": ", {count} skipped",
+      "notSure": ", {count} not sure",
+      "build": "Build my plan",
+      "changeHurdles": "Change hurdles"
+    },
+    "pick": {
+      "intro": "Name what is in your way, work through it one question at a time, and leave with a plan: what you know, what is still open, what to do now, who can help, and what you choose to tell an employer.",
+      "savedPlan": "You have a saved plan. Pick up from its answers? Record answers are never saved, so those questions will ask again.",
+      "resume": "Pick up where I left off",
+      "consentYes": "You said yes: record answers can go to an AI service.",
+      "consentNo": "Your record answers stay away from every AI.",
+      "changeThis": "Change this",
+      "targetJob": "Target job",
+      "optional": "(optional)",
+      "targetJobExample": "e.g., {job}",
+      "targetJobDefault": "e.g., Warehouse Associate",
+      "employer": "Employer: {company}",
+      "startWith": "Start with {hurdle}",
+      "pickOne": "Pick at least one to start",
+      "answerAiFirst": "Answer the AI question above first. Either answer is fine."
+    },
+    "strengths": {
+      "title": "Strengths to lead with",
+      "note": "From your Forge work, if you have any. Edit them, or ask for suggestions. Nothing is added until you say yes.",
+      "itemAria": "Strength {number}",
+      "removeAria": "Remove this strength",
+      "lookAgain": "Look again",
+      "suggest": "Suggest strengths from my history",
+      "looking": "Looking through your history...",
+      "none": "No new strengths turned up. Add one yourself: one thing you did that you would want a boss to know.",
+      "loadError": "Suggestions could not load right now. You can still add strengths yourself.",
+      "proposalQuestion": "Does this describe something you did?",
+      "fromSource": " (from your {source})",
+      "yesMe": "Yes, that's me",
+      "notThis": "Not this one",
+      "add": "+ Add a strength"
+    },
+    "toast": {
+      "title": "Plan saved",
+      "body": "It's in your Library"
+    }
+  },
+  "coach": {
+    "title": "Confidence Coach",
+    "backToPlan": "Back to plan",
+    "voiceUnsupported": "Voice input requires Chrome or Edge.",
+    "fallbackReply": "Tell me a little more about that.",
+    "errorReply": "I had trouble responding. Let's try again.",
+    "personas": {
+      "friend": {
+        "label": "Supportive friend",
+        "blurb": "A safe first try with someone who is on your side."
+      },
+      "family": {
+        "label": "Family member",
+        "blurb": "Practice telling someone close to you."
+      },
+      "mentor": {
+        "label": "Mentor",
+        "blurb": "Someone who believes in you and gives honest guidance."
+      },
+      "hiring_warm": {
+        "label": "Hiring manager (warm)",
+        "blurb": "A manager who hires people with records and wants you to do well."
+      },
+      "hiring_skeptical": {
+        "label": "Hiring manager (skeptical)",
+        "blurb": "A tougher room, so the real one feels easier."
+      },
+      "coworker": {
+        "label": "New coworker",
+        "blurb": "A casual, day-one conversation."
+      },
+      "teacher": {
+        "label": "Child's teacher or childcare provider",
+        "blurb": "Talking with someone who cares for your kid."
+      },
+      "landlord": {
+        "label": "Landlord",
+        "blurb": "Practice for a rental conversation."
+      }
+    },
+    "gentleness": {
+      "gentle": "Gentle",
+      "balanced": "Balanced",
+      "direct": "Direct"
+    },
+    "setup": {
+      "whoTitle": "Who do you want to practice with?",
+      "whoNote": "Pick whoever feels right to start. You can change it and go again anytime.",
+      "pushTitle": "How hard should they push?",
+      "pushNote": "Start gentle if you want. You can turn it up when you are ready.",
+      "planTitle": "You are practicing the plan you just made",
+      "planNote": "Say it your way. It does not have to match word for word.",
+      "askTitle": "Does this person ask about it?",
+      "askNote": "Practice both. Some people ask, some never do, and you still get to choose.",
+      "theyAsk": "They ask",
+      "theyNeverAsk": "They never ask",
+      "start": "Start practicing"
+    },
+    "practice": {
+      "with": "Practicing with a {persona}",
+      "saving": ". Saving this practice.",
+      "notSaving": ". Not saving.",
+      "changeSetup": "Change setup",
+      "pivot": "Pivot to your strengths:",
+      "preparing": "Preparing a response to your answer",
+      "stopRecording": "Stop recording",
+      "speak": "Speak your response",
+      "listening": "Listening...",
+      "placeholder": "Say it in your own words...",
+      "send": "Send",
+      "finishing": "Building your takeaways...",
+      "done": "I'm done",
+      "savingNote": "Saving this practice, encrypted and private to your account.",
+      "notSavingNote": "This practice is not being saved."
+    },
+    "safety": "This is not a job interview. This is a private practice space for talking about hard things.",
+    "save": {
+      "title": "Save this practice?",
+      "note": "By default nothing here is saved. If you turn saving on, the words from this practice are stored encrypted and private to your account, so you can come back and read them. You can delete saved practice anytime in Settings. Only the text is stored. Audio is never saved.",
+      "thisLabel": "Save this practice conversation",
+      "thisNote": "Saved just for this run. Auto-saving stays off after.",
+      "alwaysLabel": "Always save my practice conversations",
+      "alwaysNote": "Keeps saving on until you turn it off here or in Settings."
+    },
+    "takeaways": {
+      "title": "Your takeaways",
+      "wentWell": "What went well",
+      "tryNext": "One thing to try next",
+      "saved": "Saved with this practice, so you can pick up where you left off.",
+      "notSaved": "These takeaways are shown just for you now. Turn on saving next time to keep them.",
+      "again": "Practice again"
+    },
+    "history": {
+      "title": "Your saved practice",
+      "note": "Only practices you chose to save show up here. Each one is encrypted and private to your account. Delete saved practice anytime in Settings.",
+      "defaultPersona": "a practice partner",
+      "practiceWith": "Practice with {persona}",
+      "hide": "Hide",
+      "read": "Read",
+      "nextTime": "Next time:"
+    },
+    "opener": {
+      "friend": "Hey, it's just me. Take your time. What's on your mind?",
+      "family": "I'm glad we're talking. Whenever you're ready, tell me what you wanted to share.",
+      "mentor": "Good to see you. Walk me through what you want to work on today.",
+      "hiringWarmJob": "Thanks for coming in. I see you're interested in the {job} role. Tell me a bit about yourself.",
+      "hiringWarm": "Thanks for coming in. Tell me a bit about yourself and why you're interested in this role.",
+      "hiringSkepticalJob": "Have a seat. So, the {job} position. Why should I consider you for this?",
+      "hiringSkeptical": "Have a seat. So, tell me why I should consider you for this position.",
+      "coworker": "Hey, welcome aboard! I'm on your team. How's your first day going?",
+      "teacher": "Thanks for coming in. I always like meeting the families. What did you want to talk about?",
+      "landlord": "Thanks for your interest in the unit. Tell me a little about yourself and your situation.",
+      "default": "Whenever you're ready, go ahead and start."
+    }
+  },
+  "gate": {
+    "title": "{tool} unlocks after your resume",
+    "needsProfile": "First, finish your profile in The Forge. Then tailor a resume to a specific job. That unlocks this and the rest of the toolset.",
+    "needsResume": "{tool} is built around a specific job. Tailor a resume to the job you're aiming at first, and this unlocks right away. You can paste the job description. No live search needed.",
+    "finishForge": "Finish in The Forge",
+    "tailor": "Tailor my resume",
+    "preview": "See a preview",
+    "backToDashboard": "Back to dashboard"
+  },
+  "interview": {
+    "toolName": "Interview Practice",
+    "types": {
+      "general": {
+        "label": "General Interview",
+        "description": "Common questions for any role. Good starting point."
+      },
+      "behavioral": {
+        "label": "Behavioral (STAR)",
+        "description": "\"Tell me about a time when...\" Practice with real scenarios."
+      },
+      "industry": {
+        "label": "Industry-Specific",
+        "description": "Questions tailored to your target field."
+      },
+      "disclosure": {
+        "label": "Disclosure Practice",
+        "description": "Practice talking about your record with an interviewer."
+      }
+    },
+    "struggle": {
+      "owning_the_gap": "owning your story",
+      "specifics": "giving specific examples",
+      "staying_calm": "staying calm and steady",
+      "closing": "closing the interview strong",
+      "confidence": "speaking with confidence"
+    },
+    "opening": {
+      "disclosure": "Thanks for coming in today. We appreciate your interest in this position. Why don't you start by telling me a little about yourself?",
+      "behavioral": "Welcome! I'm going to ask you some questions about your past experiences. Take your time with each answer. Let's start. Tell me about yourself and what brought you here today.",
+      "general": "Hi there, thanks for taking the time to interview with us today. Let's get started. Can you tell me a bit about yourself and why you're interested in this role?"
+    },
+    "errors": {
+      "savedJobLoad": "This saved job could not be loaded. Choose a job again before starting.",
+      "accountLoading": "Your account is still loading. Try again in a moment.",
+      "voiceAccount": "Your report is here, but the account could not be confirmed for saving.",
+      "feedbackFailed": "Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.",
+      "connectionDropped": "The connection dropped. Your answers are still here. Try End & get feedback again.",
+      "troubleReply": "I had trouble with that response. Let's try again."
+    },
+    "setup": {
+      "intro": "Practice makes confidence. Choose your interview type and we'll simulate a real conversation.",
+      "lastTime": "Last time you wanted to work on <b>{areas}</b>. Want to target that this time?",
+      "targetYes": "Yes, give me chances to practice that",
+      "savedJob": "Practice for a saved job?",
+      "savedJobHint": "(auto-fills the role and job description)",
+      "notNow": "Not right now",
+      "savedJobFallback": "Saved job",
+      "usingJd": "Using the job description we saved for this job{age}.",
+      "jdLong": " It was long, so we saved the first part of it.",
+      "role": "What role are you interviewing for?",
+      "rolePlaceholder": "e.g., Warehouse Associate, Customer Service Rep",
+      "resume": "Interview against which resume?",
+      "resumeHint": "(so questions match your real experience)",
+      "resumeFrom": "Resume from {when}",
+      "yourAccount": "your account",
+      "resumeGeneral": "General (no specific resume)",
+      "resumeNote": "Questions will be based on the real jobs, tools, and results on this resume.",
+      "posting": "Paste the job posting",
+      "postingHint": "(optional, helps the questions match the real role)",
+      "postingPlaceholder": "Paste the description from the job you are applying to...",
+      "skills": "Your skills (from The Forge)",
+      "kind": "What kind of practice do you need?",
+      "includeDisclosure": "Include disclosure practice",
+      "includeDisclosureNote": "The interviewer will ask about your background at some point during the conversation.",
+      "start": "Start Practice Interview",
+      "allowance": "Text practice: {limit} interviews a day with your account."
+    },
+    "feedback": {
+      "title": "Interview Feedback",
+      "intro": "Here's how you did. Remember, this is about practice, not perfection.",
+      "savingRecord": "Saving your practice record...",
+      "recordFailed": "Your practice record save has not been confirmed. Your report is still here. Check your Library before retrying, or download a copy.",
+      "retrySave": "Retry saving practice",
+      "didWell": "What you did well",
+      "workOn": "Areas to work on",
+      "overall": "Overall",
+      "disclosureNotes": "Disclosure notes",
+      "frame": "The frame to carry in",
+      "stronger": "Stronger answers to model",
+      "notes": "Your notes",
+      "notesNote": "Jot what you want to remember. These notes stay on this page and are not saved. Copy or download the analysis to keep them.",
+      "notesPlaceholder": "What clicked? What do you want to do differently next time?",
+      "savePdf": "Save analysis PDF",
+      "copied": "Copied!",
+      "copySummary": "Copy a practice summary for any AI",
+      "again": "Practice Again",
+      "reviewChat": "Review Chat"
+    },
+    "practice": {
+      "initials": "HM",
+      "hiringManager": "Hiring Manager",
+      "roleInterview": "{role} interview",
+      "inProgress": "Interview in progress",
+      "wrapping": "Wrapping up...",
+      "end": "End & get feedback",
+      "preparing": "Preparing a response to your answer",
+      "placeholder": "Type your answer...",
+      "send": "Send",
+      "privacy": "This is a safe space to practice. In text practice we keep the role, the kind of practice and t.ROY's feedback, never a transcript of your answers, so the app can track your progress. In voice practice, what was said is kept as text only when you turn saving on, and we never keep the audio. No program or employer can read your practice. If you share your progress with a program, it sees how many sessions you have done."
+    },
+    "voice": {
+      "title": "Live voice practice",
+      "desc": "Talk out loud with a realtime AI interviewer using gpt-realtime-2.",
+      "privacy": "Voice practice runs through OpenAI. They may keep audio and transcripts for up to 30 days for abuse monitoring, then delete them. We do not store your audio.",
+      "captionsNote": "Prefer to read along? Live captions show below while you talk. You can also use the text interview instead.",
+      "connecting": "Connecting...",
+      "live": "Live now. Speak naturally; end the session when you are done.",
+      "liveMinutes": " You have up to {minutes} minutes this session.",
+      "building": "Building feedback from your captured answers",
+      "finishing": "Finishing captured answers...",
+      "start": "Start live voice",
+      "upTo": "Up to {minutes} minutes today.",
+      "retryFeedback": "Retry feedback",
+      "savingOn": "Text saving is on for this practice.",
+      "savingOff": "Text saving is off. You can still get feedback when you end.",
+      "save": {
+        "title": "Save this voice practice?",
+        "note": "Saving is selected for your first practice unless you previously turned it off. You can turn it off below. Saved transcripts are text only, encrypted and private to your account. Feedback is available either way. We never save the audio. Delete saved practice in Settings.",
+        "thisLabel": "Save this voice practice",
+        "thisNote": "Turning this off remembers your choice. Turning it on here saves only this run.",
+        "alwaysLabel": "Always save my voice practice",
+        "alwaysNote": "Keeps saving on until you turn it off here or in Settings.",
+        "offNote": "With saving off, your transcript and feedback stay in this tab. We keep basic practice progress. Leaving the page clears the report."
+      },
+      "captions": "Live captions",
+      "captionsEmpty": "Captions will appear here as you and the interviewer speak.",
+      "you": "You",
+      "interviewer": "Interviewer",
+      "warnPreference": "Your saving preference could not be saved. Check this choice again before your next practice.",
+      "warnTranscript": "Your transcript could not be saved. You can still practice and get feedback in this tab.",
+      "warnChunk": "Some transcript text could not be saved. Keep this tab open for your feedback; saved history may be incomplete.",
+      "warnFinalize": "Your feedback is ready, but saved practice history could not be finalized. Keep this report open or download it.",
+      "reportError": "Your feedback could not be prepared. Your captured answers are still here in this tab. Retry feedback before leaving this page.",
+      "noAnswer": "No completed answer was captured. Start again and wait for your answer to appear in the captions before ending.",
+      "errCancelled": "Voice connection cancelled.",
+      "errNoMic": "This browser does not support microphone access.",
+      "errStart": "Could not start voice practice.",
+      "errReserve": "Voice session could not be reserved.",
+      "errOffer": "Could not create voice offer.",
+      "errConnection": "Realtime voice connection failed.",
+      "errStartShort": "Voice practice could not start."
+    },
+    "history": {
+      "openError": "This saved practice could not be opened. Try again.",
+      "title": "Your saved voice practice",
+      "note": "Open a saved practice to read its feedback and text transcript. Older sessions may have only a transcript and a short summary. Transcript text is encrypted in your account. We do not save audio.",
+      "defaultRole": "an interview",
+      "practiceFor": "Voice practice for {role}",
+      "opening": "Opening...",
+      "close": "Close practice",
+      "open": "Open practice",
+      "workingOn": "Working on:",
+      "reportUnavailable": "Your transcript opened, but the saved report could not be loaded.",
+      "reportMissing": "There is no full report linked to this practice. It may be an older session, or its report was not saved.",
+      "retryReport": "Retry loading report",
+      "savedSummary": "Saved summary: {summary}",
+      "transcriptAria": "Practice transcript",
+      "transcript": "Transcript",
+      "noTranscript": "No transcript text was saved for this practice."
+    },
+    "report": {
+      "aria": "Saved practice report",
+      "title": "Your practice report",
+      "worked": "What worked",
+      "next": "What to practice next",
+      "carry": "What to carry into your interview",
+      "disclosure": "Disclosure practice",
+      "answers": "Answers to practice"
+    }
+  },
+  "plan": {
+    "title": "Your plan",
+    "download": "Download",
+    "changeAnswers": "Change answers",
+    "coaching": {
+      "lead": "This is coaching, not legal advice.",
+      "body": "It is built from your answers. Anything you did not answer stays open. Nothing here is filled in with a guess.",
+      "saved": "What gets saved to your Library: the job you named and your plan for the other hurdles (and it stays with a job if you came here from one). Not saved: the record part, anything else you typed, and t.ROY's reading. The record part stays only on this screen until you copy or download it."
+    },
+    "save": {
+      "saved": "Saved to your Library, without the record part. You can come back to it there.",
+      "saving": "Saving your plan...",
+      "failed": "{error} Your plan is still here. Try saving again, or download a copy.",
+      "idle": "Not saved yet.",
+      "openLibrary": "Open Library",
+      "tryAgain": "Try saving again",
+      "saveThis": "Save this plan"
+    },
+    "reading": {
+      "toggle": "Show t.ROY's reading of your answers",
+      "note": "Off unless you turn it on. Your answers for each hurdle (record answers only with your yes) go to an AI service, which reads them back in plain sentences. Never saved.",
+      "working": "Putting your answers into plain sentences...",
+      "retry": "Try the wording again",
+      "done": "t.ROY's reading under each hurdle was written by an AI service from your answers for that hurdle only. Your own answers are the plan. The reading is not saved.",
+      "stripped": " We took out {count, plural, =1 {1 line} other {# lines}} it added that you didn't tell us.",
+      "nothingAdded": " Nothing was added.",
+      "nothing": "Nothing to read back for these hurdles."
+    },
+    "record": {
+      "title": "Plan what to say about the record",
+      "whenTitle": "When it comes up",
+      "sayTitle": "What to say",
+      "nextTitle": "What to say next",
+      "fromYou": "These are your own words, as you typed them. No AI changed them. Say it your way.",
+      "fillBlank": "Fill the blank in your own words. Practice can help you find them.",
+      "notSaved": "This record part is not saved anywhere. Copy or download it now if you want to keep it.",
+      "copy": "Copy my record plan",
+      "downloadAll": "Download the whole plan",
+      "lawTitle": "The law, as dated sources (as of {asOf})",
+      "sourceLine": "{whatItIs} {label}, checked {asOf}."
+    },
+    "section": {
+      "known": "What you told us",
+      "reading": "t.ROY's reading:",
+      "open": "Still open",
+      "doNow": "Do now",
+      "whoCanHelp": "Who can help",
+      "findHelp": "Find help: {label}",
+      "askEmployer": "What to ask an employer",
+      "tellEmployer": "What you tell an employer:",
+      "notDecided": "Not decided yet. That's fine."
+    },
+    "support": {
+      "transportation": "Getting to work",
+      "housing": "A place to stay",
+      "id_documents": "ID and documents",
+      "legal": "Legal help with a record",
+      "financial": "Money and benefits",
+      "employment": "Job help",
+      "education": "School and training",
+      "mental_health": "Mental health (only if you want it)",
+      "substance": "Recovery"
+    },
+    "constraints": {
+      "shiftConflict": "No shift filter: your shift answers for different hurdles don't share a shift",
+      "shifts": "Shifts: {shifts}",
+      "shift": {
+        "day": "days",
+        "evening": "evenings",
+        "night": "nights",
+        "weekend": "weekends",
+        "rotating": "a rotating schedule"
+      },
+      "remote": "Work from home only",
+      "radius": "Within {miles} miles",
+      "partTime": "Part time",
+      "fullTime": "Full time"
+    },
+    "filters": {
+      "title": "Use these in your job search?",
+      "note": "Only these limits go to your job search filters, and only if you press the button. Nothing else from this plan goes there.",
+      "saving": "Saving...",
+      "added": "Added to job search",
+      "add": "Add to my job search filters"
+    },
+    "practice": "Practice saying it"
+  },
+  "picker": {
+    "legend": "What is in your way right now?",
+    "note": "Pick all that fit. We go through them one at a time, and each answer picks the next question. You decide what, if anything, an employer ever hears."
+  },
+  "question": {
+    "header": "{label} · Hurdle {number} of {count} · Question {step}",
+    "skip": "Skip this one"
+  },
+  "hurdles": {
+    "h": {
+      "gaps": {
+        "label": "Gaps in my work history",
+        "blurb": "Time between jobs, or a stretch with no work on paper."
+      },
+      "record": {
+        "label": "A record or background check",
+        "blurb": "A form question, an interview, or a check after an offer."
+      },
+      "schedule": {
+        "label": "Schedule and caregiving",
+        "blurb": "Kids, family, school, another job, or appointments."
+      },
+      "transport": {
+        "label": "Getting to work",
+        "blurb": "No car, bus hours, a license, or the cost of the trip."
+      },
+      "housing": {
+        "label": "Housing",
+        "blurb": "Staying with someone, a shelter, or a place that may change."
+      },
+      "health": {
+        "label": "Health and work adjustments",
+        "blurb": "Limits, breaks, appointments, or what helps you work well."
+      },
+      "documents": {
+        "label": "ID, documents and licenses",
+        "blurb": "State ID, Social Security card, a driver's or work license."
+      },
+      "skills": {
+        "label": "Skills, computers and phone access",
+        "blurb": "Online applications, a phone that runs out, or a skill to learn."
+      },
+      "money": {
+        "label": "Money",
+        "blurb": "Need pay fast, costs to start, fines, or benefits."
+      },
+      "other": {
+        "label": "Something else",
+        "blurb": "Something not on this list."
+      },
+      "not_sure": {
+        "label": "Not sure yet",
+        "blurb": "A few questions to help you find what is in the way."
+      }
+    },
+    "n": {
+      "transport_what": {
+        "q": "What gets in the way of getting to work?",
+        "help": "Pick all that fit.",
+        "c": {
+          "no_car": "No car right now",
+          "bus_hours": "Bus or train hours",
+          "license": "No license, or it's suspended",
+          "cost": "Cost of gas, fares or repairs",
+          "ride": "A ride I can't count on",
+          "access": "Getting on and off is hard (accessibility)",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_bus_when": {
+        "q": "When does the bus or train not work for you?",
+        "c": {
+          "early": "Early mornings",
+          "late": "Late nights",
+          "weekends": "Weekends",
+          "route": "The route doesn't reach the job",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_shift_fit": {
+        "q": "With the bus as it runs now, which shifts can you reach?",
+        "help": "This can go into your job search filters later, only if you say so.",
+        "c": {
+          "day": "Days",
+          "evening": "Evenings",
+          "night": "Nights",
+          "weekend": "Weekends",
+          "rotating": "A rotating schedule",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_options": {
+        "q": "How do you get around now?",
+        "c": {
+          "walk": "Walk",
+          "bike": "Bike",
+          "bus": "Bus or train",
+          "rides": "Rides from family or friends",
+          "rideshare": "Rideshare or cab sometimes",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_license": {
+        "q": "Where does your license stand?",
+        "c": {
+          "never": "Never had one",
+          "suspended": "Suspended or revoked",
+          "expired": "Expired",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_cost": {
+        "q": "Which costs hit hardest?",
+        "c": {
+          "gas": "Gas",
+          "fares": "Bus or train fares",
+          "repairs": "Car repairs",
+          "insurance": "Insurance",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_backup": {
+        "q": "If your ride falls through, is there a backup?",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_access": {
+        "q": "What would make the trip work?",
+        "c": {
+          "paratransit": "A door to door ride service",
+          "stop": "A stop with a ramp or elevator",
+          "short_walk": "A shorter walk from the stop",
+          "not_sure": "Not sure"
+        }
+      },
+      "transport_distance": {
+        "q": "How far can you get to work today?",
+        "c": {
+          "under5": "Under 5 miles",
+          "5to15": "5 to 15 miles",
+          "15to30": "15 to 30 miles",
+          "home": "Only from home (remote)",
+          "not_sure": "Not sure"
+        }
+      },
+      "schedule_what": {
+        "q": "What shapes the hours you can work?",
+        "help": "Pick all that fit.",
+        "c": {
+          "care": "Kids or family I care for",
+          "job": "Another job",
+          "school": "School or classes",
+          "appointments": "Appointments I have to keep",
+          "not_sure": "Not sure"
+        }
+      },
+      "schedule_care_hours": {
+        "q": "When is care covered?",
+        "c": {
+          "school_hours": "During school hours",
+          "daytime": "Daytime",
+          "evenings": "Evenings",
+          "no_backup": "No backup when they are sick",
+          "not_sure": "Not sure"
+        }
+      },
+      "schedule_appointments": {
+        "q": "How often do the appointments come up?",
+        "c": {
+          "weekly": "Every week",
+          "monthly": "About once a month",
+          "changes": "It changes",
+          "not_sure": "Not sure"
+        }
+      },
+      "schedule_hours": {
+        "q": "Which shifts can you work?",
+        "help": "This can go into your job search filters later, only if you say so.",
+        "c": {
+          "day": "Days",
+          "evening": "Evenings",
+          "night": "Nights",
+          "weekend": "Weekends",
+          "rotating": "A rotating schedule",
+          "not_sure": "Not sure"
+        }
+      },
+      "schedule_total": {
+        "q": "How many hours a week can you work?",
+        "c": {
+          "full": "Full time",
+          "part": "Part time",
+          "not_sure": "Not sure"
+        }
+      },
+      "gaps_length": {
+        "q": "How long is the longest gap?",
+        "c": {
+          "under6": "Under 6 months",
+          "6to12": "6 to 12 months",
+          "1to3": "1 to 3 years",
+          "over3": "More than 3 years",
+          "several": "Several gaps",
+          "not_sure": "Not sure"
+        }
+      },
+      "gaps_filled": {
+        "q": "What filled the time? Pick only what you are comfortable naming.",
+        "help": "You choose what an employer hears. This is just for your plan.",
+        "c": {
+          "family": "Caring for family",
+          "health": "Health",
+          "inside": "Time inside",
+          "searching": "Looking for work",
+          "school": "School or training",
+          "informal": "Cash or side work",
+          "moving": "Moving or housing",
+          "rather_not": "Rather not say"
+        }
+      },
+      "gaps_inside": {
+        "q": "Do you want to plan the record conversation too?",
+        "c": {
+          "yes": "Yes, add it",
+          "no": "Not now"
+        }
+      },
+      "gaps_informal": {
+        "q": "Could that work go on your resume as real work?",
+        "help": "Real work is real work. It only goes on the page if you can explain every line.",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "not_sure": "Not sure"
+        }
+      },
+      "gaps_proof": {
+        "q": "Is there anything that shows what you did in that time?",
+        "c": {
+          "certs": "A certificate or class record",
+          "reference": "Someone who would vouch for me",
+          "pay": "Pay records",
+          "nothing": "Nothing yet",
+          "not_sure": "Not sure"
+        }
+      },
+      "gaps_asked": {
+        "q": "Has an employer asked about the gap yet?",
+        "c": {
+          "yes": "Yes",
+          "no": "Not yet"
+        }
+      },
+      "housing_now": {
+        "q": "What is going on with housing?",
+        "help": "Pick the closest one. No details needed.",
+        "c": {
+          "stable": "Stable for now",
+          "staying": "Staying with someone",
+          "shelter": "In a shelter",
+          "at_risk": "I may lose my place",
+          "no_address": "No address to use",
+          "rather_not": "Rather not say"
+        }
+      },
+      "housing_address": {
+        "q": "What do you have that an employer can use to reach you?",
+        "c": {
+          "mail": "An address that gets mail",
+          "phone": "A phone that works",
+          "neither": "Neither right now",
+          "not_sure": "Not sure"
+        }
+      },
+      "housing_when": {
+        "q": "When could it change?",
+        "c": {
+          "month": "This month",
+          "soon": "In 1 to 3 months",
+          "not_sure": "Not sure"
+        }
+      },
+      "housing_stay": {
+        "q": "Can you stay there while you start a job?",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "not_sure": "Not sure"
+        }
+      },
+      "housing_impact": {
+        "q": "How does it touch work?",
+        "c": {
+          "rest": "Hard to rest before shifts",
+          "calls": "Hard to get calls or mail",
+          "moving": "I may move soon",
+          "fine": "It doesn't right now",
+          "not_sure": "Not sure"
+        }
+      },
+      "health_impact": {
+        "q": "How does it touch the work?",
+        "help": "This plan never asks you to name a condition.",
+        "c": {
+          "lifting": "Limits on standing or lifting",
+          "breaks": "I need breaks",
+          "schedule": "I need a certain schedule",
+          "appointments": "Appointments",
+          "focus": "Focus or memory",
+          "settings": "Some settings are hard (noise, crowds, stress)",
+          "not_sure": "Not sure"
+        }
+      },
+      "health_helped": {
+        "q": "Has something helped you work well before?",
+        "c": {
+          "schedule": "A different schedule",
+          "equipment": "A stool, a cart or other equipment",
+          "written": "Written steps or checklists",
+          "quiet": "A quieter spot",
+          "time_off": "Time off for appointments",
+          "not_sure": "Not sure"
+        }
+      },
+      "health_ask": {
+        "q": "Do you want to ask an employer for a change that helps you work?",
+        "c": {
+          "before": "Yes, before I start",
+          "after": "Yes, after I start",
+          "no": "Not now",
+          "not_sure": "Not sure"
+        }
+      },
+      "documents_missing": {
+        "q": "What are you missing?",
+        "help": "Pick all that fit.",
+        "c": {
+          "state_id": "State ID",
+          "ss_card": "Social Security card",
+          "birth": "Birth certificate",
+          "drivers": "Driver's license",
+          "work_license": "A license or certificate for a job",
+          "not_sure": "Not sure"
+        }
+      },
+      "documents_blocker": {
+        "q": "What is stopping you from getting it?",
+        "c": {
+          "cost": "The cost",
+          "chain": "I need another document first",
+          "address": "I need an address",
+          "not_sure": "Not sure"
+        }
+      },
+      "documents_drivers": {
+        "q": "Where does your license stand?",
+        "c": {
+          "never": "Never had one",
+          "suspended": "Suspended or revoked",
+          "expired": "Expired",
+          "not_sure": "Not sure"
+        }
+      },
+      "documents_work_license": {
+        "q": "Which license or certificate? (for example CDL, forklift, CNA)",
+        "ph": "A few words. You can skip this."
+      },
+      "documents_board": {
+        "q": "Have you asked the people who issue it what they need from you?",
+        "c": {
+          "yes": "Yes",
+          "no": "Not yet",
+          "not_sure": "Not sure"
+        }
+      },
+      "documents_need_by": {
+        "q": "When do you need it?",
+        "c": {
+          "apply": "Before I can apply",
+          "start": "Before I start",
+          "not_sure": "Not sure"
+        }
+      },
+      "skills_what": {
+        "q": "What gets in the way?",
+        "help": "Pick all that fit.",
+        "c": {
+          "computer": "No computer",
+          "phone": "My phone or data runs out",
+          "online": "Email or online applications",
+          "job_skill": "A skill the job asks for",
+          "reading": "Reading or writing",
+          "not_sure": "Not sure"
+        }
+      },
+      "skills_online": {
+        "q": "Where can you get online?",
+        "c": {
+          "library": "A library",
+          "friend": "A friend or family member",
+          "phone_only": "My phone only",
+          "nowhere": "Nowhere right now",
+          "not_sure": "Not sure"
+        }
+      },
+      "skills_which": {
+        "q": "Which skill? (for example forklift, Excel, typing)",
+        "ph": "A few words. You can skip this."
+      },
+      "skills_reading": {
+        "q": "What would help?",
+        "c": {
+          "person": "Someone to go through it with me",
+          "voice": "Voice or audio tools",
+          "time": "More time",
+          "not_sure": "Not sure"
+        }
+      },
+      "skills_learn": {
+        "q": "How do you like to learn?",
+        "c": {
+          "hands_on": "Hands on",
+          "video": "Videos",
+          "class": "A class",
+          "one_on_one": "One on one",
+          "not_sure": "Not sure"
+        }
+      },
+      "money_what": {
+        "q": "What is the money problem?",
+        "help": "Pick all that fit.",
+        "c": {
+          "fast": "I need pay fast",
+          "start": "Costs to start (boots, clothes, tools, fares)",
+          "debt": "Debt, fines or fees",
+          "benefits": "Benefits I could lose",
+          "not_sure": "Not sure"
+        }
+      },
+      "money_when": {
+        "q": "How soon do you need a paycheck?",
+        "c": {
+          "week": "This week",
+          "month": "This month",
+          "not_sure": "Not sure"
+        }
+      },
+      "money_start": {
+        "q": "Which costs?",
+        "c": {
+          "boots": "Boots or safety gear",
+          "clothes": "Work clothes",
+          "tools": "Tools",
+          "fares": "Fares or gas for the first weeks",
+          "not_sure": "Not sure"
+        }
+      },
+      "money_debt": {
+        "q": "Do fines, fees or support orders touch your license or your pay?",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "not_sure": "Not sure"
+        }
+      },
+      "money_benefits": {
+        "q": "Do you want to know how a paycheck could change your benefits before you take a job?",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "not_sure": "Not sure"
+        }
+      },
+      "other_what": {
+        "q": "In a few words, what is in the way?",
+        "ph": "Short is fine. You can skip this."
+      },
+      "other_where": {
+        "q": "Which part does it touch?",
+        "c": {
+          "hired": "Getting hired",
+          "getting_there": "Getting to work",
+          "keeping": "Keeping a job",
+          "not_sure": "Not sure"
+        }
+      },
+      "not_sure_signs": {
+        "q": "Have any of these happened in the last few months?",
+        "help": "Pick up to three, the one that matters most first. Each adds a short set of questions. You can add more later from the start screen.",
+        "c": {
+          "ride": "Missed or turned down work because of a ride",
+          "papers": "Got asked for ID or papers I didn't have",
+          "check": "Got turned down after a background check",
+          "gap": "Got asked about time between jobs",
+          "hours": "Kids, family or school made the hours hard",
+          "health": "Health got in the way",
+          "housing": "Housing or mail problems",
+          "money": "Money ran out before payday",
+          "online": "Could not finish an online application",
+          "none": "None of these"
+        }
+      },
+      "not_sure_free": {
+        "q": "What feels off when you look for work? Short is fine.",
+        "ph": "You can skip this."
+      },
+      "record_where": {
+        "q": "Where is it coming up?",
+        "help": "Pick all that fit.",
+        "c": {
+          "form": "A question on an application",
+          "interview": "In an interview",
+          "check": "A background check after an offer",
+          "work": "With a supervisor or HR at work",
+          "not_sure": "Not sure"
+        }
+      },
+      "record_form_question": {
+        "q": "What does the form ask, in its own words?",
+        "help": "Copy it exactly if you can. The form's own words decide what you answer.",
+        "ph": "For example: Have you been convicted of a felony in the last 7 years?"
+      },
+      "record_check_stage": {
+        "q": "Where are you with the check?",
+        "c": {
+          "not_started": "It has not started",
+          "signed": "I signed the form for it",
+          "notice": "I got a letter saying they may not hire me because of it",
+          "not_sure": "Not sure"
+        }
+      },
+      "record_raise": {
+        "q": "Do you want to bring it up yourself, or wait to be asked?",
+        "help": "There is no one right way. You decide.",
+        "c": {
+          "me": "I'll bring it up",
+          "wait": "I'll wait to be asked",
+          "later": "I'll decide later"
+        }
+      },
+      "record_kind": {
+        "q": "What kind of record? You can skip this.",
+        "c": {
+          "misdemeanor": "Misdemeanor",
+          "felony": "Felony",
+          "both": "Both",
+          "pending": "A pending case",
+          "rather_not": "Rather not say"
+        }
+      },
+      "record_when": {
+        "q": "How long ago was the most recent one?",
+        "c": {
+          "lt1": "Less than 1 year",
+          "1to3": "1 to 3 years",
+          "3to7": "3 to 7 years",
+          "7plus": "More than 7 years",
+          "rather_not": "Rather not say"
+        }
+      },
+      "record_supervision": {
+        "q": "Are you on probation, parole or other supervision right now?",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "rather_not": "Rather not say"
+        }
+      },
+      "record_conditions": {
+        "q": "Do your conditions touch work? (hours, travel, kind of job, internet use)",
+        "c": {
+          "yes": "Yes",
+          "no": "No",
+          "not_sure": "Not sure"
+        }
+      },
+      "record_state": {
+        "q": "Which state is the job in?",
+        "help": "Two letters, like MT or WI. It's used to show dated sources for that state.",
+        "ph": "MT"
+      },
+      "record_worry": {
+        "q": "What worries you most about the conversation?",
+        "c": {
+          "details": "Being pushed for details",
+          "turned_down": "Being turned down",
+          "too_much": "Saying too much",
+          "surprise": "The check showing something I didn't expect",
+          "not_sure": "Not sure"
+        }
+      },
+      "record_lead": {
+        "q": "What do you want them to hear about you now?",
+        "c": {
+          "work": "My current or recent work",
+          "training": "Training or school I finished",
+          "showing_up": "How I show up",
+          "reference": "Someone who will vouch for me",
+          "not_sure": "Not sure"
+        }
+      },
+      "record_own_words": {
+        "q": "If you had to say it in one sentence, what would you say?",
+        "help": "Your words. Short is fine. No details needed. You can skip this.",
+        "ph": "For example: I have a felony from 2019."
+      },
+      "record_now_words": {
+        "q": "And one true thing about what you do now?",
+        "help": "Your words. You can skip this.",
+        "ph": "For example: I've worked at the yard for a year and a half."
+      },
+      "gaps_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "schedule_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "transport_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "housing_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "health_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "documents_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "skills_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "money_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      },
+      "other_tell": {
+        "q": "What do you want an employer to know about this?",
+        "help": "Your choice. You can change it any time.",
+        "c": {
+          "nothing": "Nothing. It stays with me.",
+          "job_only": "Only what touches the schedule or the work",
+          "more": "More of the picture, in my own words",
+          "later": "I'll decide later"
+        }
+      }
+    }
+  }
+}

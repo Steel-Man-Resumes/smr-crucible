@@ -12,10 +12,11 @@ import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
-import { SearchFilters, activeSearchFilters, FILTER_LABELS } from "@/components/jobs/SearchFilters";
+import { SearchFilters, activeSearchFiltersLocalized, FILTER_LABELS } from "@/components/jobs/SearchFilters";
 import { defaultJobSearchFilters, readJobSearchFilters, canonicalSearchFilters, type JobSearchFilters } from "@crucible/core/src/jobSearchFilters";
 import type { EnrichedJob, JobSearchSummary } from "@/lib/job-search-types";
 import { useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
 import { GhostGuide } from "@crucible/consumer-ui";
@@ -26,7 +27,7 @@ import { jobSourceForSave } from "@/lib/job-source";
 import { JobFitChoices } from "@/components/JobFitChoices";
 import { jobFitExclusion, type JobFitPreferences } from "@/lib/job-fit";
 import { broadenJobSearch } from "@/lib/job-search-broaden";
-import { BATCH_HANDOFF_KEY, MAX_BATCH_JOBS, SELECTION_FULL_LINE, toggleSelection, type BatchJob } from "@/lib/tailor-batch";
+import { BATCH_HANDOFF_KEY, MAX_BATCH_JOBS, toggleSelection, type BatchJob } from "@/lib/tailor-batch";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,11 @@ export default function JobBoardPageWrapper() {
 }
 
 function JobBoardPage() {
+  const t = useTranslations("refineryJobs.jobsPage");
+  const tc = useTranslations("common.actions");
+  const locale = useLocale();
+  const tFilters = useTranslations("refineryJobs.searchFilters");
+  const filterLabel = (key: string) => (FILTER_LABELS[key] ? t(`filterLabels.${key}`) : key);
   const searchParams = useSearchParams();
   const ownerUid = useSession().data?.user?.id;
   const ownerRef = useRef(ownerUid); ownerRef.current = ownerUid;
@@ -172,11 +178,11 @@ function JobBoardPage() {
             setJobs(cached.jobs); setSummary(cached.summary || null); setFairChanceInfo(cached.fairChanceInfo || ""); setSource(cached.source || ""); setSearched(true);
             submittedFilters.current = canonicalSearchFilters(nextFilters);
           }
-        } catch { setPreferencesNotice("Your last search could not be restored. Your saved lane choices are loaded."); }
+        } catch { setPreferencesNotice(t("restoreFailed")); }
         setPreferenceSource(data.source === "lane" ? "lane" : data.source === "account" ? "account" : "built-in");
         setFilters(nextFilters); setContext(nextContext); setPreferenceRevision(data.revision || 0); setAccountRevision(data.accountRevision || 0); setLoadedLane(laneKey);
       })
-      .catch(() => { if (!controller.signal.aborted) setPreferencesError("Your lane search choices could not be loaded. Try again before searching."); });
+      .catch(() => { if (!controller.signal.aborted) setPreferencesError(t("lanePrefsFailed")); });
     return () => { controller.abort(); searchController.current?.abort(); searchSequence.current++; };
   }, [ownerUid, laneKey, preferenceReload, searchParams]);
 
@@ -188,10 +194,10 @@ function JobBoardPage() {
       const response = await fetch("/api/job-search/preferences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ laneId: targetLane, scope, revision: scope === "lane" ? preferenceRevision : accountRevision, role: context.targetRole, location: context.location, filters: readJobSearchFilters(filters) }) });
       const data = await response.json();
       if (laneRef.current !== targetLane) return;
-      if (!response.ok) throw new Error(data.error || "Your choices did not save.");
+      if (!response.ok) throw new Error(data.error || t("choicesNotSaved"));
       if (scope === "lane") setPreferenceRevision(data.saved.revision); else setAccountRevision(data.saved.revision);
-      setPreferencesNotice(scope === "lane" ? "Search choices saved for this lane. Device location is not remembered." : "Account defaults saved. A lane’s own saved choices take priority. Device location is not remembered.");
-    } catch (error) { if (laneRef.current === targetLane) setPreferencesNotice(error instanceof Error ? error.message : "Your choices did not save. Try again."); }
+      setPreferencesNotice(scope === "lane" ? t("savedForLane") : t("savedAsDefaults"));
+    } catch (error) { if (laneRef.current === targetLane) setPreferencesNotice(error instanceof Error ? error.message : t("choicesNotSavedRetry")); }
     finally { if (laneRef.current === targetLane) setSavingPreferences(false); }
   }
 
@@ -210,7 +216,7 @@ function JobBoardPage() {
       .then(body => {
         if (controller.signal.aborted) return;
         setHiddenEmployers(Array.isArray(body.employers) ? body.employers.filter((item: {id?: unknown; display_name?: unknown}) => typeof item?.id === "string" && typeof item?.display_name === "string") : []);
-      }).catch(() => { if (!controller.signal.aborted) setHiddenEmployerError("Hidden employers could not be loaded. Retry to review them."); });
+      }).catch(() => { if (!controller.signal.aborted) setHiddenEmployerError(t("hiddenLoadFailed")); });
     void fetch("/api/applications", { cache: "no-store", signal: controller.signal })
       .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
       .then(body => {
@@ -269,7 +275,7 @@ function JobBoardPage() {
   async function searchJobs(override?: JobSearchFilters) {
     if (!preferencesReady || !laneKey) return;
     let chosenFilters: JobSearchFilters;
-    try { chosenFilters = readJobSearchFilters(override ?? filters); } catch (error) { setSearchError(error instanceof Error ? error.message : "Check your filters."); return; }
+    try { chosenFilters = readJobSearchFilters(override ?? filters); } catch (error) { setSearchError(error instanceof Error ? error.message : t("checkFilters")); return; }
     const targetLane = laneKey;
     const request = ++searchSequence.current;
     searchController.current?.abort();
@@ -305,12 +311,12 @@ function JobBoardPage() {
           // shown next to the outage line, not hidden behind it.
           setSummary(data.summary || null);
           setSearchError(
-            data.error === "location_required" ? "Add a city or ZIP. For a nationwide remote search, choose Remote and Anywhere."
+            data.error === "location_required" ? t("errLocationRequired")
               : data.error === "provider_partial"
-              ? "Part of the job listings did not load just now, and nothing from the rest fit this search. This is on our side, not yours. Try again in a few minutes."
+              ? t("errProviderPartial")
               : data.error === "provider_rate_limited"
-              ? "Our job-listing provider hit its limit for right now. This is on our side, not yours. Your search was fine. Try again in a little while."
-              : "We couldn't reach the job listings just now. This is on our side, not yours. Try again in a few minutes."
+              ? t("errProviderRateLimited")
+              : t("errProviderDown")
           );
         } else {
           setJobs(data.jobs || []);
@@ -325,13 +331,13 @@ function JobBoardPage() {
         const data = await res.json().catch(() => null);
         if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
         setJobs([]);
-        setSearchError(data?.message || data?.error || "Something went wrong running that search. Try again.");
+        setSearchError(data?.message || data?.error || t("errSearchGeneric"));
       }
     } catch {
       if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
       setJobs([]);
       setSearchError(
-        "We couldn't reach the server. Check your connection and try again."
+        t("errServer")
       );
     } finally {
       if (request === searchSequence.current && laneRef.current === targetLane) setSearching(false);
@@ -444,7 +450,7 @@ function JobBoardPage() {
   function togglePick(job: BatchJob) {
     const keys = picked.map(item => item.selectKey);
     const result = toggleSelection(keys, job.selectKey, MAX_BATCH_JOBS);
-    if (result.refused) { setPickNotice(SELECTION_FULL_LINE); return; }
+    if (result.refused) { setPickNotice(t("pickFull")); return; }
     setPickNotice("");
     setPicked(previous => result.selected.map(key => previous.find(item => item.selectKey === key) || job));
   }
@@ -462,7 +468,7 @@ function JobBoardPage() {
     if (!ownerUid || picked.length === 0) return;
     try {
       sessionStorage.setItem(BATCH_HANDOFF_KEY, JSON.stringify({ ownerUid, laneId: laneKey && laneKey !== "main" ? laneKey : null, jobs: picked }));
-    } catch { setPickNotice("This browser would not hold your picks. Tailor them one at a time instead."); return; }
+    } catch { setPickNotice(t("pickStorageFailed")); return; }
     window.location.href = "/dashboard/application-tailor?from=batch";
   }
 
@@ -490,7 +496,7 @@ function JobBoardPage() {
       if (ownerRef.current !== owner) return;
       setHiddenEmployers(previous => [...previous.filter(item => item.id !== body.employer.id), body.employer]);
       setHideEmployerFor(null); setHideReason("");
-    } catch { if (ownerRef.current === owner) setHiddenEmployerError("That employer was not confirmed hidden. Please try again."); }
+    } catch { if (ownerRef.current === owner) setHiddenEmployerError(t("hideFailed")); }
   }
 
   async function restoreEmployer(id: string) {
@@ -502,8 +508,8 @@ function JobBoardPage() {
       if (!response.ok) throw new Error();
       if (ownerRef.current !== owner) return;
       setHiddenEmployers(previous => previous.filter(item => item.id !== id));
-      setPreferencesNotice("Employer restored. Run Find Jobs again to include its available listings.");
-    } catch { if (ownerRef.current === owner) setHiddenEmployerError("That employer could not be restored. Please try again."); }
+      setPreferencesNotice(t("employerRestored"));
+    } catch { if (ownerRef.current === owner) setHiddenEmployerError(t("restoreEmployerFailed")); }
     finally { if (ownerRef.current === owner) setRestoringEmployer(null); }
   }
 
@@ -515,7 +521,7 @@ function JobBoardPage() {
   function showBroaderResults() {
     const broader = broadenJobSearch(filters);
     setFilters(broader); setRemoteOnly(false); showDismissedJobs();
-    setPreferencesNotice("Searching with fewer requirements. Saved exclusions and hidden employers still apply. Your saved search choices are unchanged.");
+    setPreferencesNotice(t("broaderNotice"));
     void searchJobs(broader);
   }
 
@@ -535,12 +541,11 @@ function JobBoardPage() {
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">
-        Job Board
+        {t("title")}
       </h1>
-      <GhostGuide message={getOpusMessage("jobs")} pageId="jobs" />
+      <GhostGuide message={getOpusMessage("jobs", "client", false, locale)} pageId="jobs" />
       <p className="text-base text-t-phos-dim mb-6">
-        Job listings from connected providers. Posting dates and available details vary. Employers we checked for hiring people with records are marked.
-        Everything stays right here in your dashboard.
+        {t("intro")}
       </p>
 
       {/* Cross-link into the curated job paths (completes the loop) */}
@@ -549,8 +554,8 @@ function JobBoardPage() {
         className="t-focus flex items-center justify-between gap-3 bg-t-panel border border-t-line px-4 py-3 mb-6 hover:border-t-phos-dim transition-colors"
       >
         <span className="text-sm text-t-phos">
-          <span className="font-semibold text-t-white">Not sure where to start?</span>{" "}
-          Explore work paths, the evidence you already have, and what you would need next.
+          <span className="font-semibold text-t-white">{t("crossTitle")}</span>{" "}
+          {t("crossBody")}
         </span>
         <svg
           width="16"
@@ -576,22 +581,21 @@ function JobBoardPage() {
           <div className="flex items-center justify-between">
             <div>
               <span className="text-sm font-semibold text-t-amber-bright">
-                {savedCount} saved job{savedCount !== 1 ? "s" : ""}
+                {t("savedCount",{count:savedCount})}
               </span>
               <span className="text-xs text-t-phos-dim ml-2">
-                {Array.from(savedJobs.values()).filter(
+                {t("appliedCount",{count:Array.from(savedJobs.values()).filter(
                   (j) => j.status === "applied"
-                ).length}{" "}
-                applied
+                ).length})}
               </span>
             </div>
             <Link href="/dashboard/applications" className="text-xs text-t-amber-bright underline">
-              Track applications
+              {t("trackApplications")}
             </Link>
           </div>
           {savedRows.some(row => row.status === "saved") && (
             <details className="mt-3 text-sm text-t-phos" data-testid="saved-jobs-picker">
-              <summary className="t-focus min-h-touch cursor-pointer text-t-white">Pick saved jobs to tailor (up to {MAX_BATCH_JOBS})</summary>
+              <summary className="t-focus min-h-touch cursor-pointer text-t-white">{t("pickSaved",{max:MAX_BATCH_JOBS})}</summary>
               <ul className="mt-2 space-y-1">
                 {savedRows.filter(row => row.status === "saved").slice(0, 20).map(row => {
                   const item = batchJobFromSaved(row);
@@ -600,7 +604,7 @@ function JobBoardPage() {
                     <li key={row.id}>
                       <label className="flex min-h-touch items-center gap-3">
                         <input type="checkbox" className="h-5 w-5 flex-shrink-0" checked={isPicked} onChange={() => togglePick(item)} />
-                        <span>{row.job_title} at {row.company}{row.resume_artifact_id ? <span className="text-xs text-t-phos-dim"> · already has a tailored resume</span> : null}</span>
+                        <span>{t("jobAt",{title:row.job_title,company:row.company})}{row.resume_artifact_id ? <span className="text-xs text-t-phos-dim"> · {t("hasTailored")}</span> : null}</span>
                       </label>
                     </li>
                   );
@@ -613,17 +617,17 @@ function JobBoardPage() {
 
       {/* Search form */}
       <div id="job-fit-choices"><JobFitChoices key={ownerUid || "signed-out"} onChange={setJobFit} /></div>
-      {preferencesError && <p role="alert" className="mb-4 border border-t-red p-3 text-sm text-t-red">{preferencesError} <button type="button" onClick={() => setPreferenceReload(n=>n+1)} className="t-focus min-h-touch underline">Retry</button></p>}
-      {!preferencesReady && !preferencesError && <p role="status" className="mb-4 text-sm text-t-phos-dim">Loading this lane’s search choices...</p>}
-      <div id="refinery-tool-jobs-search" role="group" aria-label="Job search choices" className="bg-t-panel p-5 border border-t-line mb-6" aria-busy={!preferencesReady}>
+      {preferencesError && <p role="alert" className="mb-4 border border-t-red p-3 text-sm text-t-red">{preferencesError} <button type="button" onClick={() => setPreferenceReload(n=>n+1)} className="t-focus min-h-touch underline">{t("retry")}</button></p>}
+      {!preferencesReady && !preferencesError && <p role="status" className="mb-4 text-sm text-t-phos-dim">{t("loadingLane")}</p>}
+      <div id="refinery-tool-jobs-search" role="group" aria-label={t("choicesAria")} className="bg-t-panel p-5 border border-t-line mb-6" aria-busy={!preferencesReady}>
         <div className="space-y-4">
           <div id="refinery-tool-jobs-query">
             <label className="text-sm font-medium text-t-white block mb-1">
-              What kind of work?
+              {t("kindOfWork")}
             </label>
             <input
               disabled={!preferencesReady}
-              aria-label="What kind of work?"
+              aria-label={t("kindOfWork")}
               value={context.targetRole}
               onChange={(e) =>
                 setContext({ ...context, targetRole: e.target.value })
@@ -631,21 +635,21 @@ function JobBoardPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
               }}
-              placeholder="e.g., Warehouse, CDL Driver, Forklift"
+              placeholder={t("workPlaceholder")}
               data-tour="jobs-search-role"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
             />
             <p className="text-xs text-t-phos-dim mt-1">
-              You can combine terms. Try &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;.
+              {t("combineTerms")}
             </p>
             {roleFromLane && context.targetRole && (
               <p className="text-xs text-t-amber-bright mt-1">
-                From this lane’s goal. Edit it anytime.
+                {t("fromLaneGoal")}
               </p>
             )}
             {/* Quick picks — click to set or append */}
             <div className="flex flex-wrap gap-2 mt-2">
-              {COMMON_ROLES.slice(0, 6).map((role) => {
+              {COMMON_ROLES.slice(0, 6).map((role, roleIndex) => {
                 const isActive = context.targetRole === role;
                 return (
                   <button
@@ -660,7 +664,7 @@ function JobBoardPage() {
                         : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"
                     }`}
                   >
-                    {role}
+                    {t(`roles.${roleIndex}`)}
                   </button>
                 );
               })}
@@ -668,10 +672,10 @@ function JobBoardPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-t-white block mb-1">Where?</label>
+            <label className="text-sm font-medium text-t-white block mb-1">{t("where")}</label>
             <input
               disabled={!preferencesReady}
-              aria-label="Search city or ZIP"
+              aria-label={t("cityOrZip")}
               value={context.location}
               onChange={(e) =>
                 { setContext({ ...context, location: e.target.value }); setFilters(f=>({...f,origin:null})); }
@@ -679,15 +683,15 @@ function JobBoardPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
               }}
-              placeholder="City, State (e.g., Milwaukee, WI)"
+              placeholder={t("cityPlaceholder")}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white min-h-touch focus:border-t-amber focus:outline-none transition-colors"
             />
           </div>
 
-          <p className="mb-3 text-sm text-t-phos">{preferenceSource === "built-in" ? "The starting defaults are within 25 miles and posted in the last 30 days, keeping unknown details. These are not saved personal choices. Your current choices are shown below; review them before Find Jobs." : preferenceSource === "lane" ? "Your saved choices for this lane are loaded. Review them before searching." : "Your saved account defaults are loaded. Review them before searching."}</p>
+          <p className="mb-3 text-sm text-t-phos">{preferenceSource === "built-in" ? t("sourceBuiltIn") : preferenceSource === "lane" ? t("sourceLane") : t("sourceAccount")}</p>
           <SearchFilters key={laneKey || "loading"} value={filters} onChange={setFilters} disabled={!preferencesReady || searching} />
-          <div className="flex flex-wrap gap-2" aria-label="Active search choices">{activeSearchFilters(filters).map(line=><span key={line} className="border border-t-line px-2 py-1 text-xs text-t-phos-dim">{line}</span>)}</div>
-          <div className="flex flex-wrap gap-3 text-xs"><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("lane")} className="t-focus min-h-touch text-t-amber-bright underline">Remember for this lane</button><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("account")} className="t-focus min-h-touch text-t-phos-dim underline">Use as account defaults</button></div>
+          <div className="flex flex-wrap gap-2" aria-label={t("activeAria")}>{activeSearchFiltersLocalized(filters, tFilters).map(line=><span key={line} className="border border-t-line px-2 py-1 text-xs text-t-phos-dim">{line}</span>)}</div>
+          <div className="flex flex-wrap gap-3 text-xs"><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("lane")} className="t-focus min-h-touch text-t-amber-bright underline">{t("rememberLane")}</button><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("account")} className="t-focus min-h-touch text-t-phos-dim underline">{t("useDefaults")}</button></div>
           {preferencesNotice && <p role="status" className="text-xs text-t-phos-dim">{preferencesNotice}</p>}
           <button
             onClick={() => void searchJobs()}
@@ -695,45 +699,45 @@ function JobBoardPage() {
             data-tour="jobs-search-button"
             className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
-            {searching ? "Searching real listings..." : "Find Jobs"}
+            {searching ? t("searchingListings") : t("findJobs")}
           </button>
         </div>
       </div>
 
-      <section aria-label="Broaden or restore job results" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos">
-        <p>Broader results stop screening listings by distance, date, pay and other search requirements. Your entered location, saved exclusions and hidden employers still apply. Provider search areas and result limits still apply.</p>
-        <button type="button" disabled={!preferencesReady || searching || (!context.targetRole && !context.location)} onClick={showBroaderResults} className="t-focus mt-3 min-h-touch border border-t-line px-4">Show broader results</button>
-        <p className="mt-3 text-xs">To undo saved exclusions, review <a href="#job-fit-choices" className="underline">Work that fits your life</a> and the search filters, save your choices, then search again.</p>
-        {dismissedCount > 0 && <button type="button" onClick={showDismissedJobs} className="t-focus mt-3 min-h-touch underline">Show {dismissedCount} dismissed listings</button>}
-        <details className="mt-3"><summary className="t-focus min-h-touch cursor-pointer">Review hidden employers ({hiddenEmployers.length})</summary>
-          {hiddenEmployers.length === 0 && !hiddenEmployerError && <p>No saved hidden employers are loaded.</p>}
-          <ul>{hiddenEmployers.map(employer => <li key={employer.id} className="flex flex-wrap items-center justify-between gap-2 py-2"><span>{employer.display_name}</span><button type="button" disabled={restoringEmployer !== null} onClick={() => void restoreEmployer(employer.id)} className="t-focus min-h-touch underline">{restoringEmployer === employer.id ? "Restoring..." : "Show jobs from this employer"}</button></li>)}</ul>
+      <section aria-label={t("broadenAria")} className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos">
+        <p>{t("broadenIntro")}</p>
+        <button type="button" disabled={!preferencesReady || searching || (!context.targetRole && !context.location)} onClick={showBroaderResults} className="t-focus mt-3 min-h-touch border border-t-line px-4">{t("showBroader")}</button>
+        <p className="mt-3 text-xs">{t.rich("undoExclusions",{link:(chunks) => <a href="#job-fit-choices" className="underline">{chunks}</a>})}</p>
+        {dismissedCount > 0 && <button type="button" onClick={showDismissedJobs} className="t-focus mt-3 min-h-touch underline">{t("showDismissed",{count:dismissedCount})}</button>}
+        <details className="mt-3"><summary className="t-focus min-h-touch cursor-pointer">{t("reviewHidden",{count:hiddenEmployers.length})}</summary>
+          {hiddenEmployers.length === 0 && !hiddenEmployerError && <p>{t("noHidden")}</p>}
+          <ul>{hiddenEmployers.map(employer => <li key={employer.id} className="flex flex-wrap items-center justify-between gap-2 py-2"><span>{employer.display_name}</span><button type="button" disabled={restoringEmployer !== null} onClick={() => void restoreEmployer(employer.id)} className="t-focus min-h-touch underline">{restoringEmployer === employer.id ? t("restoring") : t("showEmployerJobs")}</button></li>)}</ul>
         </details>
-        {hiddenEmployerError && <p role="alert">{hiddenEmployerError} <button type="button" onClick={() => setHiddenReload(value => value + 1)} className="t-focus min-h-touch underline">Reload hidden employers</button></p>}
+        {hiddenEmployerError && <p role="alert">{hiddenEmployerError} <button type="button" onClick={() => setHiddenReload(value => value + 1)} className="t-focus min-h-touch underline">{t("reloadHidden")}</button></p>}
       </section>
-      {summary && !searching && preferencesReady && <section aria-label="Loaded search results" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{summary.matched} kept from {summary.loaded} loaded listings. {summary.excluded} excluded. {summary.unknownIncluded} kept with fields to check.</p><p className="mt-1 text-xs">This is a bounded search, not a count of every opening. Listings fetched {new Date(summary.fetchedAt).toLocaleString()}. {source === "cache" ? "Reused from a cached search." : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{line}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">Choices changed. Run Find Jobs to apply them.</p>}</section>}
-      {prioritizeRecordEvidence && <p className="mb-3 text-sm text-t-phos-dim">Employers with verified evidence appear first. Other openings stay visible: missing evidence does not mean an employer won’t hire you.</p>}
-      {summary && summary.excluded > 0 && <details className="mb-4 text-sm text-t-phos-dim"><summary className="cursor-pointer">Why were openings excluded?</summary><ul className="mt-2 space-y-1">{Object.entries(summary.excludedBy).map(([key, count]) => <li key={key}>{key === "personal" ? "Your saved exclusions or hidden employers" : key.startsWith("unknown_") ? `Missing ${FILTER_LABELS[key.slice(8)] || key.slice(8)}` : FILTER_LABELS[key] || key}: {count}</li>)}</ul><p className="mt-2">One opening can fail more than one requirement. Change a requirement only if it works for you, then run Find Jobs again.</p></details>}
+      {summary && !searching && preferencesReady && <section aria-label={t("resultsAria")} className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{t("summaryCounts",{matched:summary.matched,loaded:summary.loaded,excluded:summary.excluded,unknown:summary.unknownIncluded})}</p><p className="mt-1 text-xs">{t("bounded",{time:new Date(summary.fetchedAt).toLocaleString()})} {source === "cache" ? t("cached") : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{line}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">{t("choicesChanged")}</p>}</section>}
+      {prioritizeRecordEvidence && <p className="mb-3 text-sm text-t-phos-dim">{t("prioritizeNote")}</p>}
+      {summary && summary.excluded > 0 && <details className="mb-4 text-sm text-t-phos-dim"><summary className="cursor-pointer">{t("whyExcluded")}</summary><ul className="mt-2 space-y-1">{Object.entries(summary.excludedBy).map(([key, count]) => <li key={key}>{key === "personal" ? t("excludedPersonal") : key.startsWith("unknown_") ? t("missingField",{label:filterLabel(key.slice(8))}) : filterLabel(key)}: {count}</li>)}</ul><p className="mt-2">{t("excludedNote")}</p></details>}
       {/* Phase 4C: result filters -- refine the listings you already pulled */}
       {jobs.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs font-medium text-t-phos-dim">Show:</span>
+          <span className="text-xs font-medium text-t-phos-dim">{t("show")}</span>
           <button
             aria-pressed={prioritizeRecordEvidence}
-            title="Bring employers with verified hiring evidence to the top. Other openings stay visible because missing evidence is not a refusal."
+            title={t("prioritizeTitle")}
             onClick={() => setPrioritizeRecordEvidence((v) => !v)}
             className={`t-focus text-xs px-3 py-1.5 border transition-colors ${prioritizeRecordEvidence ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
-            Prioritize employers with hiring evidence
+            {t("prioritize")}
           </button>
           <button
             onClick={() => setRemoteOnly((v) => !v)}
             className={`t-focus text-xs px-3 py-1.5 border transition-colors ${remoteOnly ? "bg-t-steel text-white border-t-steel font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
-            Remote only
+            {t("remoteOnly")}
           </button>
           <span className="text-xs text-t-phos-dim ml-auto">
-            {visibleJobs.length} of {jobs.length} shown
+            {t("shown",{visible:visibleJobs.length,total:jobs.length})}
           </span>
         </div>
       )}
@@ -749,10 +753,10 @@ function JobBoardPage() {
       {searchError && !searching && (
         <div className="bg-t-panel p-5 border border-t-red mb-6">
           <p className="text-sm font-semibold text-t-red mb-1">
-            Job search is having trouble right now
+            {t("searchTrouble")}
           </p>
           <p className="text-sm text-t-phos leading-relaxed">{searchError}</p>
-          {summary && (summary.removedByChoices || 0) > 0 && <p className="mt-2 text-sm text-t-phos" data-testid="jobs-removed-by-choices">{summary.removedByChoices} listing{summary.removedByChoices === 1 ? "" : "s"} that did load {summary.removedByChoices === 1 ? "was" : "were"} removed by your choices. See why above.</p>}
+          {summary && (summary.removedByChoices || 0) > 0 && <p className="mt-2 text-sm text-t-phos" data-testid="jobs-removed-by-choices">{t("removedByChoices",{count:summary.removedByChoices || 0})}</p>}
         </div>
       )}
 
@@ -760,13 +764,13 @@ function JobBoardPage() {
       {fairChanceInfo && (
         <div className="bg-t-panel p-5 border border-t-steel mb-6">
           <h2 className="font-semibold text-t-steel mb-2">
-            Applying With a Record Here
+            {t("applyingTitle")}
           </h2>
           <p className="text-sm text-t-phos leading-relaxed">
             {fairChanceInfo}
           </p>
           <p className="text-xs text-t-phos-dim mt-2">
-            General guidance, not a list of employers we checked.
+            {t("generalGuidance")}
           </p>
         </div>
       )}
@@ -775,7 +779,7 @@ function JobBoardPage() {
       {searching && (
         <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
           <TroyWork compact decorative />
-          Searching real job listings...
+          {t("searchingJobs")}
         </div>
       )}
 
@@ -783,12 +787,12 @@ function JobBoardPage() {
       {!searching && searched && !searchError && visibleJobs.length === 0 && (
         <div className="text-center py-12">
           <p className="text-t-phos-dim mb-3">
-            No listings kept from this loaded search. You can change a choice and search again:
+            {t("noneKept")}
           </p>
           <ul className="text-sm text-t-phos-dim space-y-1">
-            {summary && Object.entries(summary.excludedBy).map(([key,count])=><li key={key}>{key.startsWith("unknown_") ? `Not supplied: ${FILTER_LABELS[key.slice(8)] || key.slice(8)}` : FILTER_LABELS[key] || key}: {count} loaded listing{count===1?"":"s"}. Reasons can overlap.</li>)}
-            <li>Adjust the role, distance or a must-have filter above. Your radius is never widened automatically.</li>
-            {!filters.includeUnknown && <li>Allow unknown fields if you want to inspect listings with missing details.</li>}
+            {summary && Object.entries(summary.excludedBy).map(([key,count])=><li key={key}>{key.startsWith("unknown_") ? t("notSupplied",{label:filterLabel(key.slice(8))}) : filterLabel(key)}: {t("loadedListings",{count})}</li>)}
+            <li>{t("adjustTip")}</li>
+            {!filters.includeUnknown && <li>{t("allowUnknownTip")}</li>}
           </ul>
         </div>
       )}
@@ -799,8 +803,7 @@ function JobBoardPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/cos-logo-star.svg" alt="CareerOneStop" className="h-5 w-auto" />
           <span>
-            Job listings provided by CareerOneStop, sponsored by the U.S.
-            Department of Labor.
+            {t("careerOneStop")}
           </span>
         </div>
       )}
@@ -820,8 +823,8 @@ function JobBoardPage() {
                 data-tour={groupIndex === 0 && jobIndex === 0 ? "jobs-first-result" : undefined}
                 className="bg-t-panel border border-t-line overflow-hidden transition-colors hover:border-t-phos-dim"
               >
-                {job.filterAssessment && <div className="border-b border-t-line px-4 py-2 text-xs text-t-phos-dim">{job.filterAssessment.distanceMiles === null ? "Distance unverified" : `About ${job.filterAssessment.distanceMiles.toFixed(1)} miles in a straight line`}{job.filterAssessment.unknown.length>0?` · Check: ${job.filterAssessment.unknown.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}{job.filterAssessment.preferred.length>0?` · Preferences not matched: ${job.filterAssessment.preferred.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}</div>}
-                {job.evidence && <p className="px-4 pt-2 text-xs text-t-phos-dim">Source: {job.evidence.source}. Posted: {job.evidence.postedAt && Number.isFinite(Date.parse(job.evidence.postedAt)) ? new Date(job.evidence.postedAt).toLocaleDateString() : "not supplied"}. Fetched: {new Date(job.evidence.fetchedAt).toLocaleString()}.</p>}
+                {job.filterAssessment && <div className="border-b border-t-line px-4 py-2 text-xs text-t-phos-dim">{job.filterAssessment.distanceMiles === null ? t("distanceUnverified") : t("aboutMiles",{miles:job.filterAssessment.distanceMiles.toFixed(1)})}{job.filterAssessment.unknown.length>0?` · ${t("check",{list:job.filterAssessment.unknown.map(key=>filterLabel(key)).join(", ")})}`:""}{job.filterAssessment.preferred.length>0?` · ${t("preferencesNotMatched",{list:job.filterAssessment.preferred.map(key=>filterLabel(key)).join(", ")})}`:""}</div>}
+                {job.evidence && <p className="px-4 pt-2 text-xs text-t-phos-dim">{t("evidenceLine",{source:job.evidence.source,posted:job.evidence.postedAt && Number.isFinite(Date.parse(job.evidence.postedAt)) ? new Date(job.evidence.postedAt).toLocaleDateString() : t("postedNotSupplied"),fetched:new Date(job.evidence.fetchedAt).toLocaleString()})}</p>}
                 {job.evidence?.warnings.map(warning=><p key={warning} className="px-4 pt-1 text-xs text-t-amber-bright">{warning}</p>)}
                 {job.relevance && <p className="px-4 pt-2 text-sm text-t-phos-dim">{job.relevance.reason}</p>}
                 <label className="flex min-h-touch items-center gap-3 px-4 pt-2 text-sm text-t-phos" data-testid="job-pick">
@@ -830,9 +833,9 @@ function JobBoardPage() {
                     className="h-5 w-5 flex-shrink-0"
                     checked={picked.some(item => item.selectKey === job.id)}
                     onChange={() => togglePick(batchJobFromResult(job))}
-                    aria-label={`Pick to tailor (up to 3): ${job.title} at ${job.company}`}
+                    aria-label={t("pickAria",{title:job.title,company:job.company})}
                   />
-                  Pick to tailor (up to 3)
+                  {t("pickLabel")}
                 </label>
                 {/* Header — always visible */}
                 <button
@@ -849,24 +852,24 @@ function JobBoardPage() {
                         </h3>
                         {job.second_chance && (
                           <span className="text-[10px] font-medium border border-t-amber text-t-amber-bright px-2 py-0.5 whitespace-nowrap">
-                            Hires people with records
+                            {t("hiresRecords")}
                           </span>
                         )}
                         {!job.second_chance && job.marked_elsewhere && (
                           <span data-testid="job-marked-elsewhere" className="text-[10px] font-medium border border-t-amber text-t-amber-bright px-2 py-0.5">
-                            Hires people with records in {job.marked_elsewhere.town}
+                            {t("hiresRecordsIn",{town:job.marked_elsewhere.town})}
                           </span>
                         )}
                         {job.remote && (
                           <span className="text-[10px] font-medium border border-t-steel text-t-steel px-2 py-0.5 whitespace-nowrap">
-                            Remote
+                            {t("remote")}
                           </span>
                         )}
                       </div>
                       <p className="text-sm text-t-phos-dim">{job.company}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-t-phos-dim flex-wrap">
                         {job.location && <span>{job.location}</span>}
-                        {job.other_locations && job.other_locations.length > 0 && <span data-testid="job-location-count">{job.other_locations.length + 1} locations</span>}
+                        {job.other_locations && job.other_locations.length > 0 && <span data-testid="job-location-count">{t("locations",{count:job.other_locations.length + 1})}</span>}
                         {job.salary && (
                           <span className="font-medium text-t-amber-bright">
                             {job.salary}
@@ -913,17 +916,17 @@ function JobBoardPage() {
                       {job.employment_type && (
                         <span className="text-t-phos-dim">{job.employment_type}</span>
                       )}
-                      {job.remote && <span className="text-t-steel font-medium">Remote</span>}
+                      {job.remote && <span className="text-t-steel font-medium">{t("remote")}</span>}
                     </div>
 
                     {job.other_listings && job.other_listings.length > 0 && (
                       <div className="text-xs text-t-phos-dim" data-testid="job-other-listings">
-                        <p>This posting is also listed here. Each copy keeps its own application page.</p>
+                        <p>{t("alsoListed")}</p>
                         <ul className="mt-1 space-y-1">
                           {job.other_listings.map((listing, i) => (
                             <li key={`${listing.source}-${i}`}>
-                              {listing.place || "Place not supplied"} ({listing.source})
-                              {listing.apply_url && <>{" "}<a href={listing.apply_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-t-steel underline underline-offset-2 hover:opacity-80">Open this listing &#8599;</a></>}
+                              {listing.place || t("placeNotSupplied")} ({listing.source})
+                              {listing.apply_url && <>{" "}<a href={listing.apply_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-t-steel underline underline-offset-2 hover:opacity-80">{t("openListing")} &#8599;</a></>}
                             </li>
                           ))}
                         </ul>
@@ -959,7 +962,7 @@ function JobBoardPage() {
                     {job.requirements.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase">
-                          What they&apos;re looking for
+                          {t("lookingFor")}
                         </h4>
                         <ul className="text-sm text-t-phos-dim space-y-1">
                           {job.requirements.map((r, i) => (
@@ -978,7 +981,7 @@ function JobBoardPage() {
                     {job.benefits.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-t-white mb-1.5 uppercase">
-                          Benefits
+                          {t("benefits")}
                         </h4>
                         <ul className="text-sm text-t-phos-dim space-y-1">
                           {job.benefits.map((b, i) => (
@@ -1004,7 +1007,7 @@ function JobBoardPage() {
                           }}
                           className="t-focus px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
                         >
-                          Save Job
+                          {t("saveJob")}
                         </button>
                       ) : savedStatus === "saved" ? (
                         <>
@@ -1015,7 +1018,7 @@ function JobBoardPage() {
                             }}
                             className="t-focus px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
                           >
-                            Mark Applied
+                            {t("markApplied")}
                           </button>
                           <button
                             onClick={(e) => {
@@ -1024,12 +1027,12 @@ function JobBoardPage() {
                             }}
                             className="text-xs text-t-phos-dim hover:text-t-white"
                           >
-                            Unsave
+                            {t("unsave")}
                           </button>
                         </>
                       ) : (
                         <span className="text-xs font-medium text-t-amber-bright border border-t-amber px-3 py-1.5">
-                          Applied
+                          {t("applied")}
                         </span>
                       )}
 
@@ -1042,7 +1045,7 @@ function JobBoardPage() {
                         data-tour={jobIndex === 0 ? "jobs-tailor-button" : undefined}
                         className="t-focus px-4 py-2 bg-transparent border border-t-steel text-t-steel text-sm font-bold hover:bg-t-steel hover:text-white transition-colors"
                       >
-                        Tailor My Resume for This Job
+                        {t("tailorResume")}
                       </button>
 
                       <button
@@ -1052,7 +1055,7 @@ function JobBoardPage() {
                         }}
                         className="text-xs text-t-phos-dim hover:text-t-white ml-auto"
                       >
-                        Not for me
+                        {t("notForMe")}
                       </button>
 
                       <button
@@ -1062,9 +1065,9 @@ function JobBoardPage() {
                           setHideEmployerFor(hideEmployerFor === job.id ? null : job.id);
                         }}
                         className="text-xs text-t-phos-dim hover:text-t-red"
-                        title="Hide this employer from your searches"
+                        title={t("hideEmployerTitle")}
                       >
-                        Hide employer
+                        {t("hideEmployer")}
                       </button>
                     </div>
 
@@ -1075,13 +1078,12 @@ function JobBoardPage() {
                         className="mt-2 border border-t-line bg-t-panel-2 p-3"
                       >
                         <p className="text-xs text-t-phos">
-                          Hide <strong className="text-t-white">{job.company}</strong> from all your
-                          future searches. You can undo this anytime in Settings.
+                          {t.rich("hideConfirm",{company:job.company,strong:(chunks) => <strong className="text-t-white">{chunks}</strong>})}
                         </p>
                         <textarea
                           value={hideReason}
                           onChange={(e) => setHideReason(e.target.value)}
-                          placeholder="Reason (optional), like a former employer or already applied"
+                          placeholder={t("hideReasonPlaceholder")}
                           rows={2}
                           className="mt-2 w-full px-3 py-2 text-xs bg-t-panel border border-t-line text-t-white focus:border-t-amber focus:outline-none resize-y"
                         />
@@ -1090,13 +1092,13 @@ function JobBoardPage() {
                             onClick={() => hideEmployer(job.company)}
                             className="t-focus px-3 py-1.5 text-xs font-bold bg-t-red text-white hover:opacity-90"
                           >
-                            Hide {job.company}
+                            {t("hideCompany",{company:job.company})}
                           </button>
                           <button
                             onClick={() => { setHideEmployerFor(null); setHideReason(""); }}
                             className="text-xs text-t-phos-dim hover:text-t-white"
                           >
-                            Cancel
+                            {tc("cancel")}
                           </button>
                         </div>
                       </div>
@@ -1106,11 +1108,8 @@ function JobBoardPage() {
                     {(job.apply_url || job.employer_website) && (
                       <div className="bg-t-panel-2 px-3 py-2 border border-t-line">
                         <p className="text-xs text-t-phos mb-1">
-                          <strong className="text-t-white">Last step:</strong>{" "}
-                          when your resume is ready, apply on the employer&apos;s
-                          site. Save the job first so it lands in your
-                          Applications list. Always confirm the posting is still
-                          open.
+                          <strong className="text-t-white">{t("lastStep")}</strong>{" "}
+                          {t("lastStepBody")}
                         </p>
                         {job.apply_url ? (
                           <a
@@ -1120,7 +1119,7 @@ function JobBoardPage() {
                             onClick={(e) => e.stopPropagation()}
                             className="text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80 break-all"
                           >
-                            Open the employer&apos;s application page &#8599;
+                            {t("openApplicationPage")} &#8599;
                           </a>
                         ) : job.employer_website ? (
                           <a
@@ -1144,16 +1143,15 @@ function JobBoardPage() {
             if (!group.length) return null;
             return (
               <details key="also" className="border border-t-line p-3" data-testid="jobs-also-found">
-                <summary className="t-focus min-h-touch cursor-pointer text-sm text-t-white">Also found: {group.length} listing{group.length === 1 ? "" : "s"} that only mention your search words in the description</summary>
-                <p className="mt-2 text-xs text-t-phos-dim">The job title does not match your search, so these may be a different kind of work. Check each one before you save it.</p>
+                <summary className="t-focus min-h-touch cursor-pointer text-sm text-t-white">{t("alsoFound",{count:group.length})}</summary>
+                <p className="mt-2 text-xs text-t-phos-dim">{t("alsoFoundNote")}</p>
                 <div className="mt-3 space-y-3">{cards}</div>
               </details>
             );
           })}
 
           <p className="text-xs text-t-phos-dim text-center py-4">
-            Listings sourced from real job boards. Updated daily.
-            Always confirm details directly with the employer.
+            {t("sourcedNote")}
           </p>
         </div>
       )}
@@ -1161,46 +1159,43 @@ function JobBoardPage() {
       {/* How it works — always visible at bottom */}
       <div className="mt-8 pt-6 border-t border-t-line">
         <h2 className="text-sm font-semibold text-t-white mb-3">
-          How This Works
+          {t("howTitle")}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="p-3 bg-t-panel border border-t-line">
-            <span className="text-sm font-medium text-t-white block">Real Listings</span>
+            <span className="text-sm font-medium text-t-white block">{t("howRealTitle")}</span>
             <span className="text-xs text-t-phos-dim">
-              Every job here is a real posting from employers hiring right now
-              in your area.
+              {t("howRealBody")}
             </span>
           </div>
           <div className="p-3 bg-t-panel border border-t-line">
-            <span className="text-sm font-medium text-t-white block">Checked Employers First</span>
+            <span className="text-sm font-medium text-t-white block">{t("howCheckedTitle")}</span>
             <span className="text-xs text-t-phos-dim">
-              Employers we checked for hiring people with records are marked
-              and shown first. The mark only shows where we checked.
+              {t("howCheckedBody")}
             </span>
           </div>
           <div className="p-3 bg-t-panel border border-t-line">
-            <span className="text-sm font-medium text-t-white block">Save &amp; Track</span>
+            <span className="text-sm font-medium text-t-white block">{t("howSaveTitle")}</span>
             <span className="text-xs text-t-phos-dim">
-              Save jobs you like. Mark when you apply. Build your resume and
-              practice interviews for each one.
+              {t("howSaveBody")}
             </span>
           </div>
         </div>
       </div>
 
       {(picked.length > 0 || pickNotice) && (
-        <div role="region" aria-label="Jobs picked to tailor" data-testid="pick-bar" className="sticky bottom-0 z-20 mt-6 border border-t-amber bg-t-panel-2 p-3 shadow-[0_-3px_8px_rgba(22,26,21,0.25)]">
+        <div role="region" aria-label={t("pickBarAria")} data-testid="pick-bar" className="sticky bottom-0 z-20 mt-6 border border-t-amber bg-t-panel-2 p-3 shadow-[0_-3px_8px_rgba(22,26,21,0.25)]">
           {pickNotice && <p role="status" className="mb-2 text-sm text-t-amber-bright">{pickNotice}</p>}
           {picked.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm text-t-white" aria-live="polite">
-                <strong>{picked.length} selected</strong>
-                <span className="text-t-phos-dim"> · {picked.length === 1 ? "1 job = 1 AI action" : `${picked.length} jobs = ${picked.length} AI actions`}, one resume each</span>
+                <strong>{t("selected",{count:picked.length})}</strong>
+                <span className="text-t-phos-dim"> · {t("pickCost",{count:picked.length})}</span>
               </p>
               <button type="button" onClick={tailorPicked} data-testid="pick-bar-tailor" className="t-focus min-h-touch bg-t-amber px-4 font-bold text-white hover:bg-t-amber-bright">
-                Tailor for {picked.length === 1 ? "this job" : "these"}
+                {picked.length === 1 ? t("tailorForThis") : t("tailorForThese")}
               </button>
-              <button type="button" onClick={() => { setPicked([]); setPickNotice(""); }} className="t-focus min-h-touch text-sm text-t-phos-dim underline">Clear</button>
+              <button type="button" onClick={() => { setPicked([]); setPickNotice(""); }} className="t-focus min-h-touch text-sm text-t-phos-dim underline">{t("clear")}</button>
             </div>
           )}
         </div>

@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { SETTINGS_TOUR_REVEAL_EVENT } from "@/lib/tour/settings-reveal";
 import { TBtn } from "@crucible/consumer-ui";
 import { coachSaveBody } from "@/lib/coach-settings";
@@ -25,13 +26,10 @@ interface Settings {
   coachCreativity: number;
 }
 
-const STYLE_OPTIONS: { value: Style; label: string; hint: string }[] = [
-  { value: "supportive", label: "Supportive", hint: "Warm, encouraging" },
-  { value: "balanced", label: "Balanced", hint: "Warm and direct" },
-  { value: "direct", label: "Direct", hint: "Efficient, no warm-up" },
-];
+const STYLE_VALUES: Style[] = ["supportive", "balanced", "direct"];
 
 export function CoachSettingsSection() {
+  const t = useTranslations("refineryAccount.coach");
   const [s, setS] = useState<Settings | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   // The Settings tour opens Advanced settings to show the creativity slider, and
@@ -88,41 +86,41 @@ export function CoachSettingsSection() {
 
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-t-white mb-1">Your Coach</h2>
+      <h2 className="text-lg font-bold text-t-white mb-1">{t("heading")}</h2>
       <p className="text-sm text-t-phos-dim mb-4">
-        Your coach guides you through your job search. Make it yours.
+        {t("intro")}
       </p>
 
       <div className="bg-t-panel border border-t-line p-5 space-y-5">
         {/* Name */}
         <div>
-          <label className="text-sm font-medium text-t-white block mb-1">Coach name</label>
+          <label className="text-sm font-medium text-t-white block mb-1">{t("nameLabel")}</label>
           <input
             value={s.coachName}
             onChange={(e) => update("coachName", e.target.value)}
             maxLength={40}
-            placeholder="Guide"
+            placeholder={t("namePlaceholder")}
             className="w-full px-4 py-3 border border-t-line text-base bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
         </div>
 
         {/* Style */}
         <div id="settings-coach-style" data-tour="settings-coach-choices">
-          <label className="text-sm font-medium text-t-white block mb-2">Coaching style</label>
+          <label className="text-sm font-medium text-t-white block mb-2">{t("styleLabel")}</label>
           <div className="grid grid-cols-3 gap-2">
-            {STYLE_OPTIONS.map((o) => (
+            {STYLE_VALUES.map((value) => (
               <button
-                key={o.value}
+                key={value}
                 type="button"
-                onClick={() => update("coachStyle", o.value)}
+                onClick={() => update("coachStyle", value)}
                 className={`t-focus border p-3 text-left transition-colors ${
-                  s.coachStyle === o.value
+                  s.coachStyle === value
                     ? "border-t-amber bg-t-panel-2"
                     : "border-t-line bg-t-panel hover:border-t-phos-dim"
                 }`}
               >
-                <span className="block text-sm font-semibold text-t-white">{o.label}</span>
-                <span className="block text-xs text-t-phos-dim mt-0.5">{o.hint}</span>
+                <span className="block text-sm font-semibold text-t-white">{t(`styles.${value}.label`)}</span>
+                <span className="block text-xs text-t-phos-dim mt-0.5">{t(`styles.${value}.hint`)}</span>
               </button>
             ))}
           </div>
@@ -131,7 +129,7 @@ export function CoachSettingsSection() {
         {/* Length + Focus toggles */}
         <div className="grid sm:grid-cols-2 gap-4" data-tour="settings-coach-choices">
           <div>
-            <label className="text-sm font-medium text-t-white block mb-2">Response length</label>
+            <label className="text-sm font-medium text-t-white block mb-2">{t("lengthLabel")}</label>
             <div className="flex gap-2">
               {(["brief", "full"] as Length[]).map((v) => (
                 <button
@@ -144,17 +142,17 @@ export function CoachSettingsSection() {
                       : "border-t-line bg-t-panel text-t-phos-dim hover:border-t-phos-dim"
                   }`}
                 >
-                  {v}
+                  {t(`lengths.${v}`)}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium text-t-white block mb-2">Focus</label>
+            <label className="text-sm font-medium text-t-white block mb-2">{t("focusLabel")}</label>
             <div className="flex gap-2">
               {([
-                { v: "guide" as Focus, label: "Guide me" },
-                { v: "answer" as Focus, label: "Just answer" },
+                { v: "guide" as Focus, label: t("focus.guide") },
+                { v: "answer" as Focus, label: t("focus.answer") },
               ]).map((o) => (
                 <button
                   key={o.v}
@@ -180,12 +178,12 @@ export function CoachSettingsSection() {
             onClick={() => setShowAdvanced((v) => !v)}
             className="text-sm font-medium text-t-phos-dim hover:text-t-amber-bright"
           >
-            {showAdvanced ? "Hide advanced" : "Advanced settings"}
+            {showAdvanced ? t("hideAdvanced") : t("advanced")}
           </button>
           {showAdvanced && (
             <div className="mt-3" id="settings-creativity">
               <label className="text-sm font-medium text-t-white block mb-1">
-                How creative should your coach be?{" "}
+                {t("creativityLabel")}{" "}
                 <span className="text-t-phos-dim font-normal">({s.coachCreativity})</span>
               </label>
               <input
@@ -197,8 +195,8 @@ export function CoachSettingsSection() {
                 className="w-full accent-t-amber"
               />
               <div className="flex justify-between text-xs text-t-phos-dim">
-                <span>Focused advice</span>
-                <span>More exploratory</span>
+                <span>{t("focusedAdvice")}</span>
+                <span>{t("moreExploratory")}</span>
               </div>
             </div>
           )}
@@ -207,10 +205,10 @@ export function CoachSettingsSection() {
         {/* Save */}
         <div className="flex items-center gap-3 pt-1" data-tour="settings-coach-choices">
           <TBtn onClick={save} disabled={status === "saving"} size="sm">
-            {status === "saving" ? "saving..." : "save"}
+            {status === "saving" ? t("saving") : t("save")}
           </TBtn>
-          {status === "saved" && <span className="text-sm text-t-amber-bright">Saved.</span>}
-          {status === "error" && <span className="text-sm text-t-red">Could not save.</span>}
+          {status === "saved" && <span className="text-sm text-t-amber-bright">{t("saved")}</span>}
+          {status === "error" && <span className="text-sm text-t-red">{t("couldNotSave")}</span>}
         </div>
       </div>
     </section>

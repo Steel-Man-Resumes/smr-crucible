@@ -27,6 +27,7 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import type { Milestone } from "@crucible/core";
 import {
   getQuickWins,
@@ -113,6 +114,8 @@ const CELEBRATED_KEY = "celebrated_milestones";
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 export default function ProgressPage() {
+  const t = useTranslations("refineryHome.progress");
+  const locale = useLocale();
   const [progress, setProgress] = useState<ProgressData>(DEFAULT_PROGRESS);
   const [barriers, setBarriers] = useState<string[]>([]);
   const [readinessStage, setReadinessStage] =
@@ -341,7 +344,7 @@ export default function ProgressPage() {
     return (
       <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
         <TroyWork compact decorative />
-        Loading your progress...
+        {t("loading")}
       </div>
     );
   }
@@ -356,7 +359,7 @@ export default function ProgressPage() {
             role="status"
           >
             <p className="text-sm font-semibold text-t-amber-bright mb-1">
-              You just hit a milestone: {celebrate.title}
+              {t("milestoneHit", { title: celebrate.title })}
             </p>
             {celebrate.fact && (
               <p className="text-sm text-t-phos leading-relaxed">
@@ -367,10 +370,9 @@ export default function ProgressPage() {
         </>
       )}
 
-      <h1 className="text-2xl font-bold text-t-white mb-2">Your Progress</h1>
+      <h1 className="text-2xl font-bold text-t-white mb-2">{t("title")}</h1>
       <p className="text-base text-t-phos-dim mb-8">
-        Every step counts. Here&apos;s what you&apos;ve accomplished and
-        what to do next.
+        {t("intro")}
       </p>
 
       {/* ── Steel Man meter and stats ───────────────────────────────────── */}
@@ -381,7 +383,7 @@ export default function ProgressPage() {
       {quickWins.length > 0 && (
         <section className="mb-10">
           <h2 className="text-lg font-bold text-t-white mb-4">
-            What to Do Next
+            {t("whatNext")}
           </h2>
           <div className="space-y-3">
             {quickWins.map((win) => (
@@ -394,12 +396,12 @@ export default function ProgressPage() {
       {/* ── Upcoming timeline ───────────────────────────────────────────── */}
       <section className="mb-10">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-t-white">Upcoming</h2>
+          <h2 className="text-lg font-bold text-t-white">{t("upcoming")}</h2>
           <Link
             href="/dashboard/applications"
             className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
           >
-            Manage applications
+            {t("manageApps")}
           </Link>
         </div>
         {upcoming.length > 0 ? (
@@ -415,7 +417,7 @@ export default function ProgressPage() {
                 >
                   <div className={`flex-shrink-0 w-14 text-center ${overdue ? "text-t-red" : "text-t-amber-bright"}`}>
                     <div className="text-xs font-semibold uppercase">
-                      {valid ? d.toLocaleDateString("en-US", { month: "short" }) : "--"}
+                      {valid ? d.toLocaleDateString(locale === "es" ? "es" : "en-US", { month: "short" }) : "--"}
                     </div>
                     <div className="text-lg font-bold leading-none">
                       {valid ? d.getDate() : "--"}
@@ -423,7 +425,7 @@ export default function ProgressPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium text-t-white block truncate">
-                      Follow up{item.company ? ` with ${item.company}` : ""}
+                      {item.company ? t("followUpWith", { company: item.company }) : t("followUp")}
                     </span>
                     <span className="text-xs text-t-phos-dim block truncate">
                       {[item.role, item.status].filter(Boolean).join(" · ")}
@@ -431,7 +433,7 @@ export default function ProgressPage() {
                   </div>
                   {overdue && (
                     <span className="text-[10px] font-semibold text-t-red border border-t-red px-2 py-0.5">
-                      due
+                      {t("due")}
                     </span>
                   )}
                 </div>
@@ -441,8 +443,7 @@ export default function ProgressPage() {
         ) : (
           <div className="border border-t-line bg-t-panel px-5 py-8 text-center">
             <p className="text-sm text-t-phos-dim">
-              No follow-ups scheduled yet. Save a job and set a follow-up date in
-              Applications, and it will show up here.
+              {t("noFollowUps")}
             </p>
           </div>
         )}
@@ -453,11 +454,10 @@ export default function ProgressPage() {
         <section className="mb-10">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-t-white">
-              Your Roadmap
+              {t("roadmap")}
             </h2>
             <span className="text-sm text-t-phos-dim">
-              {roadmapProgress.completed}/{roadmapProgress.total} steps
-              ({roadmapProgress.percent}%)
+              {t("roadmapSteps", { completed: roadmapProgress.completed, total: roadmapProgress.total, percent: roadmapProgress.percent })}
             </span>
           </div>
 
@@ -483,7 +483,7 @@ export default function ProgressPage() {
               return (
                 <div key={phase}>
                   <h3 className="text-xs font-semibold uppercase text-t-phos-dim mb-2">
-                    {meta.label}
+                    {t.has(`phases.${phase}`) ? t(`phases.${phase}`) : meta.label}
                   </h3>
                   <div className="space-y-2">
                     {phaseNodes.map((node) => (
@@ -501,12 +501,12 @@ export default function ProgressPage() {
       {pipeline && pipelineTotal > 0 && (
         <section className="mb-10">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-t-white">Your Pipeline</h2>
+            <h2 className="text-lg font-bold text-t-white">{t("pipeline")}</h2>
             <Link
               href="/dashboard/applications"
               className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
             >
-              Open tracker
+              {t("openTracker")}
             </Link>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -518,7 +518,7 @@ export default function ProgressPage() {
                 <span className="text-xl font-bold block text-t-amber-bright">
                   {pipeline[stage.key]}
                 </span>
-                <span className="text-xs text-t-phos-dim">{stage.label}</span>
+                <span className="text-xs text-t-phos-dim">{t(`stages.${stage.key}`)}</span>
               </div>
             ))}
           </div>
@@ -528,9 +528,9 @@ export default function ProgressPage() {
       {/* ── Milestones + Streak (private) ───────────────────────────────── */}
       {milestones.length > 0 && (
         <section className="mb-10">
-          <h2 className="text-lg font-bold text-t-white mb-1">Milestones</h2>
+          <h2 className="text-lg font-bold text-t-white mb-1">{t("milestones")}</h2>
           <p className="text-sm text-t-phos-dim mb-4">
-            Just for you. Each one is backed by something you actually did.
+            {t("milestonesSub")}
           </p>
 
           <div className="space-y-2">
@@ -544,26 +544,26 @@ export default function ProgressPage() {
       {/* ── Summary Stats ───────────────────────────────────────────────── */}
       <section className="mb-8">
         <h2 className="text-lg font-bold text-t-white mb-4">
-          By the Numbers
+          {t("byNumbers")}
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
-            label="Skills Found"
+            label={t("skillsFound")}
             value={progress.skills_identified}
             color="amber"
           />
           <StatCard
-            label="Career Paths"
+            label={t("careerPaths")}
             value={progress.career_paths}
             color="steel"
           />
           <StatCard
-            label="Interviews"
+            label={t("interviews")}
             value={progress.interviews_completed}
             color="phos"
           />
           <StatCard
-            label="Actions Taken"
+            label={t("actionsTaken")}
             value={totalActions}
             color="amber"
           />
@@ -573,36 +573,36 @@ export default function ProgressPage() {
       {/* ── Refinery Activity ───────────────────────────────────────────── */}
       <section className="mb-8">
         <h2 className="text-lg font-bold text-t-white mb-3">
-          Activity Detail
+          {t("activityDetail")}
         </h2>
         <div className="space-y-2">
           {/* NOTE (Phase 4.2): the old "N bullets written" sub-line is gone.
               The 'bullet_written' event type exists but nothing writes it, so
               that number was localStorage-only -- dropped rather than faked. */}
           <ActivityRow
-            label="Resumes built"
+            label={t("resumesBuilt")}
             value={progress.resumes_built}
           />
           <ActivityRow
-            label="Disclosure plans"
+            label={t("disclosurePlans")}
             value={progress.disclosure_plans_created}
           />
           <ActivityRow
-            label="Practice interviews"
+            label={t("practiceInterviews")}
             value={progress.interviews_completed}
             sub={
               progress.interviews_started > progress.interviews_completed
-                ? `${progress.interviews_started} started`
+                ? t("startedCount", { count: progress.interviews_started })
                 : undefined
             }
           />
-          <ActivityRow label="Job searches" value={progress.job_searches} />
+          <ActivityRow label={t("jobSearches")} value={progress.job_searches} />
           <ActivityRow
-            label="Applications sent"
+            label={t("applicationsSent")}
             value={progress.applications_sent}
           />
           <ActivityRow
-            label="Board visits"
+            label={t("boardVisits")}
             value={progress.resources_viewed}
           />
         </div>
@@ -612,12 +612,12 @@ export default function ProgressPage() {
       <div className="bg-t-panel p-5 border border-t-amber text-center">
         <p className="text-sm text-t-phos leading-relaxed">
           {totalActions === 0
-            ? "Your journey starts with one step. Check out the suggestions above and pick whichever one feels right."
+            ? t("enc0")
             : totalActions < 5
-              ? "You're building momentum. Every action you take makes the next one easier."
+              ? t("enc1")
               : totalActions < 15
-                ? "You're putting in real work. This kind of preparation gives you a serious edge."
-                : "You've shown serious commitment to your future. That dedication speaks volumes to any employer."}
+                ? t("enc2")
+                : t("enc3")}
         </p>
       </div>
     </div>
@@ -665,32 +665,33 @@ function QuickWinCard({ win }: { win: QuickWin }) {
 
 // ─── Roadmap Node Card (expands in place) ───────────────────────────────────
 
-const TOOL_LABELS: Record<string, string> = {
-  "/start": "The Forge",
-  "/welcome": "The Forge",
-  "/intro": "The Forge",
-  "/dashboard": "your dashboard",
-  "/dashboard/resources": "Resources",
-  "/dashboard/application-tailor": "the Resume Tailor",
-  "/dashboard/disclosure": "Disclosure",
-  "/dashboard/interview": "Interview Practice",
-  "/dashboard/jobs": "the Job Board",
+const TOOL_KEYS: Record<string, string> = {
+  "/start": "forge",
+  "/welcome": "forge",
+  "/intro": "forge",
+  "/dashboard": "dashboard",
+  "/dashboard/resources": "resources",
+  "/dashboard/application-tailor": "tailor",
+  "/dashboard/disclosure": "disclosure",
+  "/dashboard/interview": "interview",
+  "/dashboard/jobs": "jobs",
 };
 
-function toolLabel(link?: string): string {
-  if (!link) return "this tool";
-  return TOOL_LABELS[link] || "this tool";
+function toolKey(link?: string): string {
+  if (!link) return "thisTool";
+  return TOOL_KEYS[link] || "thisTool";
 }
 
 function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
+  const t = useTranslations("refineryHome.progress");
   const [open, setOpen] = useState(false);
   const panelId = `roadmap-panel-${node.id}`;
 
   const status = node.completed
-    ? "Done"
+    ? t("nodeDone")
     : node.current
-      ? "In progress"
-      : "Not started yet";
+      ? t("nodeInProgress")
+      : t("nodeNotStarted");
 
   return (
     <div
@@ -773,7 +774,7 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
           className="px-4 pb-4 pt-0 border-t border-t-line"
         >
           <p className="text-xs text-t-phos-dim mt-3 mb-1">
-            <span className="font-semibold text-t-white">Status:</span> {status}
+            <span className="font-semibold text-t-white">{t("nodeStatus")}</span> {status}
           </p>
           <p className="text-sm text-t-phos leading-relaxed mb-3">
             {node.description}
@@ -783,8 +784,7 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
               href={node.toolLink}
               className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
             >
-              {node.completed ? "Revisit " : "Go to "}
-              {toolLabel(node.toolLink)} &rarr;
+              {node.completed ? t("revisit", { tool: t(`tools.${toolKey(node.toolLink)}`) }) : t("goTo", { tool: t(`tools.${toolKey(node.toolLink)}`) })} &rarr;
             </Link>
           )}
         </div>

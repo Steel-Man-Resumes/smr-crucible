@@ -13,6 +13,7 @@
  * and exercised in adversarial.mts.
  */
 
+import { useTranslations } from "next-intl";
 import type { AvatarChoice, AvatarColor, AvatarShape } from "@crucible/core";
 
 interface Fill {
@@ -82,6 +83,7 @@ interface Props {
 }
 
 export function IllustratedAvatar({ choice, fallbackInitial, size = 40, className }: Props) {
+  const t = useTranslations("refineryAccount.avatar");
   const shape = choice?.shape ?? "circle";
   const color = choice?.color ?? "slate";
   const accent = choice?.accent ?? "solid";
@@ -98,7 +100,7 @@ export function IllustratedAvatar({ choice, fallbackInitial, size = 40, classNam
       viewBox={`0 0 ${size} ${size}`}
       className={className}
       role="img"
-      aria-label="Your avatar"
+      aria-label={t("aria")}
     >
       {geo.type === "circle" && (
         <circle cx={geo.cx} cy={geo.cy} r={geo.r} fill={fill.bg} />

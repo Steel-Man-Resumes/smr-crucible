@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Security & Privacy Content
  *
@@ -5,6 +7,7 @@
  * Written at 6th grade reading level. Real architecture details.
  */
 
+import { useTranslations } from "next-intl";
 import { WallText } from "@/components/forge/WallText";
 
 interface SecurityContentProps {
@@ -18,47 +21,28 @@ interface SecurityContentProps {
 }
 
 export function SecurityContent({ showUserControls, recordStep = false }: SecurityContentProps) {
+  const t = useTranslations("refineryAccount.security");
+  const b = (chunks: React.ReactNode) => <span className="font-semibold text-t-white">{chunks}</span>;
   return (
     <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Your Data: Who Sees It
+          {t("title")}
         </h1>
         <p className="text-base text-t-phos-dim leading-relaxed">
-          We built this tool for people who need to trust it. Here&apos;s
-          exactly how we protect you.
+          {t("intro")}
         </p>
       </div>
 
       {/* What We Collect */}
-      <Section title="What We Collect">
+      <Section title={t("collect.title")}>
         <ul className="space-y-2">
-          <BulletItem>
-            Your resume text, so we can find your skills and match you to
-            jobs
-          </BulletItem>
-          <BulletItem>
-            Your answers to Forge questions, so we can match jobs and
-            resources to your situation
-          </BulletItem>
-          <BulletItem>
-            Your activity in the Refinery, so we can track your progress and
-            suggest next steps
-          </BulletItem>
-          <BulletItem>
-            Your chats with t.ROY, if you are signed in and turned on Better
-            help, so he can remember your recent work. You can delete them
-            anytime in Settings.
-          </BulletItem>
-          <BulletItem>
-            Some basic facts about how you connect: your IP address, your
-            device type, and the rough city it points to. We use them to stop
-            abuse and to show you where you are signed in.
-          </BulletItem>
-          <BulletItem bold>
-            We do not track what you do on other sites, and we do not look at
-            your social media.
-          </BulletItem>
+          <BulletItem>{t("collect.resume")}</BulletItem>
+          <BulletItem>{t("collect.answers")}</BulletItem>
+          <BulletItem>{t("collect.refinery")}</BulletItem>
+          <BulletItem>{t("collect.chats")}</BulletItem>
+          <BulletItem>{t("collect.connect")}</BulletItem>
+          <BulletItem bold>{t("collect.noTrack")}</BulletItem>
         </ul>
       </Section>
 
@@ -67,167 +51,91 @@ export function SecurityContent({ showUserControls, recordStep = false }: Securi
           workspace on and required sharing off. Change the product, change
           this in the same commit. "Record plan" is what the Disclosure Planner
           makes; the join prompt and the Settings switch use the same words. */}
-      <Section title="Who Can See Your Data">
+      <Section title={t("who.title")}>
         <div className="bg-t-panel p-4 border border-t-line mb-4">
           <p className="text-sm font-bold text-t-amber-bright">
-            You decide. Program staff cannot read your work unless you share
-            it.
+            {t("who.banner")}
           </p>
         </div>
         <ul className="space-y-2">
-          <BulletItem>
-            <Lead>If you share nothing:</Lead> your name is not on their
-            caseload list. They cannot read your resume, letters, jobs or
-            anything you wrote. Staff who signed you up, or who you shared
-            with before, may still see your name, email and step.
-          </BulletItem>
-          <BulletItem>
-            <Lead>If you share your progress:</Lead> they see your name,
-            email, your step, how many jobs you saved and applied to, when you
-            were last on, and if you got hired. They also see how many times
-            you practiced and whether you made a record plan. They cannot read
-            either one.
-          </BulletItem>
-          <BulletItem>
-            <Lead>You can share more, one item at a time,</Lead> if your
-            program offers it: your job applications, your resumes or your
-            cover letters. You see what each one shows first. Staff can read
-            them. They cannot change them.
-          </BulletItem>
-          <BulletItem>
-            <Lead>No program can read these through sharing:</Lead> your
-            record plan (what you make in the Disclosure Planner),{" "}
-            {recordStep ? "your saved record checks, " : ""}your interview
-            practice, or your vault files.
-          </BulletItem>
-          <BulletItem>
-            <Lead>Stop any time in Settings.</Lead> That ends new viewing. It
-            cannot take back what someone already read or wrote down.
-          </BulletItem>
-          <BulletItem>
-            <Lead>You can see who looked.</Lead> Where your program uses the
-            full workspace, each time staff open something you shared is
-            logged, and you can see the list in Settings.
-          </BulletItem>
-          <BulletItem>
-            <Lead>If a program has its own sharing rule,</Lead> you see the
-            rule and its reason first. Nothing opens until you say you saw it,
-            and we will not call it your choice.
-          </BulletItem>
-          <BulletItem>
-            A boss, a PO or the police do not get in just because of who they
-            are. If the law makes us hand something over, we have to.
-          </BulletItem>
+          <BulletItem>{t.rich("who.nothing", { lead: (c) => <Lead>{c}</Lead> })}</BulletItem>
+          <BulletItem>{t.rich("who.progress", { lead: (c) => <Lead>{c}</Lead> })}</BulletItem>
+          <BulletItem>{t.rich("who.more", { lead: (c) => <Lead>{c}</Lead> })}</BulletItem>
+          <BulletItem>{t.rich("who.noRead", { lead: (c) => <Lead>{c}</Lead>, checks: recordStep ? "yes" : "no" })}</BulletItem>
+          <BulletItem>{t.rich("who.stop", { lead: (c) => <Lead>{c}</Lead> })}</BulletItem>
+          <BulletItem>{t.rich("who.logged", { lead: (c) => <Lead>{c}</Lead> })}</BulletItem>
+          <BulletItem>{t.rich("who.rule", { lead: (c) => <Lead>{c}</Lead> })}</BulletItem>
+          <BulletItem>{t("who.law")}</BulletItem>
         </ul>
         <p className="text-sm text-t-phos leading-relaxed mt-3">
-          Our own staff can open an account to help you when you ask for
-          support or something breaks. Each time is logged with who and when.
+          {t("who.staff")}
         </p>
       </Section>
 
       {/* Where Your Data Lives */}
-      <Section title="Where Your Data Lives">
+      <Section title={t("lives.title")}>
         <ul className="space-y-2">
-          <BulletItem>
-            Stored in a database that is encrypted at rest. If someone stole
-            the physical disks, they could not read your data.
-          </BulletItem>
-          <BulletItem>
-            Every connection uses HTTPS, so your data is encrypted while it
-            moves between your device and our servers
-          </BulletItem>
+          <BulletItem>{t("lives.db")}</BulletItem>
+          <BulletItem>{t("lives.https")}</BulletItem>
         </ul>
         <p className="text-sm text-t-phos leading-relaxed mt-3">
-          Files you upload to your Vault get a second lock on top of the
-          database: each one is sealed with AES-256-GCM encryption tied to your
-          account, so it can only be opened for you.
+          {t("lives.vault")}
         </p>
       </Section>
 
       {/* What the AI Sees */}
-      <Section title="What the AI Sees">
+      <Section title={t("ai.title")}>
         <ul className="space-y-2">
-          <BulletItem>
-            The AI reads your resume and answers to help you. That&apos;s
-            its only job.
-          </BulletItem>
-          <BulletItem>
-            Most AI steps leave a short record: which tool ran, which AI model,
-            and a short note about the step. The note does not include the
-            words you typed, and the record does not keep a copy of what the AI
-            wrote to you.
-          </BulletItem>
-          <BulletItem>
-            When you are signed in and Better help is on, t.ROY remembers your
-            recent chats so he can pick up where you left off. You can delete
-            that history anytime. Without an account, t.ROY does not save your
-            chats.
-          </BulletItem>
-          <BulletItem>
-            When you are signed in, each checked version of your resume is
-            saved to your account, with the answers you gave about its lines.
-            You can download or delete them in Settings.
-          </BulletItem>
+          <BulletItem>{t("ai.job")}</BulletItem>
+          <BulletItem>{t("ai.record")}</BulletItem>
+          <BulletItem>{t("ai.memory")}</BulletItem>
+          <BulletItem>{t("ai.versions")}</BulletItem>
           {recordStep ? (
-            <BulletItem>
-              The record check is the only screen that asks for your offense,
-              and it asks for your yes first. What you type there goes to
-              Anthropic, which picks items for your checklist from our own
-              list. If you type your record somewhere else, like the chat or
-              the disclosure planner, the AI sees it there too. A saved
-              checklist keeps the list and the state, and keeps what you typed
-              only if you tick the box for it. Taking back your yes deletes
-              your saved checklists.
-            </BulletItem>
+            <BulletItem>{t("ai.recordStep")}</BulletItem>
           ) : (
-            <BulletItem>
-              If you type your record in the chat or the disclosure planner,
-              the AI sees it there.
-            </BulletItem>
+            <BulletItem>{t("ai.recordPlain")}</BulletItem>
           )}
-          <BulletItem>
-            The AI never shares your information with other users
-          </BulletItem>
+          <BulletItem>{t("ai.never")}</BulletItem>
         </ul>
       </Section>
 
       {/* Your Controls */}
-      <Section title="You&apos;re in Control">
+      <Section title={t("control.title")}>
         <div className="grid sm:grid-cols-2 gap-3">
           <ControlCard
-            title="Export Your Data"
-            description="Download a copy of your data: your resume, Forge results, applications, chat history, and more. You can pick which parts to include. We ask you to confirm it's you first."
+            title={t("control.export.title")}
+            description={t("control.export.description")}
             showButton={showUserControls}
-            buttonLabel="Export in Settings"
+            buttonLabel={t("control.export.button")}
             href="/dashboard/settings"
           />
           <ControlCard
-            title="Delete Your Data or Account"
-            description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone. Short AI records from before you signed in are not tied to your account, so they stay. They hold no name and none of your words. Abuse-prevention counts are deleted after 30 days."
+            title={t("control.delete.title")}
+            description={t("control.delete.description")}
             showButton={showUserControls}
-            buttonLabel="Delete in Settings"
+            buttonLabel={t("control.delete.button")}
             href="/dashboard/settings"
             destructive
           />
           <ControlCard
-            title="Consent Preferences"
-            description="Manage optional sharing in Settings. You can stop access through the sharing feature; copies and program records already made may remain."
+            title={t("control.consent.title")}
+            description={t("control.consent.description")}
             showButton={showUserControls}
-            buttonLabel="Manage Consent"
+            buttonLabel={t("control.consent.button")}
             href="/dashboard/settings"
           />
           {/* Follows the Forge sign-in wall (lib/forge-access.ts). */}
           <WallText
             open={
               <ControlCard
-                title="No Account Required"
-                description="The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, press Clear this computer, or leave it untouched for a day. On a shared or library computer, press Clear this computer when you finish. To stop abuse we count uses per internet connection, kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed."
+                title={t("control.noAccount.title")}
+                description={t("control.noAccount.description")}
               />
             }
             up={
               <ControlCard
-                title="One Free Account"
-                description="The Forge asks you to sign in with a free account, the same one the Refinery uses. That is how your work follows you to another device, and how you can download or delete it in Settings. Until it is saved to your account, your work also sits in this web browser. On a shared or library computer, sign out and press Clear this computer when you finish. To stop abuse we count uses per account and per internet connection. The connection is kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed. The free resume check works without signing in and saves nothing."
+                title={t("control.oneAccount.title")}
+                description={t("control.oneAccount.description")}
               />
             }
           />
@@ -235,123 +143,61 @@ export function SecurityContent({ showUserControls, recordStep = false }: Securi
       </Section>
 
       {/* Locking Down Your Account */}
-      <Section title="Locking Down Your Account">
+      <Section title={t("lock.title")}>
         <ul className="space-y-2">
-          <BulletItem>
-            Set a password, or sign in with a one-time magic link sent to your
-            email. Passwords are stored as a scrambled hash, not as the words you
-            typed.
-          </BulletItem>
-          <BulletItem>
-            Turn on two-step verification. Every sign-in then asks for a code
-            from an authenticator app, whether you use a password, an email
-            link, or Google, and you get one-time backup codes in case you lose
-            your phone. The secret behind those codes is stored encrypted.
-          </BulletItem>
-          <BulletItem>
-            See every device signed in to your account and sign out any one you
-            don&apos;t recognize. It loses access right away.
-          </BulletItem>
-          <BulletItem>
-            Exporting or deleting your data asks you to prove it&apos;s you first,
-            with your password, or by typing DELETE if you use magic-link
-            sign-in. That way a borrowed or unlocked device can&apos;t wipe or
-            copy your data.
-          </BulletItem>
+          <BulletItem>{t("lock.password")}</BulletItem>
+          <BulletItem>{t("lock.twoStep")}</BulletItem>
+          <BulletItem>{t("lock.devices")}</BulletItem>
+          <BulletItem>{t("lock.proof")}</BulletItem>
         </ul>
       </Section>
 
       {/* What You Share Is Your Choice */}
-      <Section title="What You Share Is Your Choice">
+      <Section title={t("choice.title")}>
         <p className="text-sm text-t-phos-dim mb-3">
-          You control a few separate choices in Settings. You can change any of
-          them anytime:
+          {t("choice.intro")}
         </p>
         <ul className="space-y-2">
-          <BulletItem>
-            <span className="font-semibold text-t-white">Better help:</span> let
-            the AI use more of your Forge answers to give you sharper, more
-            personal suggestions.
-          </BulletItem>
-          <BulletItem>
-            <span className="font-semibold text-t-white">Research:</span> allow
-            your data, with your name and details removed, to help study what
-            helps people find work.
-          </BulletItem>
-          <BulletItem>
-            <span className="font-semibold text-t-white">Outcomes:</span> share
-            whether you landed a job so partner programs can see if this is
-            working. You can share this without sharing anything else.
-          </BulletItem>
+          <BulletItem>{t.rich("choice.better", { b })}</BulletItem>
+          <BulletItem>{t.rich("choice.research", { b })}</BulletItem>
+          <BulletItem>{t.rich("choice.outcomes", { b })}</BulletItem>
         </ul>
       </Section>
 
       {/* What We Don't Do */}
-      <Section title="What We Don&apos;t Do">
+      <Section title={t("dont.title")}>
         <div className="bg-t-panel p-4 border border-t-line">
           <ul className="space-y-2">
-            <DenyItem>No ads. Ever.</DenyItem>
-            <DenyItem>No selling your data. Ever.</DenyItem>
-            <DenyItem>
-              No ad networks and no data brokers. We count visits with Google
-              Analytics and Vercel to see which tools help people. They see
-              which pages get used, not what you type. We keep them off
-              disclosure practice, interview practice, the Vault, your
-              documents, and invitation links that carry a code or a name.
-            </DenyItem>
-            <DenyItem>
-              We use service providers for hosting, storage, AI, email, bot
-              checks, job listings and visit counting. Program sharing and legally required disclosures are
-              described above.
-            </DenyItem>
-            <DenyItem>No data mining</DenyItem>
-            <DenyItem>
-              No surprises. If something changes, we&apos;ll tell you first
-            </DenyItem>
+            <DenyItem>{t("dont.ads")}</DenyItem>
+            <DenyItem>{t("dont.sell")}</DenyItem>
+            <DenyItem>{t("dont.networks")}</DenyItem>
+            <DenyItem>{t("dont.providers")}</DenyItem>
+            <DenyItem>{t("dont.mining")}</DenyItem>
+            <DenyItem>{t("dont.surprises")}</DenyItem>
           </ul>
         </div>
       </Section>
 
       {/* For Organizations */}
-      <Section title="For Organizations">
+      <Section title={t("orgs.title")}>
         <p className="text-sm text-t-phos-dim mb-3">
-          If you&apos;re considering this platform for your clients:
+          {t("orgs.intro")}
         </p>
         <ul className="space-y-2">
-          <BulletItem>
-            Staff access to participant materials is limited by organization,
-            staff permissions and the participant&apos;s active sharing grants
-          </BulletItem>
-          <BulletItem>
-            Most AI steps leave a short record (tool, model, time) for review.
-            The record does not hold the AI&apos;s full reply.
-          </BulletItem>
-          <BulletItem>
-            Voice practice audio passes through OpenAI, which may retain it
-            up to 30 days for abuse monitoring. We do not store the audio. If
-            the person chooses to save a practice run, we keep the written
-            words, encrypted.
-          </BulletItem>
-          <BulletItem>
-            Users control their own data. They can export or delete it on
-            their own, without going through you
-          </BulletItem>
-          <BulletItem>
-            Rate limiting protects against abuse. Programs that share one
-            internet connection can use an access code so their group gets a
-            bigger shared limit.
-          </BulletItem>
-          <BulletItem>
-            Partner access codes let you onboard your clients with elevated
-            permissions
-          </BulletItem>
+          <BulletItem>{t("orgs.staff")}</BulletItem>
+          <BulletItem>{t("orgs.record")}</BulletItem>
+          <BulletItem>{t("orgs.voice")}</BulletItem>
+          <BulletItem>{t("orgs.users")}</BulletItem>
+          <BulletItem>{t("orgs.rate")}</BulletItem>
+          <BulletItem>{t("orgs.codes")}</BulletItem>
         </ul>
       </Section>
 
-      {/* Technical Details */}
-      <Section title="Technical Details">
+      {/* Technical Details. The detail lines stay in English: they are for
+          security professionals and compliance teams, and name products. */}
+      <Section title={t("tech.title")}>
         <p className="text-xs text-t-phos-dim mb-3">
-          For security professionals and compliance teams:
+          {t("tech.intro")}
         </p>
         <div className="bg-t-panel-2 p-4 border border-t-line text-xs text-t-phos-dim space-y-1.5">
           <p>Database: PostgreSQL on Neon (encrypted at rest, TLS in transit)</p>
@@ -376,13 +222,16 @@ export function SecurityContent({ showUserControls, recordStep = false }: Securi
       {/* Contact */}
       <div className="bg-t-panel p-5 border border-t-line text-center">
         <p className="text-sm text-t-white mb-1">
-          Questions about your data or privacy?
+          {t("contact.question")}
         </p>
         <p className="text-sm text-t-phos-dim">
-          Ask t.ROY. He&apos;s on every page. Or email us at{" "}
-          <span className="font-medium text-t-white">
-            troyrichardcarr@gmail.com
-          </span>
+          {t.rich("contact.ask", {
+            email: () => (
+              <span className="font-medium text-t-white">
+                troyrichardcarr@gmail.com
+              </span>
+            ),
+          })}
         </p>
       </div>
     </div>

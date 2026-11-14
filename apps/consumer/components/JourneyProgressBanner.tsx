@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { OnboardingState } from "@/lib/useOnboarding";
 import type { RefineryWorkspaceContext } from "@/lib/refinery-workspace";
 import { workspaceNextAction } from "@/lib/workspace-next-action";
@@ -20,6 +21,7 @@ export function JourneyProgressBanner({ state, work, contextStatus, contextKey }
   contextStatus: "loading" | "error" | "ready";
   contextKey: string;
 }) {
+  const t = useTranslations("refineryShell.journey");
   const progression = useProgression();
   const pathname = usePathname();
   const key = `${pathname}:${contextKey}`;
@@ -50,22 +52,23 @@ export function JourneyProgressBanner({ state, work, contextStatus, contextKey }
   }, [useGlobal, key, retry]);
 
   if (progression && progression.status !== "inactive") {
-    if (progression.status === "error") return <span className="text-xs text-t-bone-dim">Process unavailable. <button type="button" onClick={progression.refresh} className="t-focus min-h-touch underline">Retry</button></span>;
-    if (!progression.data) return <span role="status" className="text-xs text-t-bone-dim">Loading your process...</span>;
+    if (progression.status === "error") return <span className="text-xs text-t-bone-dim">{t("processUnavailable")} <button type="button" onClick={progression.refresh} className="t-focus min-h-touch underline">{t("retry")}</button></span>;
+    if (!progression.data) return <span role="status" className="text-xs text-t-bone-dim">{t("loadingProcess")}</span>;
     const primary = progressPrimaryAction(progression.data);
     const current = primary.current;
-    return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"><span className="text-xs text-t-bone-dim">{primary.override ? "Today" : "Process"}: {primary.heading}</span>{primary.locked && current
-      ? <button type="button" aria-haspopup="dialog" onClick={() => progression.ask(current)} className="t-focus min-h-touch text-sm font-semibold text-t-amber-bright underline">Ask t.ROY to open this</button>
+    return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"><span className="text-xs text-t-bone-dim">{primary.override ? t("today") : t("process")}: {primary.heading}</span>{primary.locked && current
+      ? <button type="button" aria-haspopup="dialog" onClick={() => progression.ask(current)} className="t-focus min-h-touch text-sm font-semibold text-t-amber-bright underline">{t("askOpen")}</button>
       : <NextLink href={safeProgressHref(progression.data.nextAction.href)} action={progression.data.nextAction.label} />}</div>;
   }
   if (state === "loading") return null;
-  if (contextStatus === "error") return <span className="text-xs text-t-bone-dim">Next step unavailable.</span>;
+  if (contextStatus === "error") return <span className="text-xs text-t-bone-dim">{t("nextUnavailable")}</span>;
   if (direct) return <NextLink href={direct.href} action={direct.label} />;
   const current = useGlobal && result?.key === key ? result : null;
-  if (current?.failed) return <span className="text-xs text-t-bone-dim">Next step unavailable. <button type="button" onClick={() => setRetry((n) => n + 1)} className="t-focus min-h-touch underline">Retry</button></span>;
-  return current?.next ? <NextLink href={current.next.href} action={current.next.action} /> : <span className="text-xs text-t-bone-dim">Loading next step...</span>;
+  if (current?.failed) return <span className="text-xs text-t-bone-dim">{t("nextUnavailable")} <button type="button" onClick={() => setRetry((n) => n + 1)} className="t-focus min-h-touch underline">{t("retry")}</button></span>;
+  return current?.next ? <NextLink href={current.next.href} action={current.next.action} /> : <span className="text-xs text-t-bone-dim">{t("loadingNext")}</span>;
 }
 
 function NextLink({ href, action }: { href: string; action: string }) {
-  return <Link href={href} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline-offset-2 hover:underline"><span className="mr-1 text-t-bone-dim">Next:</span> {action}</Link>;
+  const t = useTranslations("refineryShell.journey");
+  return <Link href={href} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline-offset-2 hover:underline"><span className="mr-1 text-t-bone-dim">{t("nextLabel")}</span> {action}</Link>;
 }

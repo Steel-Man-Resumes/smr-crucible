@@ -11,9 +11,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import {
-  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, PHASE_LABEL, admitBatch, clearTailorBatchStorage, confirmedSignedOut, batchSummary, createBatch, plural, readBatch, runBatch, runnableIndexes,
+  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, MAX_BATCH_JOBS, admitBatch, clearTailorBatchStorage, confirmedSignedOut, batchSummary, createBatch, readBatch, runBatch, runnableIndexes,
   type BatchJob, type BatchState, type TailorResult,
 } from "@/lib/tailor-batch";
 import { loadTailorContext, type TailorContext } from "@/lib/tailor-context";
@@ -29,6 +30,7 @@ function newBatchId() {
 }
 
 export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: string | null | undefined; currentArtifactId: string | null }) {
+  const t = useTranslations("refineryResume.resume.batch");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [batch, setBatch] = useState<BatchState | null>(null);
@@ -64,7 +66,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
     if (from === "batch") {
       let raw: string | null = null;
       try { raw = sessionStorage.getItem(BATCH_HANDOFF_KEY); sessionStorage.removeItem(BATCH_HANDOFF_KEY); } catch {}
-      if (!raw) { if (!id) setLoadError("The jobs you picked were not found. Pick them again on the job board."); return; }
+      if (!raw) { if (!id) setLoadError(t("notFound")); return; }
       try {
         const handoff = JSON.parse(raw) as { ownerUid?: string; laneId?: string | null; jobs?: BatchJob[] };
         if (handoff.ownerUid !== ownerUid) throw new Error("owner");
@@ -73,7 +75,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
         setBatch(state);
         router.replace(`/dashboard/application-tailor?batch=${state.batchId}`, { scroll: false });
       } catch {
-        setLoadError("The jobs you picked could not be read. Pick them again on the job board.");
+        setLoadError(t("unreadable"));
       }
       return;
     }
@@ -81,9 +83,9 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
       let state: BatchState | null = null;
       try { state = readBatch(JSON.parse(sessionStorage.getItem(BATCH_STORAGE_PREFIX + id) || "null"), ownerUid); } catch {}
       if (state) setBatch(prev => (prev?.batchId === state!.batchId ? prev : state));
-      else setLoadError("This batch is no longer on this device. Your saved resumes are in your Library and under Applications.");
+      else setLoadError(t("gone"));
     }
-  }, [ownerUid, searchParams, router]);
+  }, [ownerUid, searchParams, router, t]);
 
   useEffect(() => () => { runToken.current++; }, []);
 
@@ -97,13 +99,25 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
       setAllowance({ remaining: typeof body.remaining === "number" ? body.remaining : null, blockedReason: body.blockedReason || null });
     } catch {
       setAllowance(null);
-      setAllowanceError("Your allowance could not be checked. Try again before running.");
+      setAllowanceError(t("allowanceError"));
     }
-  }, [laneParam]);
+  }, [laneParam, t]);
   useEffect(() => { if (batch && ownerUid) void loadAllowance(); }, [batch?.batchId, ownerUid, loadAllowance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pending = batch ? runnableIndexes(batch) : [];
   const admission = batch && allowance ? admitBatch(pending.length, allowance.remaining, allowance.blockedReason) : null;
+  // The same cost words admitBatch builds, in the person's language. A reason the server gave stays as it is.
+  const costLine = (): string | null => {
+    if (!admission || !allowance) return null;
+    if (admission.kind === "none" && (pending.length === 0 || allowance.blockedReason)) return admission.line;
+    const n = Math.max(0, Math.min(MAX_BATCH_JOBS, Math.floor(pending.length)));
+    if (allowance.remaining === null) return t("costUnlimited", { count: n });
+    const left = Math.max(0, Math.floor(allowance.remaining));
+    const cost = t("cost", { count: n });
+    if (left === 0) return `${cost} ${t("costNone")}`;
+    if (left < n) return `${cost} ${t("costSome", { left })}`;
+    return `${cost} ${t("costAll", { left })}`;
+  };
   // When only some can run, the person picks which; default to the first ones.
   useEffect(() => {
     if (!admission || admission.kind !== "some") { setChosen([]); return; }
@@ -142,7 +156,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
             }),
           });
           const body = (await response.json().catch(() => null)) as (TailorResult & { key?: string }) | null;
-          if (!body || (body.key && body.key !== key)) return { ok: false, code: "unreadable", error: "The answer for this job could not be read. Retry this one." };
+          if (!body || (body.key && body.key !== key)) return { ok: false, code: "unreadable", error: t("answerUnreadable") };
           // A changed lane or base resume: read the person context again on the next try.
           if (!body.ok) contextRef.current = null;
           return body;
@@ -154,7 +168,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
         },
       });
     } catch {
-      if (isCurrent()) setAllowanceError("The batch stopped before it finished. Saved jobs stay saved. Retry the rest.");
+      if (isCurrent()) setAllowanceError(t("stopped"));
     } finally {
       if (runToken.current === token) { setRunning(false); void loadAllowance(); }
     }
@@ -162,7 +176,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
 
   if (!ownerUid) return null;
   if (loadError && !batch) {
-    return <section aria-label="Jobs to tailor" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos" role="status">{loadError}</section>;
+    return <section aria-label={t("ariaJobs")} className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos" role="status">{loadError}</section>;
   }
   if (!batch) return null;
 
@@ -172,10 +186,10 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
   const open = (artifactId: string) => router.push(`/dashboard/application-tailor?id=${encodeURIComponent(artifactId)}&batch=${batch.batchId}`);
 
   return (
-    <section aria-label="Jobs to tailor" data-testid="tailor-batch-queue" className="mb-6 border border-t-steel bg-t-panel p-4">
-      <h2 className="font-bold text-t-white">Tailor for {plural(batch.jobs.length, "job")}</h2>
+    <section aria-label={t("ariaJobs")} data-testid="tailor-batch-queue" className="mb-6 border border-t-steel bg-t-panel p-4">
+      <h2 className="font-bold text-t-white">{t("title", { count: batch.jobs.length })}</h2>
       <p className="mt-1 text-sm text-t-phos">
-        Your base resume and facts are read once for all of them. Each job gets its own posting read and its own tailored resume, so each one is its own AI action.
+        {t("intro")}
       </p>
 
       <ol className="mt-3 space-y-2" aria-live="polite">
@@ -192,13 +206,13 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
                     <label className="flex min-h-touch items-center gap-2 text-sm font-semibold text-t-white">
                       <input type="checkbox" className="h-5 w-5" checked={chosen.includes(j.index)}
                         onChange={() => setChosen(prev => prev.includes(j.index) ? prev.filter(i => i !== j.index) : prev.length < (admission?.runnable ?? 0) ? [...prev, j.index] : prev)} />
-                      {j.job.title} at {j.job.company}
+                      {t("jobAt", { title: j.job.title, company: j.job.company })}
                     </label>
                   ) : (
-                    <p className="text-sm font-semibold text-t-white">{j.index + 1}. {j.job.title} at {j.job.company}</p>
+                    <p className="text-sm font-semibold text-t-white">{j.index + 1}. {t("jobAt", { title: j.job.title, company: j.job.company })}</p>
                   )}
                   <p className={`text-xs ${j.phase === "failed" ? "text-t-red" : j.phase === "saved" ? "text-t-amber-bright" : "text-t-phos-dim"}`}>
-                    {busy ? `${PHASE_LABEL[j.phase]}...` : PHASE_LABEL[j.phase]}{isCurrent ? ". Open now" : ""}
+                    {busy ? `${t(`phase.${j.phase}`)}...` : t(`phase.${j.phase}`)}{isCurrent ? t("openNow") : ""}
                   </p>
                   {j.error && j.phase !== "saved" && <p className="mt-1 text-xs text-t-phos" role={j.phase === "failed" ? "alert" : undefined}>{j.error}</p>}
                   {j.phase === "saved" && j.truth && (j.truth.blocked || j.truth.flags.length > 0) && (
@@ -206,26 +220,26 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
                       {j.truth.notice && <p>{j.truth.notice}</p>}
                       {j.truth.flags.length > 0 ? (
                         <>
-                          <p>The truth check could not match {j.truth.flags.length === 1 ? "this line" : "these lines"} to what you told us. Make sure each one is true, or take it out, before you send this:</p>
+                          <p>{j.truth.flags.length === 1 ? t("truthOne") : t("truthMany")}</p>
                           <ul className="ml-4 list-disc">{j.truth.flags.map((claim, i) => <li key={i}>{claim}</li>)}</ul>
                         </>
-                      ) : !j.truth.notice ? <p>Some lines need your check before this is finished.</p> : null}
+                      ) : !j.truth.notice ? <p>{t("needsCheck")}</p> : null}
                     </div>
                   )}
                   {j.phase === "saved" && j.linked === false && (
-                    <p className="mt-1 text-xs text-t-phos">This job is already marked {j.applicationStatus === "heard_back" ? "heard back" : j.applicationStatus || "past saved"} in Applications, so it keeps the resume it has. The new one is in your Library.</p>
+                    <p className="mt-1 text-xs text-t-phos">{t("notLinked", { status: j.applicationStatus === "heard_back" ? t("statusHeardBack") : j.applicationStatus || t("statusPast") })}</p>
                   )}
                   {j.phase === "saved" && j.letterSaved === false && (
-                    <p className="mt-1 text-xs text-t-phos">The cover letter did not save. The resume did. You can write a letter from the resume.</p>
+                    <p className="mt-1 text-xs text-t-phos">{t("letterNotSaved")}</p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {j.phase === "saved" && j.artifactId && !isCurrent && (
-                    <button type="button" onClick={() => open(j.artifactId!)} className="t-focus min-h-touch border border-t-steel px-3 text-sm font-bold text-t-steel">Review this one</button>
+                    <button type="button" onClick={() => open(j.artifactId!)} className="t-focus min-h-touch border border-t-steel px-3 text-sm font-bold text-t-steel">{t("reviewThis")}</button>
                   )}
                   {j.phase === "failed" && (
                     <button type="button" disabled={running} onClick={() => void run([j.index])} className="t-focus min-h-touch border border-t-amber px-3 text-sm font-bold text-t-amber-bright disabled:opacity-50">
-                      {j.code === "save_failed" || j.code === "not_confirmed" ? "Retry the save" : "Retry this job"}
+                      {j.code === "save_failed" || j.code === "not_confirmed" ? t("retrySave") : t("retryJob")}
                     </button>
                   )}
                 </div>
@@ -236,34 +250,34 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
         })}
       </ol>
 
-      {summary.used > 0 && <p className="mt-3 text-xs text-t-phos-dim">{plural(summary.used, "AI action")} used by this batch so far.</p>}
+      {summary.used > 0 && <p className="mt-3 text-xs text-t-phos-dim">{t("used", { count: summary.used })}</p>}
 
       {pending.length > 0 && !running && (
         <div className="mt-3 space-y-2">
-          {allowanceError && <p role="alert" className="text-sm text-t-red">{allowanceError} <button type="button" onClick={() => void loadAllowance()} className="t-focus min-h-touch underline">Check again</button></p>}
-          {!allowance && !allowanceError && <p role="status" className="text-sm text-t-phos-dim">Checking your allowance...</p>}
-          {admission && <p className="text-sm text-t-phos" data-testid="batch-cost-line">{admission.line}</p>}
+          {allowanceError && <p role="alert" className="text-sm text-t-red">{allowanceError} <button type="button" onClick={() => void loadAllowance()} className="t-focus min-h-touch underline">{t("checkAgain")}</button></p>}
+          {!allowance && !allowanceError && <p role="status" className="text-sm text-t-phos-dim">{t("checkingAllowance")}</p>}
+          {admission && <p className="text-sm text-t-phos" data-testid="batch-cost-line">{costLine()}</p>}
           {admission?.kind === "all" && (
             <button type="button" data-testid="batch-run" onClick={() => void run(pending)} className="t-focus w-full min-h-touch bg-t-amber px-5 font-bold text-white hover:bg-t-amber-bright sm:w-auto">
-              {summary.saved || summary.failed ? `Run the ${plural(pending.length, "job")} left` : `Tailor for ${pending.length === 1 ? "this job" : `these ${pending.length} jobs`}`}
+              {summary.saved || summary.failed ? t("runLeft", { count: pending.length }) : t("tailorFor", { count: pending.length })}
             </button>
           )}
           {admission?.kind === "some" && (
             <button type="button" data-testid="batch-run" disabled={!chosen.length} onClick={() => void run(chosen)} className="t-focus w-full min-h-touch bg-t-amber px-5 font-bold text-white hover:bg-t-amber-bright disabled:opacity-50 sm:w-auto">
-              {chosen.length === 1 ? "Run one now" : `Run ${chosen.length} now`}
+              {chosen.length === 1 ? t("runOne") : t("runMany", { count: chosen.length })}
             </button>
           )}
         </div>
       )}
-      {running && <p role="status" className="mt-3 text-sm text-t-phos-dim">Working one job at a time. You can stay on this page.</p>}
-      <p className="mt-3 text-xs text-t-phos-dim">If a resume is made but does not save, we keep it encrypted for up to 7 days so a retry can save it. Then it is deleted.</p>
+      {running && <p role="status" className="mt-3 text-sm text-t-phos-dim">{t("working")}</p>}
+      <p className="mt-3 text-xs text-t-phos-dim">{t("encrypted")}</p>
 
       {summary.saved > 0 && (
         <div className="mt-3 space-y-2 text-xs text-t-phos-dim">
-          <p>Each saved resume is linked to its job in Applications, unless that job was already marked applied or further along. Mark it applied after you send it.</p>
-          <p>A tailored resume starts as a draft. Use Check and finish on each one. Finishing is what queues its package to your email, once your email is confirmed. Nothing is emailed before you finish it.</p>
+          <p>{t("linked")}</p>
+          <p>{t("draftNote")}</p>
           {nextSaved?.artifactId && currentIndex >= 0 && (
-            <button type="button" onClick={() => open(nextSaved.artifactId!)} className="t-focus min-h-touch border border-t-steel px-3 text-sm font-bold text-t-steel">Next job: {nextSaved.job.title}</button>
+            <button type="button" onClick={() => open(nextSaved.artifactId!)} className="t-focus min-h-touch border border-t-steel px-3 text-sm font-bold text-t-steel">{t("nextJob", { title: nextSaved.job.title })}</button>
           )}
         </div>
       )}

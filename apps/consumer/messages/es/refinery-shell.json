@@ -1,0 +1,671 @@
+{
+  "access": {
+    "active": "El acceso para tu organización aliada está activo",
+    "welcome": "Te damos la bienvenida.",
+    "welcomeName": "Te damos la bienvenida, {name}.",
+    "intro": "Esta página le da a tu equipo los datos de acceso, una orientación sobre los productos y material de muestra para evaluar toda la experiencia de Steel Man Resumes.",
+    "workspace": "Espacio de la organización aliada",
+    "yourAccess": "Tu acceso",
+    "noSetup": "No necesitas configurar nada.",
+    "signIn": "Iniciar sesión",
+    "signInPreAuth": "Inicia sesión en The Refinery con el correo al que se envió tu invitación. Ya está autorizado para el acceso de organización aliada, así que no hay código que escribir.",
+    "signInCode": "Crea una cuenta o inicia sesión, y luego canjea en Configuración el código de organización aliada que aparece aquí.",
+    "partnerCode": "Código de la organización aliada",
+    "shareCode": "Compártelo con el personal o los participantes que deban recibir el acceso de organización aliada.",
+    "noCode": "Tu código viene de tu organización, y el enlace de tu invitación lo trae. Si llegaste a esta página sin uno, pídele el enlace a quien te invitó en vez de adivinar un código.",
+    "tier": "Nivel de organización aliada",
+    "tierBody": "Todas las herramientas están disponibles de inmediato para que tu organización pueda evaluar el flujo de trabajo completo.",
+    "orientation": "Orientación sobre los productos",
+    "twoTools": "Dos herramientas. Un solo flujo de trabajo.",
+    "forgeBody": "El punto de partida público. Convierte el historial laboral en bruto en una narración que resalta las fortalezas, caminos profesionales prácticos, recursos para superar obstáculos y un currículum inicial.",
+    "forgeOpen": "No se necesita cuenta.",
+    "forgeUp": "Es gratis, con un inicio de sesión gratis.",
+    "refineryBody": "El espacio con cuenta. Aquí la gente arma materiales para cada oferta, se prepara para hablar de sus antecedentes penales y para las entrevistas, busca trabajo y lleva el avance.",
+    "inside": "Dentro de The Refinery",
+    "unlocked": "El conjunto completo de herramientas está desbloqueado.",
+    "tools": {
+      "jobBoard": {
+        "name": "Bolsa de trabajo",
+        "description": "Ofertas locales en lenguaje sencillo, con marcas en los empleadores que verificamos que contratan a personas con antecedentes penales."
+      },
+      "applicationTailor": {
+        "name": "Adaptador de solicitudes",
+        "description": "Un currículum, una carta de presentación y materiales para hablar de tus antecedentes penales hechos a la medida de cada oferta, a partir de lo que sale de The Forge."
+      },
+      "disclosurePlanner": {
+        "name": "Plan para hablar de tus antecedentes penales",
+        "description": "Orientación sobre cuándo hacerlo, contexto de tus derechos legales y un guion de conversación natural."
+      },
+      "interviewPrep": {
+        "name": "Preparación para entrevistas",
+        "description": "Práctica que se adapta a ti, con comentarios escritos y ordenados."
+      },
+      "jobPaths": {
+        "name": "Caminos de trabajo",
+        "description": "Caminos de trabajo realistas para alguien con antecedentes penales, conectados con la búsqueda en vivo y con materiales de carrera."
+      },
+      "applicationTracker": {
+        "name": "Seguimiento de solicitudes",
+        "description": "Un registro medible desde la primera conversación hasta la colocación."
+      }
+    },
+    "sample": "Muestra opcional",
+    "pasteTitle": "Pega el currículum de Jimmy en The Forge.",
+    "pasteBody": "Este ejemplo ficticio muestra cómo el flujo de trabajo maneja el trabajo en una institución correccional, los períodos sin empleo, el lenguaje sencillo y las habilidades prácticas.",
+    "copied": "Copiado",
+    "copySample": "Copiar muestra",
+    "closingNamed": "{name}, este trabajo está hecho para personas cuya capacidad es fácil de pasar por alto en un proceso de contratación convencional. Tu alianza ayuda a poner herramientas prácticas frente a ellas en el momento justo.",
+    "closing": "Este trabajo está hecho para personas cuya capacidad es fácil de pasar por alto en un proceso de contratación convencional. Tu alianza ayuda a poner herramientas prácticas frente a ellas en el momento justo.",
+    "begin": "Empieza en The Forge"
+  },
+  "actionCard": {
+    "savingFailed": "No se pudo guardar. Vuelve a abrir la página para revisar tu trabajo guardado antes de intentarlo de nuevo.",
+    "savedRevision": "Guardado como una revisión {status}. Revísala en la página del documento.",
+    "savedResources": "Guardado en tus listas de recursos. No se hizo ninguna cita ni contacto.",
+    "couldNotSave": "No se pudo guardar.",
+    "reviewTitle": "Revisa esta corrección",
+    "before": "Antes:",
+    "after": "Después:",
+    "confirmTrue": "Confirma que lo que dice es verdad. La revisión guardada igual pasa por las verificaciones del documento.",
+    "saveTitle": "¿Guardar estos recursos?",
+    "selected": "Servicios y pasos elegidos",
+    "saved": "Guardado",
+    "saving": "Guardando...",
+    "apply": "Aplicar esta corrección",
+    "saveButton": "Guardar recursos"
+  },
+  "brand": {
+    "tagline": "Informe de carrera",
+    "lockupAlt": "{name} de Steel Man Resumes",
+    "seatTip": "Tu cupo viene a través de {name}. Lo que compartes con ellos es decisión tuya. Míralo o cámbialo en Configuración.",
+    "withAria": "Con {name}. {tip}",
+    "with": "Con {name}"
+  },
+  "carry": {
+    "yourAccount": "tu cuenta",
+    "title": "Escribe tu código",
+    "lead": "El que anotaste antes de salir. Llena todo lo que ya contestaste para que no empieces de cero.",
+    "whereSignedIn": "Cuando agregues tu currículum, tus respuestas se guardan en la cuenta de {email}, para que puedas terminar en cualquier computadora.",
+    "whereSignedOut": "Tus respuestas se quedan en esta computadora. Inicia sesión para guardarlas en una cuenta gratis.",
+    "codeLabel": "Tu código",
+    "codeHint": "Los guiones son opcionales. Los códigos nunca usan la letra O, la letra I, el número cero ni el número uno.",
+    "redeem": "Seguir donde me quedé",
+    "lost": "¿Perdiste el código? Puedes volver a contestar las preguntas desde el principio. Toma unos minutos y no se pierde nada para siempre."
+  },
+  "checkEmail": {
+    "title": "Revisa tu correo",
+    "body": "Te enviamos un enlace mágico. Haz clic en el enlace de tu correo para iniciar sesión. Si no lo ves, revisa tu carpeta de spam."
+  },
+  "forgot": {
+    "couldNotSend": "No se pudo enviar el correo para restablecer.",
+    "wentWrong": "Algo salió mal. Inténtalo de nuevo.",
+    "sentTitle": "Revisa tu correo",
+    "sentBody": "Si existe una cuenta para <strong>{email}</strong>, enviamos un enlace para restablecer la contraseña. Vence en 60 minutos.",
+    "backToSignIn": "Volver a iniciar sesión",
+    "title": "Restablece tu contraseña",
+    "lead": "Te enviaremos un enlace por correo para que crees una contraseña nueva.",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "sending": "Enviando...",
+    "send": "Enviar correo para restablecer"
+  },
+  "getListed": {
+    "wentWrongShort": "Algo salió mal",
+    "wentWrong": "Algo salió mal. Inténtalo de nuevo.",
+    "thanks": "¡Gracias!",
+    "thanksBody": "Revisaremos tu envío y agregaremos tu organización en un plazo de 48 horas. Es posible que te escribamos si necesitamos más información.",
+    "back": "Volver a Steel Man Resumes",
+    "title": "Registra tu organización",
+    "lead": "Estamos armando una red de recursos verificados para personas que reconstruyen su vida laboral en Milwaukee y Waukesha. Si tu organización ofrece servicios de apoyo, queremos conectar a la gente contigo.",
+    "orgName": "Nombre de la organización",
+    "orgNamePlaceholder": "Ej.: Servicios Comunitarios de Milwaukee",
+    "category": "Categoría",
+    "categoryPlaceholder": "Elige una categoría",
+    "categories": {
+      "housing": "Vivienda y refugio",
+      "transportation": "Transporte",
+      "legal": "Ayuda legal",
+      "id_documents": "Identificación y documentos",
+      "mental_health": "Salud mental",
+      "substance": "Apoyo para la recuperación",
+      "education": "Educación y capacitación",
+      "financial": "Educación financiera",
+      "employment": "Ayuda para conseguir empleo",
+      "other": "Otra"
+    },
+    "city": "Ciudad",
+    "cityPlaceholder": "Ej.: Milwaukee",
+    "phone": "Teléfono",
+    "website": "Sitio web",
+    "description": "Describe tus servicios",
+    "descriptionPlaceholder": "¿Qué servicios ofreces? ¿Quién puede usarlos? ¿Hay requisitos para recibirlos?",
+    "contactNote": "Usaremos esto para comunicarnos contigo si tenemos preguntas.",
+    "yourName": "Tu nombre",
+    "yourNamePlaceholder": "María Pérez",
+    "yourEmail": "Tu correo electrónico",
+    "submitting": "enviando...",
+    "submit": "enviar para revisión",
+    "verifyNote": "Verificamos cada envío. Tu organización estará publicada en un plazo de 48 horas."
+  },
+  "globalError": {
+    "title": "Algo salió mal.",
+    "body": "Tu trabajo está guardado en este dispositivo. Recarga para continuar.",
+    "tryAgain": "Intentar de nuevo"
+  },
+  "home": {
+    "forge": {
+      "eyebrow": "01 · Arma la base",
+      "title": "Trae tu currículum a The Forge.",
+      "body": "Incluso un currículum viejo y malo le da a t.ROY algo real con qué empezar. Sube un archivo, usa una foto o pega el texto. The Forge te ayuda a corregir los datos y a salir con un currículum general que puedas explicar. Si no tienes ninguna página, t.ROY puede armar una contigo.",
+      "action": "Empezar en The Forge",
+      "point1": "Tu propia página es el mejor comienzo",
+      "point2": "Revisa los datos antes de darlo por terminado",
+      "point3Wall": "Un solo inicio de sesión gratis para guardar tu trabajo",
+      "point3Open": "Gratis para empezar en este navegador"
+    },
+    "refinery": {
+      "eyebrow": "02 · Pon la base a trabajar",
+      "title": "Úsalo para buscar trabajo en The Refinery.",
+      "body": "The Refinery usa tu historial real para armar currículums para cada oferta, solicitudes, práctica de entrevistas y las conversaciones más difíciles. Habla o escribe con t.ROY. Puede buscar ofertas en vivo, guardar la que tú elijas y ayudarte con el seguimiento. Los nuevos directorios de empleadores y de recursos apenas empiezan. Revisa cada fuente y su fecha a medida que crezcan.",
+      "action": "Seguir en The Refinery",
+      "point1": "Adapta tu currículum a una oferta a la vez",
+      "point2": "Practica con tu historial de trabajo real",
+      "point3": "Revisa las fuentes y las fechas en los nuevos directorios"
+    },
+    "freeTools": "Herramientas de carrera gratis",
+    "eyebrow": "Herramientas de Steel Man Resumes",
+    "headline": "Arma tu currículum general en The Forge. Úsalo para buscar trabajo en The Refinery.",
+    "lead": "Lo dividimos en dos pasos a propósito. The Forge arma un currículum general y verdadero a partir de tu historial. The Refinery usa esa base para ir tras empleos concretos, practicar entrevistas y seguir avanzando con t.ROY a tu lado.",
+    "bringOwn": "Trae tu propio currículum si tienes uno, por malo que se vea. Empezar con algo real da menos trabajo que reconstruir tu historial de memoria.",
+    "pathAria": "Tu camino por las herramientas",
+    "then": "luego",
+    "orgsEyebrow": "Para organizaciones",
+    "orgsTitle": "Lleva a tu gente por el mismo camino.",
+    "orgsBody": "Mira cómo una organización puede apoyar este trabajo. Steel Man Resumes conserva su propio diseño; los detalles de la alianza se pueden acordar para un programa específico.",
+    "orgsLink": "Página para organizaciones",
+    "footerTitle": "Herramientas de carrera de Steel Man Resumes",
+    "security": "Seguridad",
+    "mainSite": "Sitio principal",
+    "contact": "Contacto"
+  },
+  "journey": {
+    "processUnavailable": "El proceso no está disponible.",
+    "retry": "Reintentar",
+    "loadingProcess": "Cargando tu proceso...",
+    "today": "Hoy",
+    "process": "Proceso",
+    "askOpen": "Pídele a t.ROY que lo abra",
+    "nextUnavailable": "El siguiente paso no está disponible.",
+    "loadingNext": "Cargando el siguiente paso...",
+    "nextLabel": "Siguiente:"
+  },
+  "nav": {
+    "yourPath": "Tu camino",
+    "pathInOrder": "Tu camino, en orden",
+    "quickView": "Tu camino, vista rápida",
+    "askAction": "Pídele a t.ROY que lo abra antes",
+    "askHint": "Él abre los pasos guiados cuando se lo pides.",
+    "guidedStep": "Paso guiado: ",
+    "seePreview": "{line} Mira una vista previa.",
+    "hideViews": "Ocultar las vistas de {label}",
+    "showViews": "Mostrar las vistas de {label}",
+    "views": "Vistas de {label}",
+    "stationAria": "Estación {n}, {label}. Abre el camino aquí.",
+    "stationAriaWithStatus": "Estación {n}, {label}, {status}. Abre el camino aquí.",
+    "stripStatus": {
+      "completed": "completada",
+      "locked": "bloqueada",
+      "early": "acceso anticipado",
+      "current": "recomendada ahora",
+      "available": "disponible"
+    },
+    "states": {
+      "completed": "Completado",
+      "recommendedEarly": "Recomendado ahora · acceso anticipado",
+      "early": "Acceso anticipado",
+      "recommended": "Recomendado ahora",
+      "nextLocked": "Siguiente · bloqueado",
+      "nextAvailable": "Siguiente · disponible",
+      "available": "Disponible"
+    },
+    "blurbs": {
+      "overview": "Dónde estás y qué sigue",
+      "find": "Elige un trabajo real por el que valga la pena ir",
+      "tailor": "Tus currículums, ajustados a la oferta",
+      "plan": "Tus antecedentes penales, con tus propias palabras",
+      "practice": "Práctica de entrevistas cuando sea el momento",
+      "apply": "Envíalo y luego lleva el seguimiento",
+      "next": "Estudios, dinero, salud y el resto de la vida"
+    },
+    "labels": {
+      "overview": "Resumen",
+      "find_work": "Buscar trabajo",
+      "tailor_and_package": "Adaptar y preparar",
+      "plan_what_to_say": "Planear qué decir",
+      "practice": "Practicar",
+      "apply_and_track": "Postular y dar seguimiento",
+      "what_comes_next": "Lo que sigue",
+      "find": "Buscar",
+      "tailor": "Adaptar",
+      "plan": "Plan",
+      "apply": "Postular",
+      "next": "Siguiente",
+      "progress": "Progreso",
+      "from_your_case_manager": "De tu gestor de casos",
+      "jobs": "Ofertas de trabajo",
+      "explore_paths": "Explorar caminos",
+      "employers": "Empleadores",
+      "master_draft": "Borrador maestro",
+      "resumes_and_versions": "Currículums y versiones",
+      "tailor_for_a_job": "Adaptar para una oferta",
+      "creative_work": "Trabajo creativo",
+      "cv": "CV",
+      "performer_page": "Página de artista",
+      "disclosure_plan": "Plan para hablar de tus antecedentes penales",
+      "private_records_and_documents": "Registros y documentos privados",
+      "local_help": "Ayuda local",
+      "toolbox": "Herramientas",
+      "you": "Tú",
+      "program": "Programa",
+      "help_and_tour": "Ayuda y recorrido",
+      "share_an_idea": "Comparte una idea",
+      "get_your_records": "Obtén tus registros",
+      "settings": "Configuración",
+      "admin": "Administración",
+      "access_requests": "Solicitudes de acceso",
+      "profile_and_contact_details": "Perfil y datos de contacto",
+      "sharing_and_privacy": "Compartir y privacidad",
+      "export_or_delete_my_data": "Exportar o borrar mis datos",
+      "partner_dashboard": "Panel de la organización aliada",
+      "operator_home": "Inicio del operador",
+      "my_organization": "Mi organización"
+    }
+  },
+  "overview": {
+    "eyebrow": "Resumen técnico y de investigación completo",
+    "title": "La herramienta que no existía.",
+    "lead": "Las personas afectadas por el sistema de justicia penal enfrentan un proceso de contratación que trata sus antecedentes penales como un motivo automático de rechazo. Ninguna herramienta juntaba en un solo lugar el análisis de carrera con IA, la orientación legal que toma en cuenta los antecedentes penales y la preparación para hablar de ellos. Hasta ahora.",
+    "lead2": "Esta página es la documentación completa de lo que es esta plataforma, cómo funciona, qué investigación la respalda y cómo se tomó cada decisión. Código abierto. Nada oculto. Pensada para que la lean académicos, financiadores, desarrolladores y organizaciones aliadas.",
+    "gapTitle": "La brecha",
+    "stats": {
+      "s0": "Estadounidenses con antecedentes penales",
+      "s1": "Con empleo en el primer año después de salir",
+      "s2": "Ingreso mediano del primer año después de salir",
+      "s3": "Herramientas que, antes de esta, combinaban análisis de carrera con IA, orientación legal y preparación para hablar de los antecedentes penales en un solo lugar"
+    },
+    "journeyTitle": "El recorrido completo",
+    "journeyLead": "Seis etapas. Una sola plataforma. Cada etapa se apoya en la anterior. Gratis en cada paso.",
+    "journeyStage": "Etapa {n}",
+    "underHood": "Por dentro:",
+    "journey": {
+      "j0": {
+        "time": "Una sola sesión",
+        "name": "The Forge",
+        "what": "Sube un currículum o cuenta tu historial laboral. Contesta unas preguntas sobre tus metas, obstáculos, preparación y antecedentes penales. The Forge te entrega un currículum, una carta de presentación, caminos de carrera que encajan con tu experiencia y un plan de recursos. Todo en lenguaje sencillo.",
+        "tech": "Claude Sonnet (Anthropic) con una estructura de instrucciones a la medida que hace cumplir las 10 reglas de conducta. El currículum se lee con OCR + NLP. El resultado se firma con un código y se registra."
+      },
+      "j1": {
+        "time": "5 minutos",
+        "name": "Perfil y bolsa de trabajo",
+        "what": "Llena tus datos de contacto. Busca ofertas reales en varias fuentes de empleo. Los empleadores que verificamos que contratan a personas con antecedentes penales aparecen marcados, y cada marca indica dónde aplica.",
+        "tech": "Cada marca se apoya en evidencia con fecha en el directorio de empleadores (Neon PostgreSQL) que vence sola, y solo aplica donde se encontró la evidencia. Ningún resumen de IA puede dar una marca."
+      },
+      "j2": {
+        "time": "Continuo",
+        "name": "Adaptador de solicitudes",
+        "what": "Arma versiones de tu currículum para ofertas específicas. La IA ajusta el lenguaje a la descripción del puesto sin cambiar tu historia.",
+        "tech": "Sistema de artefactos de The Refinery: cada currículum tiene versiones y se guarda con datos (puesto, empresa, número de solicitud) y queda enlazado al seguimiento de solicitudes."
+      },
+      "j3": {
+        "time": "15 a 30 minutos",
+        "name": "Plan para hablar de tus antecedentes penales",
+        "what": "Planea cuándo y cómo hablar de tus antecedentes penales con empleadores específicos. El plan te guía en el momento, la manera y lo que conviene decir. Se basa en las leyes reales de \"Ban the Box\" y en investigaciones sobre empleadores que contratan a personas con antecedentes penales.",
+        "tech": "Diálogo de orientación estructurado con t.ROY. El resultado se guarda como un artefacto disclosure_plan. Nada de la transcripción de la práctica se guarda."
+      },
+      "j4": {
+        "time": "Continuo",
+        "name": "Práctica de entrevistas",
+        "what": "Entrevistas de práctica por texto o con voz en vivo, a la medida del puesto que buscas. Preguntas de conducta, de situaciones y sobre cómo hablar de tus antecedentes penales. Comentarios al instante sobre cómo lo planteas, qué tan concreto eres y el hilo de tu historia.",
+        "tech": "Modo texto: Claude Sonnet. Modo voz: OpenAI Whisper (transcripción) + Claude (comentarios). Nunca guardamos el audio de la práctica. La práctica por texto guarda los comentarios, no la conversación. La práctica por voz guarda una transcripción de texto solo cuando la persona activa el guardado."
+      },
+      "j5": {
+        "time": "Continuo",
+        "name": "Solicitudes y seguimiento",
+        "what": "Lleva el registro de cada solicitud: empresa, estado, fechas y qué versión del currículum usaste. Genera correos de seguimiento y guárdalos en la Biblioteca.",
+        "tech": "Tabla job_application en Neon. Sistema de artefactos de The Refinery para los correos de seguimiento y las cartas de presentación. Biblioteca = el archivo de todos los documentos que generaste."
+      }
+    },
+    "protocolTitle": "El protocolo de conducta",
+    "protocolLead": "t.ROY sigue 10 reglas innegociables en cada interacción. Son límites firmes que salen de investigaciones revisadas por pares y de la década de servicio directo de Troy. Ninguna instrucción de un usuario puede anularlas.",
+    "rules": {
+      "r0": {
+        "rule": "Ponle nombre a lo que sientes antes de resolver el problema",
+        "why": "Poner nombre a las emociones reduce la reactividad de la amígdala antes de un trabajo de alto riesgo (Lieberman et al., 2007)."
+      },
+      "r1": {
+        "rule": "Primero las fortalezas, después los vacíos. Siempre.",
+        "why": "Empezar por lo que falta activa la respuesta de amenaza. Empezar por lo que tienes activa la motivación para avanzar."
+      },
+      "r2": {
+        "rule": "Nunca ofrecer interpretaciones legales",
+        "why": "t.ROY es una guía de carrera, no un abogado. Avisa cuándo toca hablar de los antecedentes penales y señala recursos."
+      },
+      "r3": {
+        "rule": "Ajustar la complejidad a la preparación que la persona dice tener",
+        "why": "Teoría de la carga cognitiva: abrumar a alguien en plena crisis lo pierde para siempre."
+      },
+      "r4": {
+        "rule": "Ofrecer el siguiente paso. Nunca un sermón.",
+        "why": "El lenguaje que apoya la autonomía predice una participación sostenida (Deci y Ryan, 2000)."
+      },
+      "r5": {
+        "rule": "Usar lenguaje sencillo. Siempre.",
+        "why": "La plataforma está escrita a un nivel de lectura de sexto grado. Quien está en crisis no necesita exámenes de vocabulario."
+      },
+      "r6": {
+        "rule": "Un arco de redención, no un informe de carencias",
+        "why": "Quienes construyen su historia como un arco de lo malo a lo bueno muestran resultados notablemente mejores después de salir (McAdams, 2013)."
+      },
+      "r7": {
+        "rule": "Pedir permiso antes de cada uso de tus datos",
+        "why": "El trauma de la vigilancia es real. La confianza se construye, no se da por hecha."
+      },
+      "r8": {
+        "rule": "Toda recomendación necesita una razón",
+        "why": "El consejo de IA sin explicación desgasta la confianza. t.ROY explica su razonamiento en lenguaje sencillo cada vez."
+      },
+      "r9": {
+        "rule": "Si alguien está en crisis, parar y derivar",
+        "why": "Cuando alguien habla de una crisis durante la orientación de carrera hace falta una persona, no un chatbot. Punto."
+      }
+    },
+    "differentTitle": "Qué lo hace distinto",
+    "different": {
+      "d0": {
+        "us": "Análisis de carrera con IA hecho para personas afectadas por el sistema de justicia penal, con los períodos sin empleo, los antecedentes penales y los obstáculos dentro del modelo",
+        "them": "Creadores de currículums genéricos que tratan 10 años sin empleo como una señal de alarma"
+      },
+      "d1": {
+        "us": "Preparación para hablar de los antecedentes penales, integrada en The Refinery como herramienta central",
+        "them": "Bolsas de trabajo que muestran ofertas con \"Ban the Box\" pero no orientan sobre qué decir cuando te preguntan"
+      },
+      "d2": {
+        "us": "La mayoría de los pasos de IA se registran con una huella de la entrada, el modelo, una nota corta y el tiempo que tomó, para que puedas ver qué se hizo y cuándo",
+        "them": "Recomendaciones de caja negra sin rendición de cuentas"
+      },
+      "d3": {
+        "us": "10 reglas de conducta documentadas, innegociables y basadas en investigación, que rigen cada respuesta de t.ROY",
+        "them": "Un chatbot genérico ajustado para retener la atención, no para lograr resultados"
+      },
+      "d4": {
+        "us": "Un panel para organizaciones aliadas con permiso de la persona, donde las organizaciones solo ven a quienes aceptaron explícitamente",
+        "them": "Herramientas de programas que recogen datos de los participantes sin un consentimiento real"
+      },
+      "d5": {
+        "us": "Gratis en cada paso. Sin muro de pago, sin tarjeta de crédito y sin vender tus datos, nunca.",
+        "them": "Herramientas \"freemium\" que cobran justo las partes que la gente necesita"
+      },
+      "d6": {
+        "us": "Creado por alguien que pasó por el mismo sistema en carne propia",
+        "them": "Herramientas diseñadas por personas que nunca estuvieron presas, para personas que sí"
+      }
+    },
+    "versus": "frente a {them}",
+    "privacyTitle": "El modelo de privacidad",
+    "privacyLead": "El trauma de la vigilancia es real. Muchas personas afectadas por el sistema de justicia penal han sido vigiladas, grabadas e informadas sin saberlo ni dar su permiso durante años. Esta plataforma está diseñada para deshacer ese patrón.",
+    "privacy": {
+      "p0": {
+        "title": "Las transcripciones de práctica se guardan solo si tú decides",
+        "detail": "La práctica de entrevistas por texto guarda el puesto, el enfoque practicado y los comentarios del coach, no la conversación. La práctica de entrevistas por voz y el ensayo para hablar de tus antecedentes penales guardan una transcripción de texto cifrada solo cuando la persona activa el guardado, y la persona puede borrarla. Nosotros nunca guardamos el audio. Los programas no pueden leer la práctica a través del uso compartido; con el avance compartido activado, solo ven cuántas sesiones hiciste."
+      },
+      "p1": {
+        "title": "El acceso de las organizaciones aliadas requiere tu permiso",
+        "detail": "Las organizaciones aliadas (organizaciones sin fines de lucro, programas de reinserción, centros de empleo) solo pueden ver a quienes aceptaron explícitamente compartir su avance. El interruptor está en Configuración. Viene apagado. Solo el usuario puede encenderlo. La organización aliada no puede."
+      },
+      "p2": {
+        "title": "Los datos de The Forge se quedan en tu dispositivo hasta que tú decidas otra cosa",
+        "detail": "The Forge funciona en tu navegador. Los datos del currículum, tus metas y las respuestas de tu historia se guardan en el localStorage de tu navegador, no en nuestros servidores, hasta que creas una cuenta y decides sincronizar. Puedes terminar The Forge sin crear una cuenta."
+      },
+      "p3": {
+        "title": "Nunca vendemos datos",
+        "detail": "Steel Man Resumes no se financia con publicidad. No existe una capa para ganar dinero con los datos. Esto está documentado en la licencia AGPL-3.0 y el código fuente es público."
+      },
+      "p4": {
+        "title": "Derecho a borrar",
+        "detail": "Configuración > Privacidad > Borrar todos los datos elimina todo en el servidor y limpia el localStorage. El borrado es inmediato e irreversible."
+      }
+    },
+    "researchTitle": "La base de investigación",
+    "researchLead": "Cada decisión de diseño se apoya en investigación revisada por pares. El protocolo de conducta, el nivel de lectura de los textos, el arco narrativo de lo que sale de The Forge y el modelo de privacidad se remontan a estudios específicos.",
+    "research": {
+      "c0": {
+        "finding": "Poner nombre a las emociones reduce la reactividad de la amígdala hasta en un 50 %",
+        "source": "Lieberman et al., 2007 (UCLA)",
+        "detail": "Poner los sentimientos en palabras activa la corteza prefrontal y baja la respuesta de estrés. The Forge usa en cada paso un replanteo narrativo como técnica documentada de rendimiento que baja la resistencia mental antes de un trabajo de alto riesgo. No es terapia."
+      },
+      "c1": {
+        "finding": "Las secuencias narrativas de redención predicen más bienestar y estabilidad después de salir",
+        "source": "McAdams, 2013 (Northwestern)",
+        "detail": "Quienes construyen su historia como un arco de lo malo a lo bueno muestran resultados notablemente mejores en salud, relaciones y estabilidad. Lo que sale de The Forge está estructurado como un arco de redención, no como un informe de carencias. Esa estructura reproduce un mecanismo psicológico documentado."
+      },
+      "c2": {
+        "finding": "La autonomía, la competencia y la conexión con los demás son las tres necesidades psicológicas innegociables",
+        "source": "Deci y Ryan, 2000 (Teoría de la autodeterminación)",
+        "detail": "El encarcelamiento quita las tres de forma sistemática. Esta plataforma las reconstruye: decisiones que toma el usuario (autonomía), habilidades que salen de su historial real (competencia) y un lenguaje basado en la experiencia vivida y no en la distancia clínica (conexión)."
+      },
+      "c3": {
+        "finding": "La discriminación por estigma persiste incluso donde rige \"Ban the Box\"",
+        "source": "Agan y Starr, 2018 (American Economic Review)",
+        "detail": "Quitar la casilla no quita el prejuicio. La preparación de The Refinery para hablar de los antecedentes penales prepara a los usuarios para el formulario y para la conversación que viene después de la solicitud."
+      },
+      "c4": {
+        "finding": "La carga cognitiva empeora la calidad de las decisiones bajo estrés económico",
+        "source": "Mullainathan y Shafir, 2013 (Scarcity)",
+        "detail": "La escasez (de dinero, de tiempo, de estabilidad de vivienda) consume directamente la capacidad mental. La plataforma está diseñada para personas bajo la máxima carga: preguntas cortas, sin jerga, una pregunta a la vez, sin cansancio de decidir."
+      },
+      "c5": {
+        "finding": "Los programas de reinserción laboral con apoyo integral muestran de 2 a 3 veces más permanencia en el empleo",
+        "source": "MDRC / metaanálisis del CEP",
+        "detail": "Solo tener empleo no basta para sostenerlo. The Refinery es un apoyo integral: currículum + hablar de los antecedentes penales + entrevista + solicitudes + coaching, en un solo lugar y gratis."
+      }
+    },
+    "archTitle": "Arquitectura y rendición de cuentas",
+    "archLead": "La mayoría de los pasos de IA se registran con una huella con llave y de un solo sentido de la entrada (nunca la entrada misma), el modelo, una nota corta y el tiempo que tomó. La lectura de currículums, las verificaciones de datos y la práctica por voz no están en este registro, y sin cuenta la nota no contiene ninguna de las palabras que escribió la persona. Hecho para informes a financiadores, revisiones de cumplimiento y evaluación de programas.",
+    "archLog": "// La mayoría de las decisiones de IA se registran:",
+    "arch": {
+      "a0": "Neon PostgreSQL: todos los datos estructurados (usuarios, perfiles, artefactos, solicitudes, registros de consentimiento, registro de decisiones)",
+      "a1": "Cloudflare R2: almacenamiento cifrado de documentos (currículums subidos, PDF generados)",
+      "a2": "Vercel: alojamiento sin servidor, funciones en el borde, despliegues de vista previa",
+      "a3": "Resend: correo transaccional (solo enlaces mágicos, sin correo de mercadeo)",
+      "a4": "Airtable: fuente de datos de empleadores verificados (curada a mano, importada a PostgreSQL)"
+    },
+    "partnersTitle": "Para organizaciones aliadas",
+    "partnersLead": "Los programas de reinserción, las organizaciones de desarrollo laboral, las sociedades de ayuda legal y los centros de empleo pueden integrar Steel Man Resumes al trabajo con sus clientes. Los códigos de acceso desbloquean límites más altos de uso de IA y permiten dar seguimiento al avance con el permiso de la persona.",
+    "partners": {
+      "n0": {
+        "label": "Código de acceso",
+        "detail": "Un código por programa. Los clientes lo escriben al iniciar sesión para desbloquear límites más altos. Los códigos están vinculados a la cuenta de tu organización aliada."
+      },
+      "n1": {
+        "label": "Panel de la organización aliada",
+        "detail": "Ve el avance del grupo (etapa, artefactos terminados, última actividad) de los clientes que aceptaron compartirlo. Exportación en CSV para los informes del programa."
+      },
+      "n2": {
+        "label": "Sin dependencia de un proveedor",
+        "detail": "Licencia AGPL-3.0. El código fuente es público. Puedes alojar una instancia privada para tu programa."
+      },
+      "n3": {
+        "label": "Para pedir un código de acceso",
+        "detail": "Escríbele directamente a Steel Man Resumes. Gratis para organizaciones sin fines de lucro y comunitarias durante el período de lanzamiento."
+      }
+    },
+    "fundersTitle": "Para financiadores",
+    "fundersLead": "La plataforma es de código abierto bajo AGPL-3.0 y gratis para todos los usuarios. No se genera ningún ingreso con los datos de los usuarios.",
+    "funders": {
+      "n0": {
+        "label": "Resultados medibles",
+        "detail": "Cada The Forge terminado, currículum armado, plan para hablar de los antecedentes penales, sesión de entrevista y solicitud queda registrado, con el permiso del usuario y sin recoger datos personales en los informes agregados."
+      },
+      "n1": {
+        "label": "Registro de auditoría",
+        "detail": "La tabla decision_log registra la mayoría de los pasos de IA: qué herramienta se usó, qué modelo, una huella de un solo sentido de la entrada, el tiempo que tomó y los tokens usados, y una nota corta para quienes iniciaron sesión. La lectura de currículums y las verificaciones de datos no están. De la práctica por voz solo registra que empezó una sesión, nunca lo que se dice. Los financiadores pueden pedir informes sobre el rendimiento de la IA, el uso de los modelos y las señales de resultados."
+      },
+      "n2": {
+        "label": "Población a la que sirve",
+        "detail": "Adultos afectados por el sistema de justicia penal en Wisconsin (al inicio), el Medio Oeste (expansión) y todo el país (alojamiento propio con AGPL). Enfoque principal: personas a menos de 90 días de salir o que salieron hace poco."
+      },
+      "n3": {
+        "label": "Sin muro de pago, por diseño",
+        "detail": "La plataforma nunca les cobrará a los usuarios. La sostenibilidad viene de licencias a organizaciones, subvenciones y, con el tiempo, el estatus de organización sin fines de lucro."
+      }
+    },
+    "livedTitle": "Hecho por alguien que lo vivió",
+    "lived1": "Steel Man Resumes lo creó Troy Carr, un defensor del trabajo afectado él mismo por el sistema de justicia penal, con una década de servicio directo recorriendo el mismo sistema que estas herramientas ayudan a las personas a sobrevivir.",
+    "lived2": "La plataforma refleja lo que él deseaba que existiera cuando estuvo adentro: un solo lugar que entendiera los antecedentes penales, que no tratara los vacíos como motivo de rechazo y que diera orientación en lenguaje sencillo en vez de consejos genéricos pensados para quienes nunca estuvieron presos.",
+    "lived3": "La investigación es real. Las reglas de conducta son reales. Los empleadores están verificados. El modelo de privacidad se diseñó pensando en el trauma de la vigilancia porque Troy también lo ha vivido.",
+    "licenseLine": "Steel Man Resumes · código abierto AGPL-3.0",
+    "seeDemo": "ver The Forge en acción (modo de demostración)",
+    "backIntro": "Volver a la introducción"
+  },
+  "policy": {
+    "banner": "{orgs} {count, plural, =1 {requiere} other {requieren}} que compartas algo como parte del programa. Todavía no se abre nada.",
+    "and": " y ",
+    "read": "Lee lo que requieren"
+  },
+  "seat": {
+    "title": "The Refinery abre con un cupo",
+    "intro": "Las organizaciones que trabajan con Steel Man Resumes les dan cupos a su gente. Tu currículum de The Forge es tuyo de todos modos, y queda guardado en tu cuenta.",
+    "open": "The Refinery está abierto para ti.",
+    "openButton": "Ir a The Refinery",
+    "emailed": "Te enviamos tu paquete de The Forge al correo de tu cuenta.",
+    "sendIt": "Envíamelo",
+    "sendItHelp": "Envía tu currículum terminado de The Forge al correo de tu cuenta.",
+    "download": "Descárgalo desde The Forge",
+    "offerLead": "{org} te pidió que te unas.",
+    "offerBody": "Si te unes, solo ven el avance que tú elijas compartir desde Configuración. Nunca ven el texto de tu currículum, tus planes para hablar de tus antecedentes penales ni tus respuestas de práctica. Unirte usa uno de sus cupos.",
+    "offerYes": "Unirme",
+    "offerNo": "No, gracias",
+    "codeHeading": "¿Tienes un código de una organización?",
+    "codeButton": "Usar código",
+    "askHeading": "¿No tienes código? Pide un cupo.",
+    "askNoteLabel": "Algo que quieras que Troy sepa (opcional)",
+    "askRefLabel": "¿Quién te mandó aquí? (opcional)",
+    "askButton": "Pedir un cupo",
+    "askPending": "Tu solicitud llegó. Troy las revisa él mismo.",
+    "alwaysHeading": "Esto siempre funciona",
+    "backToForge": "Volver a The Forge",
+    "settings": "Configuración",
+    "myData": "Descargar o borrar mis datos",
+    "pending": "Primero termina de iniciar sesión.",
+    "signedOut": "Primero inicia sesión.",
+    "checkFailed": "No se pudo revisar tu cupo. Inténtalo de nuevo en un momento.",
+    "codeFailed": "Ese código no funcionó.",
+    "done": "Listo.",
+    "answerFailed": "Tu respuesta no se guardó. Inténtalo de nuevo.",
+    "requestFailed": "Tu solicitud no se guardó. Inténtalo de nuevo.",
+    "noResume": "Todavía no hay un currículum terminado de The Forge para enviar.",
+    "sentTo": "Enviado a {to}.",
+    "unproven": "Primero confirma tu correo: inicia sesión una vez con un enlace por correo. Mientras tanto, puedes descargarlo.",
+    "stillDraft": "Tu currículum de The Forge sigue siendo un borrador. Termínalo primero en The Forge.",
+    "notSent": "No se envió. Puedes descargarlo desde The Forge.",
+    "goSignIn": "Ir a iniciar sesión",
+    "checking": "Revisando tu cupo...",
+    "saving": "Guardando...",
+    "sending": "Enviando...",
+    "troyAsked": "Troy preguntó: {note}"
+  },
+  "shell": {
+    "partnerView": "Vista de organización aliada",
+    "clientView": "Vista de cliente",
+    "returnPartner": "Volver a la vista de tu organización aliada",
+    "experienceClient": "Vive la plataforma exactamente como un cliente",
+    "loadingWorkspace": "Cargando tu espacio de trabajo...",
+    "signOutFailed": "No pudimos confirmar que cerraste sesión. Quédate aquí e inténtalo de nuevo antes de dejar esta computadora.",
+    "notSavedGone": "No se guardó nada. Ese currículum ya no está en esta computadora.",
+    "savedToAccount": "Guardado en tu cuenta.",
+    "skip": "Saltar al contenido",
+    "openNav": "Abrir navegación",
+    "settings": "Configuración",
+    "signingOutAria": "Cerrando sesión",
+    "signOut": "Cerrar sesión",
+    "signingOut": "Cerrando sesión...",
+    "tryAgain": "Intentar de nuevo",
+    "inviteOne": "{org} te invitó a unirte a su equipo.",
+    "inviteMany": "Tienes {count} invitaciones para unirte a un equipo.",
+    "reviewInvite": "Revisar la invitación",
+    "resumeRegion": "Currículum en esta computadora",
+    "resumeAsk": "Hay un currículum en progreso en esta computadora. ¿Es tuyo?",
+    "resumeChanged": "El currículum de esta computadora cambió desde que preguntamos. No se guardó nada. ¿Este es tuyo?",
+    "didNotSave": "No se guardó. Inténtalo de nuevo.",
+    "saving": "Guardando...",
+    "yesSaveTo": "Sí, guardarlo en {email}",
+    "yesSaveMine": "Sí, guardarlo en mi cuenta",
+    "noErase": "No, borrarlo",
+    "admin2faTitle": "Las cuentas de administrador requieren verificación en dos pasos.",
+    "admin2faBody": "Las herramientas de administración siguen bloqueadas hasta que la actives en <b>Seguridad</b>, más abajo.",
+    "navAdmin": "Navegación de administración de la plataforma",
+    "navOrg": "Navegación del espacio de trabajo de la organización",
+    "navCareer": "Navegación del espacio de carrera",
+    "closeNav": "Cerrar navegación",
+    "trySignOutAgain": "Intentar cerrar sesión otra vez",
+    "assistantTitle": "t.ROY, para tu trabajo con personas",
+    "assistantSub": "para tu trabajo con personas",
+    "checkingAccount": "Revisando tu cuenta...",
+    "careerWorkspace": "Espacio de carrera",
+    "orgNav": {
+      "overview": "Resumen de la organización",
+      "team": "Equipo y cupos",
+      "add": "Agregar participantes",
+      "security": "Seguridad y privacidad",
+      "clients": "Mis clientes"
+    }
+  },
+  "spotlight": {
+    "pointing": "El asistente está señalando un elemento",
+    "gotIt": "Entendido"
+  },
+  "welcome": {
+    "readiness": {
+      "exploring": {
+        "label": "Solo estoy mirando",
+        "description": "No sé si estoy listo todavía, pero tengo curiosidad."
+      },
+      "thinking": {
+        "label": "Lo estoy pensando",
+        "description": "Sé que tengo que hacer algo, pero no sé por dónde empezar."
+      },
+      "getting-ready": {
+        "label": "Me estoy preparando",
+        "description": "Ya decidí hacer un cambio. Muéstrame qué sigue."
+      },
+      "ready-now": {
+        "label": "Listo para empezar",
+        "description": "Estoy buscando trabajo ahora mismo. Vamos."
+      }
+    },
+    "troyResponses": {
+      "exploring": "Sin presión. Solo veamos qué hay. Puedes parar cuando quieras.",
+      "thinking": "Ahí empieza la mayoría. Lo vamos a resolver juntos.",
+      "getting-ready": "Bien. Ya tomaste la decisión más difícil. Sigamos desde ahí.",
+      "ready-now": "Vamos. Primero, tu currículum."
+    },
+    "path": {
+      "light": {
+        "label": "El camino corto",
+        "description": "Solo lo esencial, y luego yo armo tu página. Puedes agregar más en el camino."
+      },
+      "full": {
+        "label": "El camino completo",
+        "description": "Todas las preguntas, y tu historia también. Toma más tiempo y la página queda más fuerte."
+      }
+    },
+    "title": "¿Dónde estás ahora mismo?",
+    "subtitle": "Esto cambia cuánto hablo. Elige lo que es verdad.",
+    "footer": "Ningún empleador ni programa ve esta respuesta. Puedes cambiarla cuando quieras.",
+    "savedBefore": "Tus respuestas de antes están guardadas. Cambia esta y sigue, o empieza de nuevo.",
+    "demoNote": "Modo de demostración: datos de ejemplo ya llenados. Mira cómo t.ROY te guía en cada paso.",
+    "howMuch": "¿Cuánto quieres hacer hoy?",
+    "shortSet": "Necesitas trabajo ya, así que el camino corto está elegido. ¿Quieres el completo? Tócalo.",
+    "pickFits": "Elige lo que te quede mejor. Puedes cambiarlo después volviendo aquí."
+  }
+}

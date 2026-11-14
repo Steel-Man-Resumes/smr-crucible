@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useLocale, useTranslations } from "next-intl";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
@@ -25,7 +26,6 @@ import { getOpusMessage } from "@/lib/opus-messages";
 import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
 import { trackProgress } from "@/lib/track-progress";
 import {
-  CATEGORY_LABELS,
   rankSecondChanceOpportunities,
   type OpportunityCategory,
   type SecondChanceOpportunity,
@@ -53,6 +53,8 @@ export default function SecondChanceBoardPageWrapper() {
 }
 
 function SecondChanceBoardPage() {
+  const t = useTranslations("refineryJobs.resourcesPage");
+  const locale = useLocale();
   const [pathsOpen, setPathsOpen] = useState(false);
   // The record check screen is a 404 while its server switch is off.
   const { recordStep } = useServerSwitches();
@@ -141,10 +143,10 @@ function SecondChanceBoardPage() {
     <div className="max-w-5xl space-y-8">
       <header className="max-w-3xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Get support
+          {t("title")}
         </h1>
         <p className="text-base text-t-phos-dim leading-relaxed">
-          Find help for what is in your way today. You choose what to share.
+          {t("subtitle")}
         </p>
       </header>
 
@@ -152,22 +154,20 @@ function SecondChanceBoardPage() {
 
       <SupportSearch initialLocation={location} barriers={barriers} />
 
-      <nav aria-label="Support tools" className="grid gap-3 sm:grid-cols-2">
-        <Link href="/dashboard/disclosure" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Disclosure planner</strong><span className="text-sm text-t-phos-dim">Work through your situation, choose what to say and practice with t.ROY.</span></Link>
-        {recordStep && <Link href="/dashboard/record-check" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Get your records</strong><span className="text-sm text-t-phos-dim">Find official information and steps for records you need.</span></Link>}
+      <nav aria-label={t("toolsAria")} className="grid gap-3 sm:grid-cols-2">
+        <Link href="/dashboard/disclosure" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">{t("disclosureTitle")}</strong><span className="text-sm text-t-phos-dim">{t("disclosureBody")}</span></Link>
+        {recordStep && <Link href="/dashboard/record-check" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">{t("recordsTitle")}</strong><span className="text-sm text-t-phos-dim">{t("recordsBody")}</span></Link>}
       </nav>
-      <details open={pathsOpen} onToggle={(event) => setPathsOpen(event.currentTarget.open)} className="border border-t-line bg-t-panel p-4"><summary className="t-focus cursor-pointer font-semibold text-t-phos">Explore general job-path ideas</summary><p className="my-3 text-sm text-t-phos-dim">These are general starting points from our earlier guide, not current openings or an eligibility decision. Use Find work for live jobs and dated employer evidence.</p>
+      <details open={pathsOpen} onToggle={(event) => setPathsOpen(event.currentTarget.open)} className="border border-t-line bg-t-panel p-4"><summary className="t-focus cursor-pointer font-semibold text-t-phos">{t("pathsSummary")}</summary><p className="my-3 text-sm text-t-phos-dim">{t("pathsIntro")}</p>
       <header id="paths" className="max-w-3xl scroll-mt-24">
-        <h2 className="text-xl font-bold text-t-white mb-2">Job paths to explore</h2>
-        <GhostGuide message={getOpusMessage("resources")} pageId="resources" />
+        <h2 className="text-xl font-bold text-t-white mb-2">{t("pathsHeading")}</h2>
+        <GhostGuide message={getOpusMessage("resources", "client", false, locale)} pageId="resources" />
         <p className="text-base text-t-phos-dim leading-relaxed">
-          Compare the work with your interests, skills and practical needs. t.ROY can help you investigate the requirements of a specific opening.
+          {t("compareIntro")}
         </p>
         <div className="mt-4 border border-t-amber bg-t-panel-2 px-4 py-3">
           <p className="text-sm text-t-amber-bright leading-relaxed">
-            A company that hires people with records does not approve everyone automatically. Background checks
-            still vary by role, location, timing, and the relationship between
-            the record and the job.
+            {t("hiringCaveat")}
           </p>
         </div>
       </header>
@@ -175,7 +175,7 @@ function SecondChanceBoardPage() {
       {(careerTitles.length > 0 || barriers.includes("criminal_record")) && (
         <section className="border border-t-line bg-t-panel p-4">
           <h2 className="font-semibold text-t-amber-bright mb-2">
-            Matched From Your Forge Results
+            {t("matchedTitle")}
           </h2>
           <div className="flex flex-wrap gap-2">
             {careerTitles.slice(0, 4).map((title) => (
@@ -188,7 +188,7 @@ function SecondChanceBoardPage() {
             ))}
             {barriers.includes("criminal_record") && (
               <span className="bg-t-panel-2 px-3 py-1.5 text-xs font-medium text-t-phos border border-t-line">
-                record-aware matching
+                {t("recordAware")}
               </span>
             )}
             {location && (
@@ -204,18 +204,18 @@ function SecondChanceBoardPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-t-white">
-              Opportunity Lanes
+              {t("lanesTitle")}
             </h2>
             <p className="text-sm text-t-phos-dim">
-              Use these as starting points, then search live openings.
+              {t("lanesIntro")}
             </p>
           </div>
           <label className="block sm:w-72">
-            <span className="sr-only">Search roles or employers</span>
+            <span className="sr-only">{t("searchLabel")}</span>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search role or employer"
+              placeholder={t("searchPlaceholder")}
               className="w-full border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white outline-none focus:border-t-amber"
             />
           </label>
@@ -232,7 +232,7 @@ function SecondChanceBoardPage() {
                   : "bg-t-panel text-t-phos-dim border-t-line hover:border-t-phos-dim hover:text-t-white"
               }`}
             >
-              {CATEGORY_LABELS[id]}
+              {t(`categories.${id}`)}
             </button>
           ))}
         </div>
@@ -254,7 +254,7 @@ function SecondChanceBoardPage() {
         ) : (
           <div className="border border-t-line bg-t-panel p-8 text-center">
             <p className="text-sm text-t-phos-dim">
-              No board lanes match that filter. Try a broader role term.
+              {t("noLanes")}
             </p>
           </div>
         )}
@@ -264,18 +264,17 @@ function SecondChanceBoardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-t-white">
-              Still need local support before work?
+              {t("localTitle")}
             </h2>
             <p className="text-sm text-t-phos-dim">
-              Housing, transport, IDs, legal aid, and crisis help can still
-              decide whether a job is realistic this week.
+              {t("localBody")}
             </p>
           </div>
           <a
             href="tel:211"
             className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-5 py-3 text-sm font-bold text-white hover:bg-t-amber-bright"
           >
-            Call 211
+            {t("call211")}
           </a>
         </div>
       </section>
@@ -295,6 +294,7 @@ function OpportunityCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const t = useTranslations("refineryJobs.resourcesPage");
   const searchHref = `/dashboard/jobs?q=${encodeURIComponent(
     opportunity.searchTerm
   )}`;
@@ -315,7 +315,7 @@ function OpportunityCard({
             </h3>
             {matched && (
               <span className="border border-t-amber px-2 py-0.5 text-[10px] font-semibold text-t-amber-bright">
-                matched
+                {t("matched")}
               </span>
             )}
             <span className="border border-t-line px-2 py-0.5 text-[10px] font-semibold text-t-phos-dim">
@@ -341,7 +341,7 @@ function OpportunityCard({
 
       <div className="mt-4 border border-t-amber bg-t-panel-2 px-3 py-2">
         <p className="text-xs text-t-amber-bright">
-          <span className="font-semibold">Watch out: </span>
+          <span className="font-semibold">{t("watchOut")} </span>
           {opportunity.watchOut}
         </p>
       </div>
@@ -350,7 +350,7 @@ function OpportunityCard({
         <div className="mt-4 space-y-4 border-t border-t-line pt-4">
           <div>
             <h4 className="mb-2 text-xs font-semibold uppercase text-t-phos-dim">
-              Employer Examples
+              {t("employerExamples")}
             </h4>
             <div className="flex flex-wrap gap-2">
               {opportunity.employerExamples.map((employer) => (
@@ -366,7 +366,7 @@ function OpportunityCard({
 
           <div>
             <h4 className="mb-1 text-xs font-semibold uppercase text-t-phos-dim">
-              Best Move
+              {t("bestMove")}
             </h4>
             <p className="text-sm text-t-phos leading-relaxed">
               {opportunity.bestMove}
@@ -375,7 +375,7 @@ function OpportunityCard({
 
           <div>
             <h4 className="mb-1 text-xs font-semibold uppercase text-t-phos-dim">
-              Source Note
+              {t("sourceNote")}
             </h4>
             <p className="text-xs text-t-phos-dim leading-relaxed">
               {opportunity.sourceNote}
@@ -389,19 +389,19 @@ function OpportunityCard({
           href={searchHref}
           className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
         >
-          Search live jobs
+          {t("searchJobs")}
         </Link>
         <Link
           href={resumeHref}
           className="t-focus inline-flex min-h-touch items-center justify-center border border-t-amber bg-transparent px-4 py-2.5 text-sm font-bold text-t-amber-bright hover:bg-t-amber/10"
         >
-          Build a resume
+          {t("buildResume")}
         </Link>
         <Link
           href={employersHref}
           className="t-focus inline-flex min-h-touch items-center justify-center border border-t-steel bg-transparent px-4 py-2.5 text-sm font-bold text-t-steel hover:bg-t-steel/10"
         >
-          Verified employers
+          {t("verifiedEmployers")}
         </Link>
       </div>
 
@@ -409,7 +409,7 @@ function OpportunityCard({
         onClick={onToggle}
         className="mt-4 text-sm font-medium text-t-phos-dim hover:text-t-white"
       >
-        {expanded ? "Hide details" : "Show details"}
+        {expanded ? t("hideDetails") : t("showDetails")}
       </button>
     </article>
   );

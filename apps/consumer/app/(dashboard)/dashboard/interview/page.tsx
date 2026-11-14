@@ -11,10 +11,11 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { PremiumGate, usePremium } from "@/components/premium/PremiumGate";
-import { textPracticeAllowanceLine, toolIsOpen } from "@/lib/premium";
+import { TEXT_PRACTICE_SESSIONS_PER_DAY, toolIsOpen } from "@/lib/premium";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
@@ -113,34 +114,13 @@ async function recordInterviewPractice(record: PracticeRecord): Promise<boolean>
   }
 }
 
-const INTERVIEW_TYPES = [
-  {
-    id: "general",
-    label: "General Interview",
-    description: "Common questions for any role. Good starting point.",
-  },
-  {
-    id: "behavioral",
-    label: "Behavioral (STAR)",
-    description:
-      '"Tell me about a time when..." Practice with real scenarios.',
-  },
-  {
-    id: "industry",
-    label: "Industry-Specific",
-    description: "Questions tailored to your target field.",
-  },
-  {
-    id: "disclosure",
-    label: "Disclosure Practice",
-    description: "Practice talking about your record with an interviewer.",
-  },
-];
+const INTERVIEW_TYPE_IDS = ["general", "behavioral", "industry", "disclosure"] as const;
 
 export default function InterviewPracticePageWrapper() {
+  const t = useTranslations("refineryInterview.interview");
   return (
     <TierGate requiredTier="client">
-      <OnboardingGate requiredState="needs_profile" toolName="Interview Practice" previewFeature="interview">
+      <OnboardingGate requiredState="needs_profile" toolName={t("toolName")} previewFeature="interview">
         {/* Text practice is free with an account (a daily allowance while the
             premium gate is on). Voice coaching is sponsored: only the voice
             panel below sits behind the gate. */}
@@ -151,6 +131,13 @@ export default function InterviewPracticePageWrapper() {
 }
 
 function InterviewPracticePage() {
+  const t = useTranslations("refineryInterview.interview");
+  const locale = useLocale();
+  const interviewTypes = INTERVIEW_TYPE_IDS.map((id) => ({
+    id,
+    label: t(`types.${id}.label`),
+    description: t(`types.${id}.description`),
+  }));
   const effectiveRole = useEffectiveRole();
   const practiceOwnerRef = useRef<string | null>(null);
   const searchParams = useSearchParams();
@@ -388,7 +375,7 @@ function InterviewPracticePage() {
         nextUrl.searchParams.set("applicationId", id);
         window.history.replaceState(null, "", nextUrl.toString());
       }
-    } catch { if (selectionSequence.current === seq) { setApplicationFailed(true); setRateLimitError("This saved job could not be loaded. Choose a job again before starting."); } }
+    } catch { if (selectionSequence.current === seq) { setApplicationFailed(true); setRateLimitError(t("errors.savedJobLoad")); } }
     finally { if (selectionSequence.current === seq) setApplicationLoading(false); }
   }
 
@@ -414,16 +401,16 @@ function InterviewPracticePage() {
 
   function startInterview() {
     const accountId = effectiveRole?.accountId;
-    if (!accountId) { setRateLimitError("Your account is still loading. Try again in a moment."); return; }
+    if (!accountId) { setRateLimitError(t("errors.accountLoading")); return; }
     practiceOwnerRef.current = accountId;
     const isDisclosure =
       config.interviewType === "disclosure" || config.includeDisclosure;
 
     const openingMessage = isDisclosure
-      ? "Thanks for coming in today. We appreciate your interest in this position. Why don't you start by telling me a little about yourself?"
+      ? t("opening.disclosure")
       : config.interviewType === "behavioral"
-        ? "Welcome! I'm going to ask you some questions about your past experiences. Take your time with each answer. Let's start. Tell me about yourself and what brought you here today."
-        : "Hi there, thanks for taking the time to interview with us today. Let's get started. Can you tell me a bit about yourself and why you're interested in this role?";
+        ? t("opening.behavioral")
+        : t("opening.general");
 
     if (applicationLoading || applicationFailed) return;
     setMessages([{ role: "assistant", content: openingMessage }]);
@@ -528,7 +515,7 @@ function InterviewPracticePage() {
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
     trackProgress("interview_completed", { mode: "voice" });
-    if (!practiceAccountId) { setVoiceSaveWarning("Your report is here, but the account could not be confirmed for saving."); return; }
+    if (!practiceAccountId) { setVoiceSaveWarning(t("errors.voiceAccount")); return; }
     voiceRecordRef.current = {
       accountId: practiceAccountId,
       role: practiceConfig.targetRole,
@@ -592,13 +579,13 @@ function InterviewPracticePage() {
           setStep("feedback");
           recordCompletion(data.feedback, exchangeCount);
         } else {
-          setRateLimitError("Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.");
+          setRateLimitError(t("errors.feedbackFailed"));
         }
       } else {
-        setRateLimitError(data?.error || "Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.");
+        setRateLimitError(data?.error || t("errors.feedbackFailed"));
       }
     } catch {
-      setRateLimitError("The connection dropped. Your answers are still here. Try End & get feedback again.");
+      setRateLimitError(t("errors.connectionDropped"));
     } finally {
       setSending(false);
     }
@@ -662,7 +649,7 @@ function InterviewPracticePage() {
         if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "I had trouble with that response. Let's try again." },
+          { role: "assistant", content: t("errors.troubleReply") },
         ]);
       }
     } catch {
@@ -670,7 +657,7 @@ function InterviewPracticePage() {
         ...prev,
         {
           role: "assistant",
-          content: "I had trouble with that response. Let's try again.",
+          content: t("errors.troubleReply"),
         },
       ]);
     } finally {
@@ -747,23 +734,21 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Interview Practice
+          {t("toolName")}
         </h1>
-        <GhostGuide message={getOpusMessage("interview")} pageId="interview" />
+        <GhostGuide message={getOpusMessage("interview", undefined, undefined, locale)} pageId="interview" />
         <p className="text-base text-t-phos-dim mb-8">
-          Practice makes confidence. Choose your interview type and we&apos;ll
-          simulate a real conversation.
+          {t("setup.intro")}
         </p>
 
         {/* Phase 5.9: gently offer last time's focus */}
         {lastStruggleTags.length > 0 && (
           <div className="bg-t-panel-2 border border-t-amber p-4 mb-6">
             <p className="text-sm text-t-white">
-              Last time you wanted to work on{" "}
-              <span className="font-medium text-t-amber-bright">
-                {lastStruggleTags.map(struggleTagLabel).filter(Boolean).join(", ")}
-              </span>
-              . Want to target that this time?
+              {t.rich("setup.lastTime", {
+                areas: lastStruggleTags.filter((id) => !!struggleTagLabel(id)).map((id) => t(`struggle.${id}`)).join(", "),
+                b: (chunks) => <span className="font-medium text-t-amber-bright">{chunks}</span>,
+              })}
             </p>
             <label className="flex items-center gap-2 mt-2 cursor-pointer">
               <input
@@ -773,7 +758,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 className="w-4 h-4 accent-t-amber"
               />
               <span className="text-sm text-t-phos">
-                Yes, give me chances to practice that
+                {t("setup.targetYes")}
               </span>
             </label>
           </div>
@@ -784,9 +769,9 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {applications.length > 0 && (
             <div>
               <label className="text-sm font-medium text-t-white block mb-1">
-                Practice for a saved job?{" "}
+                {t("setup.savedJob")}{" "}
                 <span className="font-normal text-t-phos-dim">
-                  (auto-fills the role and job description)
+                  {t("setup.savedJobHint")}
                 </span>
               </label>
               <select
@@ -794,22 +779,21 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 onChange={(e) => void selectApplication(e.target.value)}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
-                <option value="">Not right now</option>
+                <option value="">{t("setup.notNow")}</option>
                 {applications.map((a) => {
                   const label = [a.job_title, a.company].filter(Boolean).join(" at ");
                   return (
                     <option key={a.id} value={a.id}>
-                      {label || "Saved job"}
+                      {label || t("setup.savedJobFallback")}
                     </option>
                   );
                 })}
               </select>
               {selectedApplicationId && jdMeta && (
                 <p className="text-xs text-t-amber-bright mt-1">
-                  Using the job description we saved for this job
-                  {jdMeta.age ? ` (${jdMeta.age})` : ""}.
+                  {t("setup.usingJd", { age: jdMeta.age ? ` (${jdMeta.age})` : "" })}
                   {jdMeta.truncated
-                    ? " It was long, so we saved the first part of it."
+                    ? t("setup.jdLong")
                     : ""}
                 </p>
               )}
@@ -819,14 +803,14 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {/* Target role */}
           <div id="refinery-tool-interview-role">
             <label className="text-sm font-medium text-t-white block mb-1">
-              What role are you interviewing for?
+              {t("setup.role")}
             </label>
             <input
               value={config.targetRole}
               onChange={(e) =>
                 setConfig({ ...config, targetRole: e.target.value })
               }
-              placeholder="e.g., Warehouse Associate, Customer Service Rep"
+              placeholder={t("setup.rolePlaceholder")}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
           </div>
@@ -835,9 +819,9 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {resumes.length > 0 && (
             <div>
               <label className="text-sm font-medium text-t-white block mb-1">
-                Interview against which resume?{" "}
+                {t("setup.resume")}{" "}
                 <span className="font-normal text-t-phos-dim">
-                  (so questions match your real experience)
+                  {t("setup.resumeHint")}
                 </span>
               </label>
               <select
@@ -856,15 +840,15 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                   const label = [r.targetJob, r.targetCompany].filter(Boolean).join(" at ");
                   return (
                     <option key={r.id} value={r.id}>
-                      {label || `Resume from ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "your account"}`}
+                      {label || t("setup.resumeFrom", { when: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : t("setup.yourAccount") })}
                     </option>
                   );
                 })}
-                <option value="">General (no specific resume)</option>
+                <option value="">{t("setup.resumeGeneral")}</option>
               </select>
               {selectedResumeId && (
                 <p className="text-xs text-t-amber-bright mt-1">
-                  Questions will be based on the real jobs, tools, and results on this resume.
+                  {t("setup.resumeNote")}
                 </p>
               )}
             </div>
@@ -873,15 +857,15 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {/* Phase 3: optional job posting */}
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Paste the job posting{" "}
+              {t("setup.posting")}{" "}
               <span className="font-normal text-t-phos-dim">
-                (optional, helps the questions match the real role)
+                {t("setup.postingHint")}
               </span>
             </label>
             <textarea
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Paste the description from the job you are applying to..."
+              placeholder={t("setup.postingPlaceholder")}
               rows={3}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none resize-y"
             />
@@ -890,7 +874,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {/* Skills from Forge */}
           {forgeContext?.skills && forgeContext.skills.length > 0 && (
             <div>
-              <p className="text-xs text-t-phos-dim mb-2">Your skills (from The Forge)</p>
+              <p className="text-xs text-t-phos-dim mb-2">{t("setup.skills")}</p>
               <div className="flex flex-wrap gap-1.5">
                 {forgeContext.skills.map((s, i) => (
                   <span key={i} className="px-2.5 py-1 text-xs bg-t-panel text-t-phos border border-t-line">
@@ -904,10 +888,10 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           {/* Interview type */}
           <div>
             <label className="text-sm font-medium text-t-white block mb-3">
-              What kind of practice do you need?
+              {t("setup.kind")}
             </label>
             <CardSelect
-              options={INTERVIEW_TYPES}
+              options={interviewTypes}
               selected={config.interviewType}
               onSelect={(val) =>
                 setConfig({
@@ -936,11 +920,10 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 />
                 <div>
                   <span className="text-sm font-medium text-t-white block">
-                    Include disclosure practice
+                    {t("setup.includeDisclosure")}
                   </span>
                   <span className="text-xs text-t-phos-dim">
-                    The interviewer will ask about your background at some point
-                    during the conversation.
+                    {t("setup.includeDisclosureNote")}
                   </span>
                 </div>
               </label>
@@ -969,11 +952,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             disabled={!config.interviewType}
             className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
-            Start Practice Interview
+            {t("setup.start")}
           </button>
           {practiceAllowanceApplies && (
             <p className="text-xs text-t-phos-dim" data-testid="text-practice-allowance">
-              {textPracticeAllowanceLine()}
+              {t("setup.allowance", { limit: TEXT_PRACTICE_SESSIONS_PER_DAY })}
             </p>
           )}
         </div>
@@ -988,22 +971,21 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Interview Feedback
+          {t("feedback.title")}
         </h1>
         <p className="text-base text-t-phos-dim mb-6">
-          Here&apos;s how you did. Remember, this is about practice, not
-          perfection.
+          {t("feedback.intro")}
         </p>
 
         {voiceSaveWarning && <p role="alert" className="mb-4 text-sm text-t-amber-bright">{voiceSaveWarning}</p>}
         {/* Strengths */}
-        {voiceRecordSaving && <p role="status" className="mb-4 text-sm text-t-phos-dim">Saving your practice record...</p>}
-        {voiceRecordFailed && <div role="alert" className="mb-4 border border-t-amber p-3 text-sm"><p>Your practice record save has not been confirmed. Your report is still here. Check your Library before retrying, or download a copy.</p><button onClick={() => void saveVoiceRecord()} className="t-focus mt-2 min-h-touch text-t-amber-bright underline">Retry saving practice</button></div>}
+        {voiceRecordSaving && <p role="status" className="mb-4 text-sm text-t-phos-dim">{t("feedback.savingRecord")}</p>}
+        {voiceRecordFailed && <div role="alert" className="mb-4 border border-t-amber p-3 text-sm"><p>{t("feedback.recordFailed")}</p><button onClick={() => void saveVoiceRecord()} className="t-focus mt-2 min-h-touch text-t-amber-bright underline">{t("feedback.retrySave")}</button></div>}
 
         {feedback.strengths && (
           <div className="bg-t-panel p-5 border border-t-line mb-4">
             <h2 className="font-semibold text-t-amber-bright mb-2">
-              What you did well
+              {t("feedback.didWell")}
             </h2>
             <ul className="space-y-2">
               {feedback.strengths.map((s: string, i: number) => (
@@ -1020,7 +1002,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         {feedback.improvements && (
           <div className="bg-t-panel p-5 border border-t-line mb-4">
             <h2 className="font-semibold text-t-white mb-2">
-              Areas to work on
+              {t("feedback.workOn")}
             </h2>
             <ul className="space-y-2">
               {feedback.improvements.map((s: string, i: number) => (
@@ -1036,7 +1018,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         {/* Overall */}
         {feedback.overall && (
           <div className="bg-t-panel p-5 border border-t-steel mb-6">
-            <h2 className="font-semibold text-t-steel mb-2">Overall</h2>
+            <h2 className="font-semibold text-t-steel mb-2">{t("feedback.overall")}</h2>
             <p className="text-sm text-t-phos leading-relaxed">
               {feedback.overall}
             </p>
@@ -1047,7 +1029,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         {feedback.disclosure_notes && (
           <div className="bg-t-panel p-5 border border-t-line mb-6">
             <h2 className="font-semibold text-t-white mb-2">
-              Disclosure notes
+              {t("feedback.disclosureNotes")}
             </h2>
             <p className="text-sm text-t-phos-dim leading-relaxed">
               {feedback.disclosure_notes}
@@ -1058,7 +1040,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         {/* The frame to carry (Phase 3) */}
         {feedback.frame && (
           <div className="bg-t-panel-2 p-5 border border-t-amber mb-4">
-            <h2 className="font-semibold text-t-amber-bright mb-2">The frame to carry in</h2>
+            <h2 className="font-semibold text-t-amber-bright mb-2">{t("feedback.frame")}</h2>
             <p className="text-sm text-t-phos leading-relaxed">{feedback.frame}</p>
           </div>
         )}
@@ -1066,7 +1048,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         {/* Stronger answers to model (Phase 3) */}
         {Array.isArray(feedback.better_answers) && feedback.better_answers.length > 0 && (
           <div className="bg-t-panel p-5 border border-t-line mb-4">
-            <h2 className="font-semibold text-t-white mb-3">Stronger answers to model</h2>
+            <h2 className="font-semibold text-t-white mb-3">{t("feedback.stronger")}</h2>
             <div className="space-y-4">
               {feedback.better_answers.map((b: any, i: number) => (
                 <div key={i}>
@@ -1082,14 +1064,14 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
         {/* Your notes -- stay on your device (Phase 3) */}
         <div className="bg-t-panel p-5 border border-t-line mb-4">
-          <h2 className="font-semibold text-t-white mb-2">Your notes</h2>
+          <h2 className="font-semibold text-t-white mb-2">{t("feedback.notes")}</h2>
           <p className="text-xs text-t-phos-dim mb-2">
-            Jot what you want to remember. These notes stay on this page and are not saved. Copy or download the analysis to keep them.
+            {t("feedback.notesNote")}
           </p>
           <textarea
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
-            placeholder="What clicked? What do you want to do differently next time?"
+            placeholder={t("feedback.notesPlaceholder")}
             rows={3}
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none resize-y"
           />
@@ -1104,13 +1086,13 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Save analysis PDF
+            {t("feedback.savePdf")}
           </button>
           <button
             onClick={copyPracticeSummary}
             className="px-4 py-2.5 text-t-amber-bright text-sm font-medium hover:text-t-amber transition-colors"
           >
-            {copiedSummary ? "Copied!" : "Copy a practice summary for any AI"}
+            {copiedSummary ? t("feedback.copied") : t("feedback.copySummary")}
           </button>
         </div>
 
@@ -1124,7 +1106,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             }}
             className="t-focus flex-1 px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
           >
-            Practice Again
+            {t("feedback.again")}
           </button>
           <button
             onClick={() => {
@@ -1133,7 +1115,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             }}
             className="t-focus px-6 py-4 border border-t-line text-t-phos font-medium hover:border-t-phos-dim hover:text-t-white transition-colors min-h-touch"
           >
-            Review Chat
+            {t("feedback.reviewChat")}
           </button>
         </div>
       </div>
@@ -1147,15 +1129,15 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
       <div className="bg-t-panel-2 border border-t-line px-5 py-4 mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-t-panel border border-t-line flex items-center justify-center text-t-white text-sm font-bold">
-            HM
+            {t("practice.initials")}
           </div>
           <div>
             <p className="text-t-white text-sm font-medium flex items-center gap-2">
-              Hiring Manager
+              {t("practice.hiringManager")}
               <span className="w-2 h-2 bg-t-phos inline-block" />
             </p>
             <p className="text-t-phos-dim text-xs">
-              {config.targetRole ? `${config.targetRole} interview` : "Interview in progress"}
+              {config.targetRole ? t("practice.roleInterview", { role: config.targetRole }) : t("practice.inProgress")}
             </p>
           </div>
         </div>
@@ -1164,7 +1146,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           disabled={sending}
           className="t-focus text-sm text-t-phos-dim hover:text-t-white px-3 py-1.5 hover:bg-t-panel transition-colors disabled:opacity-50"
         >
-          {sending ? "Wrapping up..." : "End & get feedback"}
+          {sending ? t("practice.wrapping") : t("practice.end")}
         </button>
       </div>
 
@@ -1192,7 +1174,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           ))}
           {sending && (
             <div className="flex justify-start">
-              <TroyWork topic="interview" label="Preparing a response to your answer" />
+              <TroyWork topic="interview" label={t("practice.preparing")} />
             </div>
           )}
         </div>
@@ -1207,7 +1189,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your answer..."
+            placeholder={t("practice.placeholder")}
             className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             disabled={sending}
           />
@@ -1216,7 +1198,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
             disabled={sending || !input.trim()}
             className="t-focus px-4 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
           >
-            Send
+            {t("practice.send")}
           </button>
         </form>
       </div>
@@ -1228,12 +1210,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
       )}
 
       <p className="text-xs text-t-phos-dim text-center">
-        This is a safe space to practice. In text practice we keep the role, the
-        kind of practice and t.ROY&apos;s feedback, never a transcript of your
-        answers, so the app can track your progress. In voice practice, what was said is kept as text
-        only when you turn saving on, and we never keep the audio. No program or
-        employer can read your practice. If you share your progress with a
-        program, it sees how many sessions you have done.
+        {t("practice.privacy")}
       </p>
     </div>
   );
@@ -1268,6 +1245,7 @@ function VoicePracticePanel({
   onVoiceFeedback: (feedback: any, exchanges: number, saveFeedback: boolean, warning: string, voiceSessionId?: string, practiceConfig?: InterviewConfig, practiceAccountId?: string) => void;
   onHistoryChange: () => void;
 }) {
+  const t = useTranslations("refineryInterview.interview");
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
   const [error, setError] = useState("");
   const [reservedSeconds, setReservedSeconds] = useState<number | null>(null);
@@ -1402,7 +1380,7 @@ function VoicePracticePanel({
       if (!data.granted) setSaveThisSession(false);
       warnSaving("");
     } catch {
-      warnSaving("Your saving preference could not be saved. Check this choice again before your next practice.");
+      warnSaving(t("voice.warnPreference"));
     } finally {
       setConsentBusy(false);
     }
@@ -1430,7 +1408,7 @@ function VoicePracticePanel({
       if (!data?.created || !data.sessionId) throw new Error("Transcript session unavailable");
       convSessionIdRef.current = data.sessionId;
     } catch {
-      warnSaving("Your transcript could not be saved. You can still practice and get feedback in this tab.");
+      warnSaving(t("voice.warnTranscript"));
     }
   }
 
@@ -1452,7 +1430,7 @@ function VoicePracticePanel({
       });
       if (!res.ok) throw new Error("Transcript write failed");
     } catch {
-      warnSaving("Some transcript text could not be saved. Keep this tab open for your feedback; saved history may be incomplete.");
+      warnSaving(t("voice.warnChunk"));
     }
   }
 
@@ -1489,11 +1467,11 @@ function VoicePracticePanel({
     setGenerating(true);
     setReportError("");
     try {
-      const userTurns = turns.filter((t) => t.role === "user" && t.text.trim()).length;
+      const userTurns = turns.filter((turn) => turn.role === "user" && turn.text.trim()).length;
       // Freeze the context for retries even if setup fields change afterwards.
       reportRequestRef.current ??= {
         ...reportContextRef.current,
-        messages: turns.map((t) => ({ role: t.role, content: t.text })),
+        messages: turns.map((turn) => ({ role: turn.role, content: turn.text })),
         exchangeCount: userTurns,
         endInterview: true,
       };
@@ -1522,7 +1500,7 @@ function VoicePracticePanel({
             takeaways: { overall: feedback.overall ?? null, frame: feedback.frame ?? null },
           }),
         }).catch(() => null);
-        if (!saved?.ok) warnSaving("Your feedback is ready, but saved practice history could not be finalized. Keep this report open or download it.");
+        if (!saved?.ok) warnSaving(t("voice.warnFinalize"));
       }
       if (!mountedRef.current) return;
       const savedVoiceSessionId = convSessionIdRef.current ?? undefined;
@@ -1532,7 +1510,7 @@ function VoicePracticePanel({
       turnsRef.current = [];
       sessionFeedbackRef.current(feedback, userTurns, sessionSavingRef.current, saveWarningRef.current, savedVoiceSessionId, voiceContextRef.current?.config as InterviewConfig | undefined, voiceOwnerRef.current ?? undefined);
     } catch {
-      setReportError("Your feedback could not be prepared. Your captured answers are still here in this tab. Retry feedback before leaving this page.");
+      setReportError(t("voice.reportError"));
     } finally {
       reportBusyRef.current = false;
       setGenerating(false);
@@ -1568,7 +1546,7 @@ function VoicePracticePanel({
       return;
     }
 
-    setError("No completed answer was captured. Start again and wait for your answer to appear in the captions before ending.");
+    setError(t("voice.noAnswer"));
     setStatus("error");
     // No completed answer: record only practice metadata.
     if (wasLive && voiceOwnerRef.current) {
@@ -1590,7 +1568,7 @@ function VoicePracticePanel({
     if (!accountId || !enabled || !consentReady || consentBusy || finishingRef.current || reportBusyRef.current || reportError || status === "connecting" || status === "live") return;
     voiceOwnerRef.current = accountId;
     const connectionEpoch = ++connectionEpochRef.current;
-    const assertActive = () => { if (!mountedRef.current || connectionEpochRef.current !== connectionEpoch) throw new Error("Voice connection cancelled."); };
+    const assertActive = () => { if (!mountedRef.current || connectionEpochRef.current !== connectionEpoch) throw new Error(t("voice.errCancelled")); };
     reportRequestRef.current = null;
     voiceContextRef.current = structuredClone({ config, forgeContext: forgeContext || undefined, applicationId, resumeArtifactId: resumeArtifactId ?? null, jobDescription: jobDescription || undefined });
     reportContextRef.current = { ...voiceContextRef.current, voiceContext: true };
@@ -1609,7 +1587,7 @@ function VoicePracticePanel({
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("This browser does not support microphone access.");
+        throw new Error(t("voice.errNoMic"));
       }
 
       // Open the stored session first (if saving is on) so we never miss the
@@ -1624,7 +1602,7 @@ function VoicePracticePanel({
       });
       const tokenData = await tokenRes.json();
       if (!tokenRes.ok) {
-        throw new Error(tokenData.message || tokenData.error || "Could not start voice practice.");
+        throw new Error(tokenData.message || tokenData.error || t("voice.errStart"));
       }
       // Freeze the owned revision resolved before the lease. The call and the
       // report re-check these selectors; later setup edits cannot change this run.
@@ -1632,7 +1610,7 @@ function VoicePracticePanel({
       reportContextRef.current = { ...voiceContextRef.current, voiceContext: true };
       const sessionId = tokenData.sessionId;
       if (!sessionId) {
-        throw new Error("Voice session could not be reserved.");
+        throw new Error(t("voice.errReserve"));
       }
       sessionIdRef.current = sessionId;
       assertActive();
@@ -1671,7 +1649,7 @@ function VoicePracticePanel({
       const offer = await pc.createOffer();
       assertActive();
       await pc.setLocalDescription(offer);
-      if (!offer.sdp) throw new Error("Could not create voice offer.");
+      if (!offer.sdp) throw new Error(t("voice.errOffer"));
 
       const sdpRes = await fetch(
         `/api/interview-voice/call?sessionId=${encodeURIComponent(sessionId)}`,
@@ -1682,7 +1660,7 @@ function VoicePracticePanel({
         }
       );
       if (!sdpRes.ok) {
-        let message = "Realtime voice connection failed.";
+        let message = t("voice.errConnection");
         try {
           const errData = await sdpRes.clone().json();
           message = errData.message || errData.error || message;
@@ -1714,7 +1692,7 @@ function VoicePracticePanel({
       convSessionIdRef.current = null;
       void endServerSession();
       setStatus("error");
-      setError(err?.message || "Voice practice could not start.");
+      setError(err?.message || t("voice.errStartShort"));
     }
   }
 
@@ -1725,32 +1703,29 @@ function VoicePracticePanel({
       <audio ref={audioRef} autoPlay className="hidden" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-semibold text-t-steel">Live voice practice</h2>
+          <h2 className="font-semibold text-t-steel">{t("voice.title")}</h2>
           <p className="text-sm text-t-phos-dim">
-            Talk out loud with a realtime AI interviewer using gpt-realtime-2.
+            {t("voice.desc")}
           </p>
           <p className="mt-1 text-xs text-t-phos-dim">
-            Voice practice runs through OpenAI. They may keep audio and
-            transcripts for up to 30 days for abuse monitoring, then delete
-            them. We do not store your audio.
+            {t("voice.privacy")}
           </p>
           <p className="mt-1 text-xs text-t-phos-dim">
-            Prefer to read along? Live captions show below while you talk. You
-            can also use the text interview instead.
+            {t("voice.captionsNote")}
           </p>
           <div aria-live="polite" role="status">
             {status === "connecting" && (
-              <p className="mt-1 text-xs font-medium text-t-phos-dim">Connecting...</p>
+              <p className="mt-1 text-xs font-medium text-t-phos-dim">{t("voice.connecting")}</p>
             )}
             {status === "live" && (
               <p className="mt-1 text-xs font-medium text-t-amber-bright">
-                Live now. Speak naturally; end the session when you are done.
+                {t("voice.live")}
                 {reservedSeconds != null &&
-                  ` You have up to ${Math.round(reservedSeconds / 60)} minutes this session.`}
+                  t("voice.liveMinutes", { minutes: Math.round(reservedSeconds / 60) })}
               </p>
             )}
             {generating && (
-              <TroyWork topic="interview" label="Building feedback from your captured answers" />
+              <TroyWork topic="interview" label={t("voice.building")} />
             )}
             {status === "error" && error && (
               <p className="mt-1 text-xs font-medium text-t-red">{error}</p>
@@ -1764,7 +1739,7 @@ function VoicePracticePanel({
               disabled={finishing}
               className="t-focus inline-flex min-h-touch items-center justify-center bg-t-panel-2 px-5 py-3 text-sm font-medium text-t-red border border-t-red hover:bg-t-red/10"
             >
-              {finishing ? "Finishing captured answers..." : "End & get feedback"}
+              {finishing ? t("voice.finishing") : t("practice.end")}
             </button>
           ) : (
             <button
@@ -1772,12 +1747,12 @@ function VoicePracticePanel({
               disabled={!enabled || !consentReady || consentBusy || finishing || status === "connecting" || generating || !!reportError}
               className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
             >
-              {status === "connecting" ? "Connecting..." : "Start live voice"}
+              {status === "connecting" ? t("voice.connecting") : t("voice.start")}
             </button>
           )}
           {status !== "live" && reservedSeconds != null && (
             <p className="text-xs text-t-phos-dim">
-              Up to {Math.round(reservedSeconds / 60)} minutes today.
+              {t("voice.upTo", { minutes: Math.round(reservedSeconds / 60) })}
             </p>
           )}
         </div>
@@ -1788,20 +1763,17 @@ function VoicePracticePanel({
         <div className="mt-4" role="alert">
           <p className="text-sm text-t-red">{reportError}</p>
           <button type="button" disabled={generating} onClick={() => void finishSavedVoice(turnsRef.current.slice())} className="t-focus min-h-touch border border-t-steel px-4 py-2 text-sm text-t-white disabled:opacity-40">
-            Retry feedback
+            {t("voice.retryFeedback")}
           </button>
         </div>
       )}
-      {status === "live" && <p className="mt-3 text-xs text-t-phos-dim">{savingOn ? "Text saving is on for this practice." : "Text saving is off. You can still get feedback when you end."}</p>}
+      {status === "live" && <p className="mt-3 text-xs text-t-phos-dim">{savingOn ? t("voice.savingOn") : t("voice.savingOff")}</p>}
       {/* Saving is chosen before the call; feedback does not require saving. */}
       {status !== "live" && (
         <div className="mt-4 border-t border-t-line pt-4">
-          <p className="text-sm font-medium text-t-white mb-1">Save this voice practice?</p>
+          <p className="text-sm font-medium text-t-white mb-1">{t("voice.save.title")}</p>
           <p className="text-xs text-t-phos-dim leading-relaxed mb-3">
-            Saving is selected for your first practice unless you previously turned
-            it off. You can turn it off below. Saved transcripts are text only,
-            encrypted and private to your account. Feedback is available either
-            way. We never save the audio. Delete saved practice in Settings.
+            {t("voice.save.note")}
           </p>
           <label className="flex items-start gap-2 mb-2 cursor-pointer">
             <input
@@ -1812,9 +1784,9 @@ function VoicePracticePanel({
               disabled={alwaysAllow || !consentReady || consentBusy || finishing || generating || !!reportError || status === "connecting"}
             />
             <span className="text-sm text-t-white">
-              Save this voice practice
+              {t("voice.save.thisLabel")}
               <span className="block text-xs text-t-phos-dim">
-                Turning this off remembers your choice. Turning it on here saves only this run.
+                {t("voice.save.thisNote")}
               </span>
             </span>
           </label>
@@ -1827,16 +1799,15 @@ function VoicePracticePanel({
               className="mt-1"
             />
             <span className="text-sm text-t-white">
-              Always save my voice practice
+              {t("voice.save.alwaysLabel")}
               <span className="block text-xs text-t-phos-dim">
-                Keeps saving on until you turn it off here or in Settings.
+                {t("voice.save.alwaysNote")}
               </span>
             </span>
           </label>
           {!savingOn && (
             <p className="text-xs text-t-phos-dim mt-2">
-              With saving off, your transcript and feedback stay in this tab.
-              We keep basic practice progress. Leaving the page clears the report.
+              {t("voice.save.offNote")}
             </p>
           )}
         </div>
@@ -1845,7 +1816,7 @@ function VoicePracticePanel({
       {/* Phase 5.7 accessibility -- live captions of the conversation. */}
       {showCaptions && (
         <div className="mt-4 border-t border-t-line pt-4">
-          <p className="text-xs font-medium text-t-steel mb-2">Live captions</p>
+          <p className="text-xs font-medium text-t-steel mb-2">{t("voice.captions")}</p>
           <div
             aria-live="polite"
             role="log"
@@ -1853,7 +1824,7 @@ function VoicePracticePanel({
           >
             {captions.length === 0 && !partial && (
               <p className="text-xs text-t-phos-dim">
-                Captions will appear here as you and the interviewer speak.
+                {t("voice.captionsEmpty")}
               </p>
             )}
             {captions.map((c, i) => (
@@ -1861,14 +1832,14 @@ function VoicePracticePanel({
                 <span
                   className={c.role === "user" ? "text-t-amber-bright" : "text-t-steel"}
                 >
-                  {c.role === "user" ? "You" : "Interviewer"}:
+                  {c.role === "user" ? t("voice.you") : t("voice.interviewer")}:
                 </span>{" "}
                 <span className="text-t-white">{c.text}</span>
               </p>
             ))}
             {partial && (
               <p className="text-xs leading-relaxed text-t-phos-dim">
-                <span className="text-t-steel">Interviewer:</span> {partial}
+                <span className="text-t-steel">{t("voice.interviewer")}:</span> {partial}
               </p>
             )}
           </div>
@@ -1882,6 +1853,8 @@ function VoicePracticePanel({
  *  same pattern as the disclosure rehearsal history. Only sessions the user
  *  chose to save appear here. */
 function VoiceSessionHistory({ history }: { history: VoiceSessionMeta[] }) {
+  const t = useTranslations("refineryInterview.interview");
+  const locale = useLocale();
   const [detail, setDetail] = useState<{ id: string; transcript: Array<{ role: string; text: string }>; report: SavedVoiceReport | null; reportStatus: string } | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<{ id: string; message: string } | null>(null);
@@ -1898,38 +1871,38 @@ function VoiceSessionHistory({ history }: { history: VoiceSessionMeta[] }) {
       const data = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(data?.transcript)) throw new Error();
       if (request === sequence.current) setDetail({ id, transcript: data.transcript, report: data.report ?? null, reportStatus: data.reportStatus || "missing" });
-    } catch { if (request === sequence.current) setLoadError({ id, message: "This saved practice could not be opened. Try again." }); }
+    } catch { if (request === sequence.current) setLoadError({ id, message: t("history.openError") }); }
     finally { if (request === sequence.current) setLoadingId(null); }
   }
   function closeDetail() { sequence.current++; setDetail(null); setLoadingId(null); setLoadError(null); }
   if (history.length === 0) return null;
   return (
     <div className="mt-8">
-      <h2 className="font-semibold text-t-white mb-1">Your saved voice practice</h2>
-      <p className="text-xs text-t-phos-dim mb-3">Open a saved practice to read its feedback and text transcript. Older sessions may have only a transcript and a short summary. Transcript text is encrypted in your account. We do not save audio.</p>
+      <h2 className="font-semibold text-t-white mb-1">{t("history.title")}</h2>
+      <p className="text-xs text-t-phos-dim mb-3">{t("history.note")}</p>
       <div className="space-y-2">
         {history.map((session) => {
-          const role = typeof session.target_context?.role === "string" ? session.target_context.role : "an interview";
-          const when = new Date(session.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          const role = typeof session.target_context?.role === "string" ? session.target_context.role : t("history.defaultRole");
+          const when = new Date(session.started_at).toLocaleDateString(locale === "es" ? "es-US" : "en-US", { month: "short", day: "numeric", year: "numeric" });
           const tags = knownStruggleTags(session.struggle_tags);
           const opened = detail?.id === session.id;
           return <div key={session.id} className="bg-t-panel border border-t-line px-4 py-3">
             <div className="flex items-center justify-between gap-3">
-              <div><p className="text-sm text-t-white font-medium">Voice practice for {role}</p><p className="text-xs text-t-phos-dim">{when}</p></div>
-              <button onClick={() => opened ? closeDetail() : void openDetail(session.id)} disabled={loadingId === session.id} aria-expanded={opened} className="t-focus min-h-touch text-sm font-medium text-t-amber-bright hover:text-t-amber">{loadingId === session.id ? "Opening..." : opened ? "Close practice" : "Open practice"}</button>
+              <div><p className="text-sm text-t-white font-medium">{t("history.practiceFor", { role })}</p><p className="text-xs text-t-phos-dim">{when}</p></div>
+              <button onClick={() => opened ? closeDetail() : void openDetail(session.id)} disabled={loadingId === session.id} aria-expanded={opened} className="t-focus min-h-touch text-sm font-medium text-t-amber-bright hover:text-t-amber">{loadingId === session.id ? t("history.opening") : opened ? t("history.close") : t("history.open")}</button>
             </div>
-            {tags.length > 0 && <p className="text-xs text-t-phos mt-2"><span className="text-t-amber-bright">Working on:</span> {tags.map(struggleTagLabel).filter(Boolean).join(", ")}</p>}
+            {tags.length > 0 && <p className="text-xs text-t-phos mt-2"><span className="text-t-amber-bright">{t("history.workingOn")}</span> {tags.filter((id) => !!struggleTagLabel(id)).map((id) => t(`struggle.${id}`)).join(", ")}</p>}
             {loadError?.id === session.id && <p role="alert" className="mt-3 text-sm text-t-red">{loadError.message}</p>}
             {opened && <div className="mt-3 space-y-4 border-t border-t-line pt-3">
               {detail.report ? <SavedVoiceFeedback feedback={detail.report.feedback} /> : <div className="text-sm text-t-phos-dim">
-                <p>{detail.reportStatus === "unavailable" ? "Your transcript opened, but the saved report could not be loaded." : "There is no full report linked to this practice. It may be an older session, or its report was not saved."}</p>
-                {detail.reportStatus === "unavailable" && <button onClick={() => void openDetail(session.id)} className="t-focus min-h-touch text-t-amber-bright underline">Retry loading report</button>}
-                {typeof session.takeaways?.overall === "string" && <p className="mt-2">Saved summary: {session.takeaways.overall}</p>}
+                <p>{detail.reportStatus === "unavailable" ? t("history.reportUnavailable") : t("history.reportMissing")}</p>
+                {detail.reportStatus === "unavailable" && <button onClick={() => void openDetail(session.id)} className="t-focus min-h-touch text-t-amber-bright underline">{t("history.retryReport")}</button>}
+                {typeof session.takeaways?.overall === "string" && <p className="mt-2">{t("history.savedSummary", { summary: session.takeaways.overall })}</p>}
                 {typeof session.takeaways?.frame === "string" && <p className="mt-2">{session.takeaways.frame}</p>}
               </div>}
-              <section aria-label="Practice transcript"><h3 className="font-semibold text-t-white mb-2">Transcript</h3>
-                {detail.transcript.length === 0 && <p className="text-sm text-t-phos-dim">No transcript text was saved for this practice.</p>}
-                {detail.transcript.map((chunk, index) => <div key={index} className="mb-3 text-sm"><p className="font-semibold text-t-amber-bright">{chunk.role === "user" ? "You" : "Interviewer"}</p><p className="whitespace-pre-wrap text-t-phos">{chunk.text}</p></div>)}
+              <section aria-label={t("history.transcriptAria")}><h3 className="font-semibold text-t-white mb-2">{t("history.transcript")}</h3>
+                {detail.transcript.length === 0 && <p className="text-sm text-t-phos-dim">{t("history.noTranscript")}</p>}
+                {detail.transcript.map((chunk, index) => <div key={index} className="mb-3 text-sm"><p className="font-semibold text-t-amber-bright">{chunk.role === "user" ? t("voice.you") : t("voice.interviewer")}</p><p className="whitespace-pre-wrap text-t-phos">{chunk.text}</p></div>)}
               </section>
             </div>}
           </div>;
@@ -1939,13 +1912,14 @@ function VoiceSessionHistory({ history }: { history: VoiceSessionMeta[] }) {
   );
 }
 function SavedVoiceFeedback({ feedback }: { feedback: InterviewFeedback }) {
-  return <section aria-label="Saved practice report" className="space-y-3 text-sm text-t-phos">
-    <h3 className="font-semibold text-t-white">Your practice report</h3>
+  const t = useTranslations("refineryInterview.interview");
+  return <section aria-label={t("report.aria")} className="space-y-3 text-sm text-t-phos">
+    <h3 className="font-semibold text-t-white">{t("report.title")}</h3>
     <p>{feedback.overall}</p>
-    <div><h4 className="font-semibold text-t-white">What worked</h4><ul className="list-disc pl-5">{feedback.strengths.map((text, index) => <li key={index}>{text}</li>)}</ul></div>
-    <div><h4 className="font-semibold text-t-white">What to practice next</h4><ul className="list-disc pl-5">{feedback.improvements.map((text, index) => <li key={index}>{text}</li>)}</ul></div>
-    {feedback.frame && <div><h4 className="font-semibold text-t-white">What to carry into your interview</h4><p>{feedback.frame}</p></div>}
-    {feedback.disclosure_notes && <div><h4 className="font-semibold text-t-white">Disclosure practice</h4><p>{feedback.disclosure_notes}</p></div>}
-    {!!feedback.better_answers?.length && <div><h4 className="font-semibold text-t-white">Answers to practice</h4>{feedback.better_answers.map((answer, index) => <div key={index} className="mt-2"><p className="font-medium">{answer.question}</p><p>{answer.model_answer}</p></div>)}</div>}
+    <div><h4 className="font-semibold text-t-white">{t("report.worked")}</h4><ul className="list-disc pl-5">{feedback.strengths.map((text, index) => <li key={index}>{text}</li>)}</ul></div>
+    <div><h4 className="font-semibold text-t-white">{t("report.next")}</h4><ul className="list-disc pl-5">{feedback.improvements.map((text, index) => <li key={index}>{text}</li>)}</ul></div>
+    {feedback.frame && <div><h4 className="font-semibold text-t-white">{t("report.carry")}</h4><p>{feedback.frame}</p></div>}
+    {feedback.disclosure_notes && <div><h4 className="font-semibold text-t-white">{t("report.disclosure")}</h4><p>{feedback.disclosure_notes}</p></div>}
+    {!!feedback.better_answers?.length && <div><h4 className="font-semibold text-t-white">{t("report.answers")}</h4>{feedback.better_answers.map((answer, index) => <div key={index} className="mt-2"><p className="font-medium">{answer.question}</p><p>{answer.model_answer}</p></div>)}</div>}
   </section>;
 }

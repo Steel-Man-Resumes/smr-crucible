@@ -13,6 +13,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import type { UserTier } from "@/lib/useUserTier";
 import type { OrgBrand } from "@crucible/core/src/orgBrandShared";
@@ -52,6 +53,7 @@ export interface EffectiveRole {
 const RoleContext = createContext<EffectiveRole | null>(null);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
+  const t = useTranslations("refineryHome.roleProvider");
   const { data: session, status } = useSession();
   const sessionAccountId = status === "authenticated" ? session?.user?.id ?? null : null;
   const [attempt, setAttempt] = useState(0);
@@ -80,7 +82,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   // Mask during render: an effect alone leaves one render of the previous role.
   const role = sessionAccountId && snapshot?.sessionAccountId === sessionAccountId ? snapshot.role : null;
-  return <RoleContext.Provider value={role}>{failedFor && failedFor === sessionAccountId && <div role="alert" className="border border-t-line bg-t-bg p-4 text-t-white">Your account could not be loaded. <button className="min-h-touch underline" onClick={() => setAttempt(value => value + 1)}>Try again</button></div>}{children}</RoleContext.Provider>;
+  return <RoleContext.Provider value={role}>{failedFor && failedFor === sessionAccountId && <div role="alert" className="border border-t-line bg-t-bg p-4 text-t-white">{t("loadFailed")} <button className="min-h-touch underline" onClick={() => setAttempt(value => value + 1)}>{t("tryAgain")}</button></div>}{children}</RoleContext.Provider>;
 }
 
 /** Effective role, or null while loading / outside the provider. */

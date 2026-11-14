@@ -8,6 +8,7 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type {
   ResumeDocument,
   WorkEntry,
@@ -22,7 +23,6 @@ import {
   REVIEW_TRAY_LABEL,
 } from "./resumeModel";
 import { BulletWorkshop } from "./BulletWorkshop";
-import { FIRST_BULLET_PLACEHOLDER } from "@/lib/workshop-placeholders";
 
 type Updater = (fn: (prev: ResumeDocument) => ResumeDocument) => void;
 
@@ -78,11 +78,12 @@ export function ContactSection({
   doc: ResumeDocument;
   update: Updater;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   return (
     <div className="space-y-3">
       <div>
         <label className="text-xs font-medium text-t-phos-dim block mb-1">
-          Full Name
+          {t("contact.name")}
         </label>
         <input
           value={doc.contact.name}
@@ -92,14 +93,14 @@ export function ContactSection({
               contact: { ...d.contact, name: e.target.value },
             }))
           }
-          placeholder="Marcus D. Tillman"
+          placeholder={t("contact.namePh")}
           className={input}
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium text-t-phos-dim block mb-1">
-            Phone
+            {t("contact.phone")}
           </label>
           <input
             value={doc.contact.phone}
@@ -116,7 +117,7 @@ export function ContactSection({
         </div>
         <div>
           <label className="text-xs font-medium text-t-phos-dim block mb-1">
-            Email
+            {t("contact.email")}
           </label>
           <input
             value={doc.contact.email}
@@ -126,7 +127,7 @@ export function ContactSection({
                 contact: { ...d.contact, email: e.target.value },
               }))
             }
-            placeholder="you@email.com"
+            placeholder={t("contact.emailPh")}
             type="email"
             className={input}
           />
@@ -135,7 +136,7 @@ export function ContactSection({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium text-t-phos-dim block mb-1">
-            City
+            {t("contact.city")}
           </label>
           <input
             value={doc.contact.city}
@@ -145,13 +146,13 @@ export function ContactSection({
                 contact: { ...d.contact, city: e.target.value },
               }))
             }
-            placeholder="Milwaukee"
+            placeholder={t("contact.cityPh")}
             className={input}
           />
         </div>
         <div>
           <label className="text-xs font-medium text-t-phos-dim block mb-1">
-            State
+            {t("contact.state")}
           </label>
           <input
             value={doc.contact.state}
@@ -187,12 +188,13 @@ export function SummarySection({
   onAiAssist: () => void;
   generating: boolean;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   return (
     <div className="font-term">
       <textarea
         value={doc.summary}
         onChange={(e) => update((d) => ({ ...d, summary: e.target.value }))}
-        placeholder="2-3 sentences about what you bring to this role. Focus on your strongest, most relevant experience."
+        placeholder={t("summary.placeholder")}
         rows={3}
         className={`${input} resize-y`}
       />
@@ -202,7 +204,7 @@ export function SummarySection({
           disabled={generating}
           className="mt-2 text-xs text-t-amber-bright hover:text-t-amber underline underline-offset-2"
         >
-          {generating ? "Thinking..." : "Help me write this"}
+          {generating ? t("summary.thinking") : t("summary.help")}
         </button>
       )}
     </div>
@@ -221,6 +223,7 @@ export function ExperienceSection({
   /** From intake -- lets the bullet workshop meet the person where they are. */
   readinessStage?: string;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   function addEntry() {
     update((d) => ({
       ...d,
@@ -261,7 +264,7 @@ export function ExperienceSection({
         onClick={addEntry}
         className="t-focus w-full py-2.5 border border-dashed border-t-line text-sm text-t-amber-bright hover:border-t-amber transition-colors min-h-touch"
       >
-        + Add Position
+        {t("exp.addPosition")}
       </button>
     </div>
   );
@@ -282,6 +285,7 @@ function WorkEntryEditor({
   onChange: (changes: Partial<WorkEntry>) => void;
   onRemove: () => void;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   const [collapsed, setCollapsed] = useState(false);
   const [workshopBi, setWorkshopBi] = useState<number | null>(null);
 
@@ -307,7 +311,7 @@ function WorkEntryEditor({
     onChange({ bullets: entry.bullets.filter((_, i) => i !== bi) });
   }
 
-  const title = entry.title || entry.company || `Position ${index + 1}`;
+  const title = entry.title || entry.company || t("exp.position", { number: index + 1 });
 
   return (
     <div className="border border-t-line overflow-hidden">
@@ -322,9 +326,9 @@ function WorkEntryEditor({
         <button
           onClick={onRemove}
           className="text-xs text-t-phos-dim hover:text-t-red ml-2 px-1"
-          title="Remove"
+          title={t("exp.remove")}
         >
-          Remove
+          {t("exp.remove")}
         </button>
       </div>
 
@@ -333,23 +337,23 @@ function WorkEntryEditor({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
-                Job Title
+                {t("exp.jobTitle")}
               </label>
               <input
                 value={entry.title}
                 onChange={(e) => onChange({ title: e.target.value })}
-                placeholder="Forklift Operator"
+                placeholder={t("exp.jobTitlePh")}
                 className={inputSmall}
               />
             </div>
             <div>
               <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
-                Company
+                {t("exp.company")}
               </label>
               <input
                 value={entry.company}
                 onChange={(e) => onChange({ company: e.target.value })}
-                placeholder="Midwest Distribution"
+                placeholder={t("exp.companyPh")}
                 className={inputSmall}
               />
             </div>
@@ -357,7 +361,7 @@ function WorkEntryEditor({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
-                Start Date
+                {t("exp.start")}
               </label>
               <input
                 value={entry.startDate}
@@ -368,12 +372,12 @@ function WorkEntryEditor({
             </div>
             <div>
               <label className="text-[10px] font-medium text-t-phos-dim block mb-0.5">
-                End Date
+                {t("exp.end")}
               </label>
               <input
                 value={entry.endDate}
                 onChange={(e) => onChange({ endDate: e.target.value })}
-                placeholder="Present"
+                placeholder={t("exp.endPh")}
                 className={inputSmall}
               />
             </div>
@@ -382,7 +386,7 @@ function WorkEntryEditor({
           {/* Bullets */}
           <div className="space-y-1.5 pt-1">
             <label className="text-[10px] font-medium text-t-phos-dim block">
-              What you did (start with action verbs)
+              {t("exp.whatYouDid")}
             </label>
             {entry.bullets.map((bullet, bi) => (
               <div key={bi} className="flex gap-1.5 items-start">
@@ -395,8 +399,8 @@ function WorkEntryEditor({
                     onChange={(v) => updateBullet(bi, v)}
                     placeholder={
                       bi === 0
-                        ? FIRST_BULLET_PLACEHOLDER
-                        : "Describe what you accomplished..."
+                        ? t("exp.firstBullet")
+                        : t("exp.otherBullet")
                     }
                   />
                   <button
@@ -404,14 +408,14 @@ function WorkEntryEditor({
                     onClick={() => setWorkshopBi(bi)}
                     className="text-[11px] text-t-amber-bright hover:text-t-amber mt-0.5"
                   >
-                    Strengthen with help
+                    {t("exp.strengthen")}
                   </button>
                 </div>
                 {entry.bullets.length > 1 && (
                   <button
                     onClick={() => removeBullet(bi)}
                     className="text-t-phos-dim hover:text-t-red text-xs px-1 mt-1"
-                    title="Remove bullet"
+                    title={t("exp.removeBullet")}
                   >
                     &times;
                   </button>
@@ -422,7 +426,7 @@ function WorkEntryEditor({
               onClick={addBullet}
               className="text-xs text-t-amber-bright hover:text-t-amber mt-1"
             >
-              + Add bullet
+              {t("exp.addBullet")}
             </button>
 
             {workshopBi !== null && (
@@ -455,6 +459,7 @@ export function EducationSection({
   doc: ResumeDocument;
   update: Updater;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   function addEntry() {
     update((d) => ({
       ...d,
@@ -489,7 +494,7 @@ export function EducationSection({
             <GrowInput
               value={entry.credential}
               onChange={(v) => updateEntry(entry.id, { credential: v })}
-              placeholder="GED, Welding Certificate, Associate's Degree..."
+              placeholder={t("edu.credentialPh")}
             />
             <div className="grid grid-cols-2 gap-2">
               <input
@@ -497,7 +502,7 @@ export function EducationSection({
                 onChange={(e) =>
                   updateEntry(entry.id, { institution: e.target.value })
                 }
-                placeholder="School or program (optional)"
+                placeholder={t("edu.schoolPh")}
                 className={inputSmall}
               />
               <input
@@ -505,7 +510,7 @@ export function EducationSection({
                 onChange={(e) =>
                   updateEntry(entry.id, { year: e.target.value })
                 }
-                placeholder="Year (optional)"
+                placeholder={t("edu.yearPh")}
                 className={inputSmall}
               />
             </div>
@@ -522,7 +527,7 @@ export function EducationSection({
         onClick={addEntry}
         className="t-focus w-full py-2.5 border border-dashed border-t-line text-sm text-t-amber-bright hover:border-t-amber transition-colors min-h-touch"
       >
-        + Add Education or Certification
+        {t("edu.add")}
       </button>
     </div>
   );
@@ -547,6 +552,7 @@ export function ReviewTraySection({
   doc: ResumeDocument;
   update: Updater;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   const [open, setOpen] = useState(true);
 
   const trayIndexes = (doc.contentBlocks || [])
@@ -614,7 +620,7 @@ export function ReviewTraySection({
           {itemCount}
         </span>
         <span className="flex-1 text-sm font-medium text-t-white">
-          Lines we could not sort automatically
+          {t("tray.title")}
         </span>
         <svg
           width="16"
@@ -636,8 +642,7 @@ export function ReviewTraySection({
       {open && (
         <div className="px-4 pb-4 pt-1 border-t border-t-line bg-t-panel">
           <p className="text-xs text-t-amber-bright mb-3 leading-relaxed">
-            Move them where they belong or delete them. These stay off your
-            finished resume until you sort them.
+            {t("tray.note")}
           </p>
           <div className="space-y-2">
             {trayIndexes.map(({ b, i: blockIndex }) =>
@@ -647,13 +652,13 @@ export function ReviewTraySection({
                     <GrowInput
                       value={item.text}
                       onChange={(v) => updateItem(blockIndex, item.id, v)}
-                      placeholder="Edit or clear this line..."
+                      placeholder={t("tray.placeholder")}
                     />
                   </div>
                   <button
                     onClick={() => removeItem(blockIndex, item.id)}
                     className="text-t-phos-dim hover:text-t-red text-xs px-1 mt-2"
-                    title="Delete line"
+                    title={t("tray.delete")}
                   >
                     &times;
                   </button>
@@ -676,6 +681,7 @@ export function SkillsSection({
   doc: ResumeDocument;
   update: Updater;
 }) {
+  const t = useTranslations("refineryResume.resume.sections");
   const [newSkill, setNewSkill] = useState("");
 
   function addSkill() {
@@ -733,7 +739,7 @@ export function SkillsSection({
               addSkill();
             }
           }}
-          placeholder="Type a skill and press Enter (or separate with commas)"
+          placeholder={t("skills.placeholder")}
           className={`${inputSmall} flex-1`}
         />
         <button
@@ -741,7 +747,7 @@ export function SkillsSection({
           disabled={!newSkill.trim()}
           className="t-focus px-3 py-2 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim min-h-touch"
         >
-          Add
+          {t("skills.add")}
         </button>
       </div>
     </div>

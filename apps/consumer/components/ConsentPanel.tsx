@@ -19,6 +19,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { readSaveError } from "@/lib/save-error";
 import { SaveError } from "./SaveError";
 
@@ -30,6 +31,7 @@ interface ConsentRecord {
 }
 
 export function ConsentPanel() {
+  const t = useTranslations("refineryAccount.consent");
   const [loading, setLoading] = useState(true);
   const [enhanced, setEnhanced] = useState(true); // absent row -> ON (matches server default)
   const [research, setResearch] = useState(false); // absent row -> OFF (matches server default)
@@ -73,9 +75,9 @@ export function ConsentPanel() {
         body: JSON.stringify({ layer, action }),
       });
       if (res.ok) return true;
-      setError({ layer: shownAs, message: await readSaveError(res) });
+      setError({ layer: shownAs, message: await readSaveError(res, t("saveFallback")) });
     } catch {
-      setError({ layer: shownAs, message: "Could not save. Check your connection and try again." });
+      setError({ layer: shownAs, message: t("connectionError") });
     }
     return false;
   }
@@ -114,18 +116,16 @@ export function ConsentPanel() {
 
   return (
     <section className="mb-8">
-      <h2 className="text-lg font-bold text-t-white mb-4">Privacy choices</h2>
+      <h2 className="text-lg font-bold text-t-white mb-4">{t("heading")}</h2>
 
       <div className="bg-t-panel border border-t-line p-5 mb-4" id="settings-ai-memory">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold text-t-white mb-1">
-              AI memory and personalization
+              {t("memory.title")}
             </h3>
             <p className="text-sm text-t-phos-dim leading-relaxed">
-              t.ROY remembers your recent work to pick up where you left off.
-              Turn this off and he starts fresh each session; your saved
-              documents are not affected.
+              {t("memory.body")}
             </p>
           </div>
           <button
@@ -134,7 +134,7 @@ export function ConsentPanel() {
             disabled={loading || savingLayer === "enhanced"}
             role="switch"
             aria-checked={enhanced}
-            aria-label="AI memory and personalization"
+            aria-label={t("memory.title")}
             className={`t-focus relative inline-flex h-7 w-12 flex-shrink-0 items-center border transition-colors disabled:opacity-50 ${
               enhanced ? "bg-t-amber border-t-amber" : "bg-t-panel-2 border-t-line"
             }`}
@@ -147,7 +147,7 @@ export function ConsentPanel() {
           </button>
         </div>
         <p className="text-xs text-t-phos-dim mt-3">
-          {loading ? "Loading..." : enhanced ? "On: t.ROY remembers your recent work." : "Off: t.ROY starts fresh every session."}
+          {loading ? t("loading") : enhanced ? t("memory.on") : t("memory.off")}
         </p>
         <SaveError message={error?.layer === "enhanced" ? error.message : null} />
       </div>
@@ -156,11 +156,10 @@ export function ConsentPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold text-t-white mb-1">
-              De-identified research
+              {t("research.title")}
             </h3>
             <p className="text-sm text-t-phos-dim leading-relaxed">
-              Allow your anonymized progress data to be included in research
-              about what helps people get hired. Off unless you turn it on.
+              {t("research.body")}
             </p>
           </div>
           <button
@@ -169,7 +168,7 @@ export function ConsentPanel() {
             disabled={loading || savingLayer === "research"}
             role="switch"
             aria-checked={research}
-            aria-label="De-identified research"
+            aria-label={t("research.title")}
             className={`t-focus relative inline-flex h-7 w-12 flex-shrink-0 items-center border transition-colors disabled:opacity-50 ${
               research ? "bg-t-amber border-t-amber" : "bg-t-panel-2 border-t-line"
             }`}
@@ -182,40 +181,39 @@ export function ConsentPanel() {
           </button>
         </div>
         <p className="text-xs text-t-phos-dim mt-3">
-          {loading ? "Loading..." : research ? "On: your de-identified data may be used in research." : "Off: your data is not used for research."}
+          {loading ? t("loading") : research ? t("research.on") : t("research.off")}
         </p>
         <SaveError message={error?.layer === "research" ? error.message : null} />
       </div>
 
       <div className="bg-t-panel border border-t-line p-5">
         <h3 className="font-semibold text-t-white mb-1">
-          Share your success story
+          {t("outcome.title")}
         </h3>
         <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
-          If you get hired, choose whether we can ever mention it. This is
-          your choice, and you can change it anytime.
+          {t("outcome.body")}
         </p>
-        <div className="flex flex-col gap-2" role="radiogroup" aria-label="Share your success story">
+        <div className="flex flex-col gap-2" role="radiogroup" aria-label={t("outcome.title")}>
           <OutcomeOption
             id="outcome-none"
-            label="None"
-            description="Your hire is never mentioned anywhere."
+            label={t("outcome.none.label")}
+            description={t("outcome.none.description")}
             selected={outcome === "none"}
             disabled={loading || savingLayer === "outcome"}
             onSelect={() => chooseOutcome("none")}
           />
           <OutcomeOption
             id="outcome-anonymous"
-            label="Anonymous"
-            description="Your hire may be counted in success stories, never your name."
+            label={t("outcome.anonymous.label")}
+            description={t("outcome.anonymous.description")}
             selected={outcome === "outcome_anonymous"}
             disabled={loading || savingLayer === "outcome"}
             onSelect={() => chooseOutcome("outcome_anonymous")}
           />
           <OutcomeOption
             id="outcome-named"
-            label="Named"
-            description="Your first name may appear with your success story."
+            label={t("outcome.named.label")}
+            description={t("outcome.named.description")}
             selected={outcome === "outcome_named"}
             disabled={loading || savingLayer === "outcome"}
             onSelect={() => chooseOutcome("outcome_named")}

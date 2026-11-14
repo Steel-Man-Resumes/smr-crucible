@@ -3,7 +3,8 @@
 /** What is left to answer on a creative document. Questions only; never a suggested fact. */
 
 import { createContext, useContext, useState } from "react";
-import { FACILITY_ASK_NO, FACILITY_ASK_YES, type CreativeDoc, type CreativeOpenItem, type CreativeStatus } from "@crucible/core/src/creativeChecks";
+import { useTranslations } from "next-intl";
+import { type CreativeDoc, type CreativeOpenItem, type CreativeStatus } from "@crucible/core/src/creativeChecks";
 
 /**
  * Answers to the one-tap questions (review s2r3): whether a phrase names the
@@ -17,10 +18,11 @@ export interface OpenItemAnswers {
 export const OpenItemAnswersContext = createContext<OpenItemAnswers | null>(null);
 
 function AnswerButtons({ item }: { item: CreativeOpenItem }) {
+  const t = useTranslations("refineryResume.creative.openItems");
   const answers = useContext(OpenItemAnswersContext);
   const [busy, setBusy] = useState(false);
   if (!answers || !item.answer) return null;
-  const labels = item.answer === "facility_word" ? [FACILITY_ASK_YES, FACILITY_ASK_NO] : ["Yes", "No"];
+  const labels = item.answer === "facility_word" ? [t("facilityYes"), t("facilityNo")] : [t("yes"), t("no")];
   const send = async (yes: boolean) => {
     if (busy) return;
     setBusy(true);
@@ -47,19 +49,20 @@ function AnswerButtons({ item }: { item: CreativeOpenItem }) {
 }
 
 export function OpenItems({ status, doc, testId }: { status: CreativeStatus; doc: CreativeDoc; testId?: string }) {
+  const t = useTranslations("refineryResume.creative.openItems");
   const items = status.openItems.filter((x) => x.doc === doc || (doc === "artist_resume" && x.doc === "record"));
   const blocks = items.filter((x) => x.severity === "BLOCK").length;
   if (!items.length) {
     return (
       <p className="border border-t-line bg-t-panel px-3 py-2 text-sm text-t-phos" data-testid={testId}>
-        Nothing open. Every line traces to your record.
+        {t("nothingOpen")}
       </p>
     );
   }
   return (
-    <section className="border border-t-amber/60 bg-t-panel p-3" data-testid={testId} aria-label="Left to answer">
+    <section className="border border-t-amber/60 bg-t-panel p-3" data-testid={testId} aria-label={t("ariaLabel")}>
       <h3 className="text-sm font-semibold text-t-white">
-        {blocks ? `Draft: ${blocks} to answer before it's finished` : "A few things to look at"}
+        {blocks ? t("draftHeading", { count: blocks }) : t("lookAt")}
       </h3>
       <ul className="mt-2 space-y-2">
         {items.map((x, i) => (

@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface LayoutResponse {
   pages: number;
@@ -31,6 +32,7 @@ export function PageFitCheck({
   autoCheck?: boolean;
   getContent: () => string;
 }) {
+  const t = useTranslations("refineryResume.resume.pageFit");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LayoutResponse | null>(null);
@@ -46,17 +48,17 @@ export function PageFitCheck({
       });
       if (!res.ok) {
         setResult(null);
-        setError("Could not check page fit right now. Please try again.");
+        setError(t("error"));
         return;
       }
       setResult((await res.json()) as LayoutResponse);
     } catch {
       setResult(null);
-      setError("Could not check page fit right now. Please try again.");
+      setError(t("error"));
     } finally {
       setPending(false);
     }
-  }, [getContent]);
+  }, [getContent, t]);
 
   // Auto-check once, when there is content to check. The page-length rule is a
   // property of the document they are about to send, not advice to go looking for.
@@ -78,7 +80,7 @@ export function PageFitCheck({
         disabled={pending}
         className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {pending ? "Checking..." : "Check page fit"}
+        {pending ? t("checking") : t("check")}
       </button>
 
       <div aria-live="polite" className="empty:hidden">
@@ -91,12 +93,11 @@ export function PageFitCheck({
             </p>
             {runsOver && (
               <p className="mt-1">
-                You decide what to cut or tighten. Nothing is removed for you, and
-                nothing should be added just to fill space.
+                {t("decide")}
               </p>
             )}
             <p className="mt-2 text-xs text-t-white/60">
-              Counted from the same page layout your PDF and Word file are made from.
+              {t("counted")}
             </p>
           </div>
         )}

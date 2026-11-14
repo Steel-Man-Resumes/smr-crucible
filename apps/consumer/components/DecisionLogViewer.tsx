@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { labelForContextPage } from "@/lib/ai-usage-labels";
 
 interface DecisionRow {
@@ -25,10 +26,10 @@ interface DecisionRow {
   createdAt: string;
 }
 
-function fmtWhen(iso: string): string {
+function fmtWhen(iso: string, locale?: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(locale === "es" ? "es" : undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -37,16 +38,20 @@ function fmtWhen(iso: string): string {
 }
 
 export function DecisionLogViewer() {
+  const t = useTranslations("refineryAccount.decisionLog");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<DecisionRow[] | null>(null);
   const [error, setError] = useState("");
+
+  const contextLabel = (key: string) => (t.has(`pages.${key}`) ? t(`pages.${key}`) : labelForContextPage(key));
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/user/decisions?limit=25")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => !cancelled && setData(d.decisions || []))
-      .catch(() => !cancelled && setError("Could not load this history."));
+      .catch(() => !cancelled && setError(t("loadError")));
     return () => {
       cancelled = true;
     };
@@ -60,29 +65,26 @@ export function DecisionLogViewer() {
       >
         <span>
           <span className="text-sm font-semibold text-t-white block">
-            Why t.ROY suggested things
+            {t("title")}
           </span>
           <span className="text-xs text-t-phos-dim">
-            The assistant&apos;s recorded reason for each suggestion it made
+            {t("subtitle")}
           </span>
         </span>
-        <span className="text-xs text-t-phos-dim ml-3">{open ? "Hide" : "Show"}</span>
+        <span className="text-xs text-t-phos-dim ml-3">{open ? t("hide") : t("show")}</span>
       </button>
       {open && (
         <div className="px-4 pb-4 border-t border-t-line pt-3 space-y-3">
           <p className="text-[11px] text-t-phos-dim leading-relaxed">
-            This shows the assistant&apos;s recorded reasoning for its
-            suggestions. It does not show private chain-of-thought, and it never
-            stores the exact words you typed.
+            {t("explainer")}
           </p>
           {error && <p className="text-xs text-t-red">{error}</p>}
           {!data && !error && (
-            <p className="text-xs text-t-phos-dim">Loading...</p>
+            <p className="text-xs text-t-phos-dim">{t("loading")}</p>
           )}
           {data && data.length === 0 && (
             <p className="text-xs text-t-phos-dim">
-              Nothing here yet. Once t.ROY makes a suggestion for you, its reason
-              will show up here.
+              {t("empty")}
             </p>
           )}
           {data && data.length > 0 && (
@@ -91,17 +93,17 @@ export function DecisionLogViewer() {
                 <li key={i} className="border-t border-t-line pt-3 first:border-t-0 first:pt-0">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-xs font-semibold text-t-white">
-                      {labelForContextPage(d.contextPage)}
+                      {contextLabel(d.contextPage)}
                     </span>
                     <span className="text-[10px] text-t-phos-dim flex-shrink-0">
-                      {fmtWhen(d.createdAt)}
+                      {fmtWhen(d.createdAt, locale)}
                     </span>
                   </div>
                   <p className="text-xs text-t-phos leading-relaxed mt-1">
                     {d.explanation}
                   </p>
                   <p className="text-[10px] text-t-phos-dim mt-1">
-                    Model: {d.modelProvider} {d.modelId}
+                    {t("model", { provider: d.modelProvider, id: d.modelId })}
                   </p>
                 </li>
               ))}

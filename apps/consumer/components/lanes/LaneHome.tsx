@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { resumeWorkspaceAction, savedResumeAction, workspaceNextAction } from "@/lib/workspace-next-action";
 import type { RefineryWorkspaceContext } from "@/lib/refinery-workspace";
 import { LANES_CHANGED_EVENT } from "@/lib/lanes";
@@ -21,11 +22,31 @@ import {
   CARDS_PARAM,
   CHECK_AND_FINISH_LABEL,
   DOCUMENT_LINKS,
-  DRAFT_BADGE,
-  TASK_COPY,
   rebuildHref,
   type LaneTask,
 } from "@/lib/lane-task";
+
+/** The labels the next-action helpers (lib/workspace-next-action.ts, lib/lane-task.ts) write, by their English text, so the screen can say them in the person's language. */
+const ACTION_KEYS: Record<string, string> = {
+  "Review this resume": "reviewResume",
+  "Find a job to go after": "findJob",
+  "Check and finish": "checkAndFinish",
+  "Build it with t.ROY": "buildWithTroy",
+  "Save your profile": "saveProfile",
+  "Practice for this interview": "practiceThisInterview",
+  "Open this application": "openApplication",
+  "Prepare for your interview": "prepareInterview",
+  "Practice for your interview": "practiceInterview",
+  "Find help near you": "findHelp",
+  "See job paths": "seePaths",
+  "Pick a job to go after": "pickJob",
+  "Open this lane’s documents": "openLaneDocs",
+  "Choose documents in My resumes": "chooseDocs",
+  "Start your resume": "startResume",
+  "Get your files in My resumes": "getFiles",
+  "Open creative work": "openCreative",
+};
+const DOC_KEYS: Record<string, string> = { "/dashboard/creative": "creative", "/dashboard/cv": "cv", "/dashboard/performer": "performer" };
 
 interface ForgeRevision {
   id: string;
@@ -71,6 +92,13 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
 }
 
 export function LaneHome({ task, profileFirst = false, laneId = null, hidePrimaryAction = false }: { task: LaneTask; profileFirst?: boolean; laneId?: string | null; hidePrimaryAction?: boolean }) {
+  const t = useTranslations("refineryHome.laneHome");
+  const actionLabel = (label: string): string => {
+    const key = ACTION_KEYS[label];
+    if (key) return t(`action.${key}`);
+    const at = /^Prepare for your interview at (.+)$/.exec(label);
+    return at ? t("action.prepareInterviewAt", { company: at[1] }) : label;
+  };
   const laneKey = laneId || "main";
   const [result, setResult] = useState<{ key: string; work: RefineryWorkspaceContext | null; error: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
@@ -108,70 +136,70 @@ export function LaneHome({ task, profileFirst = false, laneId = null, hidePrimar
   return (
     <section aria-labelledby="lane-home-heading" className="space-y-3" data-testid="lane-home">
       <h1 id="lane-home-heading" className="text-2xl font-bold text-t-white">
-        Today: {TASK_COPY[task].label}
+        {t("today", { task: t(`task.${task}`) })}
       </h1>
       <div className={`grid gap-3 ${hidePrimaryAction ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
         <div className={box} data-testid="lane-home-resume">
-          <p className="text-xs font-semibold uppercase text-t-bone-dim">{documentHref ? "This lane’s documents" : "Current resume"}</p>
+          <p className="text-xs font-semibold uppercase text-t-bone-dim">{documentHref ? t("laneDocuments") : t("currentResume")}</p>
           {!loaded ? (
-            <p className="mt-1 text-sm text-t-phos-dim">Loading...</p>
+            <p className="mt-1 text-sm text-t-phos-dim">{t("loading")}</p>
           ) : loadError ? (
             <div className="mt-1 text-sm">
-              <p role="alert" className="text-t-red">We couldn't load your saved resume. Try again to check your latest work.</p>
-              <button type="button" onClick={() => setRetry((n) => n + 1)} className="t-focus mt-2 min-h-touch text-t-amber-bright underline underline-offset-2">Try again</button>
+              <p role="alert" className="text-t-red">{t("loadError")}</p>
+              <button type="button" onClick={() => setRetry((n) => n + 1)} className="t-focus mt-2 min-h-touch text-t-amber-bright underline underline-offset-2">{t("tryAgain")}</button>
             </div>
           ) : documentHref ? (
-            <Link href={documentHref} className="t-focus mt-2 inline-flex min-h-touch items-center text-sm text-t-amber-bright underline underline-offset-2">Open {work?.lane?.name || "your documents"}</Link>
+            <Link href={documentHref} className="t-focus mt-2 inline-flex min-h-touch items-center text-sm text-t-amber-bright underline underline-offset-2">{t("openDocs", { name: work?.lane?.name || t("yourDocuments") })}</Link>
           ) : rev ? (
             <>
-              <p className="mt-1 text-sm font-semibold text-t-white">Version {rev.number}{rev.status === "finished" ? ", finished" : ""}</p>
+              <p className="mt-1 text-sm font-semibold text-t-white">{t("version", { number: rev.number })}{rev.status === "finished" ? t("finishedSuffix") : ""}</p>
               {rev.status !== "finished" && (
                 <p className="mt-1 text-sm text-t-amber-bright" data-testid="draft-badge">
-                  {DRAFT_BADGE}
+                  {t("draftBadge")}
                 </p>
               )}
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {(rev.status !== "finished" || !rev.fromWriter) && (
                   <Link href={resumeNext!.href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-check">
-                    {resumeNext!.label}
+                    {actionLabel(resumeNext!.label)}
                   </Link>
                 )}
                 <Link href="/dashboard/vault" className="t-focus min-h-touch inline-flex items-center text-t-phos underline underline-offset-2">
-                  My resumes
+                  {t("myResumes")}
                 </Link>
               </div>
             </>
           ) : work?.selection?.artifactId ? (
             <>
-              <p className="mt-1 text-sm text-t-phos" data-testid="lane-home-unversioned">You have a saved resume in this lane. It has no checked version yet.</p>
+              <p className="mt-1 text-sm text-t-phos" data-testid="lane-home-unversioned">{t("unversioned")}</p>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 <Link href={savedResumeAction(work.selection.artifactId).href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-review">
-                  {savedResumeAction(work.selection.artifactId).label}
+                  {actionLabel(savedResumeAction(work.selection.artifactId).label)}
                 </Link>
                 <Link href="/dashboard/vault" className="t-focus min-h-touch inline-flex items-center text-t-phos underline underline-offset-2">
-                  My resumes
+                  {t("myResumes")}
                 </Link>
               </div>
             </>
           ) : (
-            <p className="mt-1 text-sm text-t-phos">No saved resume version in this lane yet.</p>
+            <p className="mt-1 text-sm text-t-phos">{t("noVersion")}</p>
           )}
         </div>
         {!hidePrimaryAction && <div className={box} data-testid="lane-home-next">
-          <p className="text-xs font-semibold uppercase text-t-bone-dim">Next</p>
+          <p className="text-xs font-semibold uppercase text-t-bone-dim">{t("next")}</p>
           {next ? <Link
             href={next.href}
             className="t-focus mt-2 inline-flex min-h-touch w-full items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
             data-testid="lane-home-next-action"
           >
-            {next.label}
-          </Link> : <p className="mt-2 text-sm text-t-phos-dim">{loadError ? "Reload your workspace to see the next step." : "Loading your next step..."}</p>}
+            {actionLabel(next.label)}
+          </Link> : <p className="mt-2 text-sm text-t-phos-dim">{loadError ? t("reload") : t("loadingNext")}</p>}
           {task === "documents" && (
             <ul className="mt-2 space-y-1 text-sm">
               {DOCUMENT_LINKS.map((d) => (
                 <li key={d.href}>
                   <Link href={d.href} className="t-focus text-t-phos underline underline-offset-2 hover:text-t-white">
-                    {d.label}
+                    {DOC_KEYS[d.href] ? t(`docs.${DOC_KEYS[d.href]}`) : d.label}
                   </Link>
                 </li>
               ))}
@@ -179,10 +207,10 @@ export function LaneHome({ task, profileFirst = false, laneId = null, hidePrimar
           )}
         </div>}
         <div className={box} data-testid="lane-home-support">
-          <p className="text-xs font-semibold uppercase text-t-bone-dim">Support</p>
-          <p className="mt-1 text-sm text-t-phos">Rides, ID, a place to stay, food, and legal help with a record.</p>
+          <p className="text-xs font-semibold uppercase text-t-bone-dim">{t("support")}</p>
+          <p className="mt-1 text-sm text-t-phos">{t("supportBody")}</p>
           <Link href="/dashboard/resources#support" className="t-focus mt-2 inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
-            Get support
+            {t("getSupport")}
           </Link>
         </div>
       </div>

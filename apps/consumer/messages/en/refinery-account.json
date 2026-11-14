@@ -1,0 +1,831 @@
+{
+  "packageEmail": {
+    "heading": "Your finished resume by email",
+    "toggle": "Email me my finished resume",
+    "confirmed": "When you finish a resume in the Forge, we send it to {email}. Only to that address.",
+    "unconfirmed": "When you finish a resume in the Forge, we send it to {email} once that address is confirmed. Sign in with an email link once to confirm it.",
+    "noEmail": "When you finish a resume in the Forge, we send it to your account email.",
+    "notSaved": "That didn't save. Try again."
+  },
+  "requirement": {
+    "whatRequires": "What {org} requires",
+    "staysPrivate": "Stays private:",
+    "whoCanOpen": "Who can open it",
+    "theirReason": "Their reason, in their words",
+    "recording": "Recording...",
+    "acknowledge": "I have read this. Let my case manager open these."
+  },
+  "decisionLog": {
+    "title": "Why t.ROY suggested things",
+    "subtitle": "The assistant's recorded reason for each suggestion it made",
+    "show": "Show",
+    "hide": "Hide",
+    "explainer": "This shows the assistant's recorded reasoning for its suggestions. It does not show private chain-of-thought, and it never stores the exact words you typed.",
+    "loading": "Loading...",
+    "loadError": "Could not load this history.",
+    "empty": "Nothing here yet. Once t.ROY makes a suggestion for you, its reason will show up here.",
+    "model": "Model: {provider} {id}",
+    "pages": {
+      "interview-practice": "Interview practice (text)",
+      "interview": "Interview practice (text)",
+      "interview-voice": "Interview practice (voice)",
+      "resume-generate-full": "Resume tailoring",
+      "resume-full": "Resume tailoring",
+      "resume-generate": "Bullet suggestions",
+      "resume": "Bullet suggestions",
+      "resume-assist": "Forge resume help",
+      "forge-resume-assist": "Forge resume help",
+      "job-search": "Job search enrichment",
+      "jobs": "Job search enrichment",
+      "mini-forge": "Quick Forge",
+      "disclosure-guide": "Disclosure planning",
+      "disclosure": "Disclosure planning",
+      "disclosure-strengths": "Strength discovery",
+      "disclosure-takeaways": "Practice takeaways",
+      "analyze": "Career analysis",
+      "apply-email": "Application email draft",
+      "follow-up": "Follow-up draft",
+      "parse": "Resume parsing",
+      "fit-check": "Fit check",
+      "next-step-why": "Next-step advice",
+      "career-plan": "Career planner",
+      "assistant": "t.ROY chat",
+      "coach": "t.ROY chat",
+      "unknown": "Other AI work"
+    }
+  },
+  "loginHistory": {
+    "title": "Recent security activity",
+    "intro": "Sign-ins and security changes on your account. If you see something you did not do, change your password.",
+    "loading": "Loading...",
+    "loadError": "Could not load recent activity.",
+    "empty": "No activity yet.",
+    "events": {
+      "sign_in": "Signed in",
+      "two_factor_enabled": "Two-step verification turned on",
+      "two_factor_disabled": "Two-step verification turned off",
+      "password_created": "Password created",
+      "password_changed": "Password changed",
+      "password_reset": "Password reset by email link",
+      "sessions_revoked": "Signed out other devices",
+      "credentials_cleared": "Removed a password or two-step you said you did not set"
+    }
+  },
+  "avatar": {
+    "aria": "Your avatar"
+  },
+  "consent": {
+    "heading": "Privacy choices",
+    "loading": "Loading...",
+    "saveFallback": "Could not save. Try again.",
+    "connectionError": "Could not save. Check your connection and try again.",
+    "memory": {
+      "title": "AI memory and personalization",
+      "body": "t.ROY remembers your recent work to pick up where you left off. Turn this off and he starts fresh each session; your saved documents are not affected.",
+      "on": "On: t.ROY remembers your recent work.",
+      "off": "Off: t.ROY starts fresh every session."
+    },
+    "research": {
+      "title": "De-identified research",
+      "body": "Allow your anonymized progress data to be included in research about what helps people get hired. Off unless you turn it on.",
+      "on": "On: your de-identified data may be used in research.",
+      "off": "Off: your data is not used for research."
+    },
+    "outcome": {
+      "title": "Share your success story",
+      "body": "If you get hired, choose whether we can ever mention it. This is your choice, and you can change it anytime.",
+      "none": {
+        "label": "None",
+        "description": "Your hire is never mentioned anywhere."
+      },
+      "anonymous": {
+        "label": "Anonymous",
+        "description": "Your hire may be counted in success stories, never your name."
+      },
+      "named": {
+        "label": "Named",
+        "description": "Your first name may appear with your success story."
+      }
+    }
+  },
+  "coach": {
+    "heading": "Your Coach",
+    "intro": "Your coach guides you through your job search. Make it yours.",
+    "nameLabel": "Coach name",
+    "namePlaceholder": "Guide",
+    "styleLabel": "Coaching style",
+    "styles": {
+      "supportive": {
+        "label": "Supportive",
+        "hint": "Warm, encouraging"
+      },
+      "balanced": {
+        "label": "Balanced",
+        "hint": "Warm and direct"
+      },
+      "direct": {
+        "label": "Direct",
+        "hint": "Efficient, no warm-up"
+      }
+    },
+    "lengthLabel": "Response length",
+    "lengths": {
+      "brief": "brief",
+      "full": "full"
+    },
+    "focusLabel": "Focus",
+    "focus": {
+      "guide": "Guide me",
+      "answer": "Just answer"
+    },
+    "advanced": "Advanced settings",
+    "hideAdvanced": "Hide advanced",
+    "creativityLabel": "How creative should your coach be?",
+    "focusedAdvice": "Focused advice",
+    "moreExploratory": "More exploratory",
+    "save": "save",
+    "saving": "saving...",
+    "saved": "Saved.",
+    "couldNotSave": "Could not save."
+  },
+  "deleteData": {
+    "requirementsError": "We couldn't check the confirmation this account needs. Try again.",
+    "notFinished": "Deletion did not finish. You can retry; some data may already have been removed.",
+    "unconfirmed": "We couldn't confirm whether deletion finished. You can retry; some data may already have been removed.",
+    "accountDeleted": "Your account was deleted.",
+    "dataDeleted": "Your data was deleted. Your login stays.",
+    "signOutFailed": "Sign-out did not finish. You do not need to delete again.",
+    "finishSignOut": "Finish signing out",
+    "signingOut": "Signing you out...",
+    "data": {
+      "title": "Delete my data",
+      "body": "Erase your saved work and history and remove your program links. Your login stays, so you can start again. This cannot be undone.",
+      "bodyStaff": "Erase your own account data. Notes and records you wrote stay with your organization. Your login stays. This cannot be undone.",
+      "button": "Delete data",
+      "confirmAria": "Confirm data deletion",
+      "confirmButton": "Permanently delete my data"
+    },
+    "account": {
+      "title": "Delete my account",
+      "body": "Remove your saved work and your login. You will be signed out. This cannot be undone.",
+      "button": "Delete account",
+      "confirmAria": "Confirm account deletion",
+      "confirmButton": "Permanently delete my account"
+    },
+    "accountLine": "Account: {account}",
+    "yourAccount": "your signed-in account",
+    "checkAgain": "Check again",
+    "checking": "Checking this account...",
+    "hasPassword": "This account has a password. Enter it here to confirm deletion, even if you signed in with an email link or Google.",
+    "passwordLabel": "Current account password",
+    "forgot": "Forgot your password? Reset it first",
+    "noPassword": "This account has no password. Type DELETE below to confirm deletion.",
+    "typeDelete": "Type DELETE",
+    "cancel": "Cancel",
+    "deleting": "Deleting..."
+  },
+  "avatarSettings": {
+    "title": "Your picture",
+    "intro": "Use a simple drawing or a photo for your account. This picture is only for your account.",
+    "introResume": "It is never automatically added to your resume.",
+    "shape": "Shape",
+    "color": "Color",
+    "accent": "Accent",
+    "letter": "Letter",
+    "shapes": {
+      "circle": "Circle",
+      "square": "Rounded",
+      "hex": "Hex",
+      "shield": "Shield"
+    },
+    "colors": {
+      "amber": "amber",
+      "phos": "phos",
+      "slate": "slate",
+      "clay": "clay",
+      "plum": "plum",
+      "teal": "teal"
+    },
+    "accents": {
+      "solid": "Plain",
+      "ring": "Ring",
+      "corner": "Dot"
+    },
+    "saving": "saving...",
+    "saveDrawing": "save drawing",
+    "saved": "Saved.",
+    "useDrawing": "Use this drawing instead of my photo",
+    "photoTitle": "Use a photo",
+    "photoIntro": "Add a photo of yourself. It is cropped to a square on your device before it is sent, kept encrypted, and only you can open it.",
+    "photoIntroResume": "It is never added to your resume.",
+    "working": "working...",
+    "uploadPhoto": "upload a photo",
+    "yourPhotos": "Your photos",
+    "useGenerated": "Use generated headshot",
+    "useUploaded": "Use uploaded photo",
+    "generated": "Generated",
+    "uploadedLabel": "Uploaded",
+    "inUse": "(in use)",
+    "remove": "remove",
+    "uploadError": "Could not upload that photo.",
+    "uploaded": "Photo uploaded. Choose it below to use it.",
+    "readError": "Could not read that image. Try a JPG, PNG, or WebP.",
+    "useError": "Could not use that photo.",
+    "removeError": "Could not remove that photo."
+  },
+  "settings": {
+    "usage": {
+      "loading": "Loading usage...",
+      "usedToday": "Used today",
+      "lowerLimit": "Tools with a lower limit of their own",
+      "paused": "paused",
+      "leftToday": "{count} left today"
+    },
+    "page": {
+      "usageError": "Your allowance could not be read right now.",
+      "redeemError": "Could not redeem code",
+      "wentWrong": "Something went wrong. Try again.",
+      "exportFailed": "Failed to export data. Please try again.",
+      "documentsFailed": "Your documents could not be downloaded in one ZIP. Download them one at a time from Private records and documents.",
+      "sections": {
+        "account": "Account",
+        "coach": "Coach & AI",
+        "accessibility": "Accessibility",
+        "privacy": "Privacy & Consent",
+        "security": "Security",
+        "data": "Data",
+        "usage": "Usage",
+        "help": "Help & About"
+      },
+      "title": "Settings",
+      "showMeAround": "Show me around",
+      "subtitle": "Your data, your control. Manage your information and privacy.",
+      "viewing": "You are viewing this person's Settings. Nothing here can be changed.",
+      "assisting": "You are assisting this person in Settings.",
+      "impersonatingNote": "These are their settings, not yours. Sharing and consent switches, program codes and the tours stay theirs to change. Security, photo, export and delete are hidden.",
+      "sectionsAria": "Settings sections",
+      "programRequiresAria": "What this program requires",
+      "joiningNote": "Joining does not open anything by itself. After you join you will be asked to acknowledge this, and you can read it again first.",
+      "join": "Join {org}",
+      "notNow": "Not now",
+      "easierTitle": "Make it easier to use",
+      "easierBody": "Bigger text, less motion, and reading help. Changes take effect right away.",
+      "noProgram": "No program is linked to your account, so no program can see your progress.",
+      "hiddenWhileViewing": "Hidden while you view or assist as this person.",
+      "dailyUsage": "Daily Usage",
+      "getHelp": "Get help",
+      "helpBody": "Stuck on something? Ask t.ROY on any page, or open Help & Feedback to search for an answer, report a problem, or message Troy. A real person reads every message.",
+      "openHelp": "Open Help & Feedback",
+      "trustQuestion": "Want to know exactly how we protect your data?",
+      "trustLink": "Read our trust page",
+      "about": "About",
+      "aboutBody": "Built by people who believe your past doesn't define your paycheck. The Forge and Refinery are tools designed to help you take the next step on your own terms.",
+      "aboutAi": "All AI-powered features are designed with transparency, consent, and your dignity in mind."
+    },
+    "data": {
+      "handleTitle": "How we handle your data",
+      "handleForge": "Your Forge answers and results are saved to your account so your work is here when you come back",
+      "handleChats": "Conversations with t.ROY are saved to your account so he can remember your recent work. Deleting your data clears them.",
+      "handleRecordCheck": "In the record check, what you type about your record goes to the AI only after you say yes on that screen. A saved checklist keeps the list and the state. What you typed is kept only if you tick the box for it. Taking back your yes deletes your saved checklists.",
+      "handleSell": "We never sell your personal information. It goes only to the services that run the app, and to a program when you choose to share with it",
+      "handleAnytime": "You can export or delete your data at any time",
+      "downloadTitle": "Download your data",
+      "downloadBody": "Get a copy of what we have stored, as one file. Keep every box ticked for a full copy. Your document files come separately, with the button further down.",
+      "passwordLabel": "Password for downloads",
+      "passwordHelp": "If your account has a password, enter it here. If it has no password, leave this blank. Confirm the device below before downloading.",
+      "boxes": {
+        "resumes": "Resumes and Forge results",
+        "applications": "Job applications",
+        "chat": "Chat history with t.ROY",
+        "consent": "Consent records",
+        "usage": "Usage totals",
+        "progress": "Your activity history",
+        "record_check": "Saved record checks",
+        "sharing": "What you share, who opened it, and what your organization has on file about you"
+      },
+      "fullCopyOnly": {
+        "decisions": "the record of AI suggestions about you",
+        "login_history": "your sign-in history",
+        "org": "your program memberships",
+        "support": "messages you sent to Steel Man",
+        "disclosure_rehearsal": "disclosure practice transcripts",
+        "interview_voice": "interview practice transcripts",
+        "avatar": "the list of your photos",
+        "vault": "the list of your documents"
+      },
+      "leavesOut": "This copy leaves out {list}. Tick every box for a full copy.",
+      "sharedWarning": "These files hold your chat history, record checks and documents. On a shared or library computer, anyone who opens the Downloads folder can read them. Download only on your own phone or computer, or delete the files and empty the trash when you finish.",
+      "ownDevice": "This is my own phone or computer",
+      "preparing": "Preparing...",
+      "downloaded": "Downloaded",
+      "export": "Export",
+      "docsTitle": "Your document files",
+      "docsBody": "Every file in Private records and documents, in one ZIP, up to about 4 MB at a time. If you have more than that, download them one at a time from that page.",
+      "docsButton": "Download my documents"
+    },
+    "accountExtras": {
+      "joinTitle": "Join a program with a code",
+      "enterCode": "Enter a code",
+      "enterCodeBody": "If a program (like a job center or nonprofit) gave you a code, enter it here. The code joins you to a program's seat. If the program has rules about sharing, you see them before you join, and joining shares nothing by itself. If the code changes your AI allowance, Usage below shows the new number.",
+      "codePlaceholder": "Your code",
+      "codeAria": "Program code",
+      "join": "join",
+      "joined": "You joined. Your program is listed below.",
+      "yourPrograms": "Your programs",
+      "joinedWithCode": "Joined with a code",
+      "hiddenTitle": "Hidden Employers",
+      "hiddenBody": "Employers you hide never show up in your job search. Hide a former employer, or anywhere you have already applied. You can un-hide any of them here.",
+      "hideNamePlaceholder": "Employer name to hide",
+      "hideReasonPlaceholder": "Reason (optional)",
+      "hideButton": "hide employer",
+      "noneHidden": "You have not hidden any employers.",
+      "unhide": "Un-hide"
+    },
+    "security": {
+      "noMatch": "Those two don't match yet.",
+      "saveError": "Could not save that. Try again.",
+      "wentWrong": "Something went wrong. Try again.",
+      "title": "Security",
+      "intro": "Manage your password, two-step verification and signed-in devices.",
+      "createTitle": "Create a password",
+      "passwordTitle": "Password",
+      "createBody": "Set a password so you can sign in instantly without waiting for an email link.",
+      "lastChanged": "Last changed {date}.",
+      "signInWithPassword": "Sign in with your email and password.",
+      "passwordSet": "Password set",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "newPasswordCreate": "New password ({min}+ characters)",
+      "confirmPassword": "Confirm new password",
+      "passwordHint": "{min}+ characters, with a letter and a number. Use a password you don't use on another site. A password manager can make and remember one for you.",
+      "created": "Password created.",
+      "updated": "Password updated.",
+      "saving": "saving...",
+      "createButton": "create password",
+      "updateButton": "update password"
+    },
+    "devices": {
+      "title": "Active devices",
+      "intro": "Where you're signed in. Revoke anything you don't recognize. It gets signed out right away.",
+      "signOutOthers": "Sign out others",
+      "loading": "Loading...",
+      "thisDevice": "This device",
+      "lastActive": "last active {date}",
+      "revoke": "Revoke"
+    },
+    "twoFactor": {
+      "startError": "Could not start setup.",
+      "codeMismatch": "That code didn't match.",
+      "turnOffError": "Could not turn it off.",
+      "title": "Two-step verification",
+      "onBody": "On. You'll enter a code from your authenticator app every time you sign in, whether you use a password, an email link, or Google.",
+      "offBody": "Add a second step at sign-in with an authenticator app (Google Authenticator, Authy, 1Password).",
+      "on": "On",
+      "off": "Off",
+      "starting": "starting...",
+      "turnOn": "turn on two-step",
+      "confirmEmailTitle": "Confirm your email first",
+      "confirmEmailBody": "Two-step verification needs a confirmed email address. We'll send a sign-in link to {email}. Open it, and then you can turn on two-step here.",
+      "yourEmail": "your email address",
+      "checkEmail": "Check your email for the link.",
+      "sending": "sending...",
+      "emailLink": "Email me a link",
+      "sendFailed": "We couldn't send the link. Try again in a few minutes.",
+      "scan": "1. Scan this with your authenticator app.",
+      "qrAlt": "Two-factor QR code",
+      "cantScan": "Can't scan? Enter this key manually:",
+      "enterCode": "2. Enter the 6-digit code it shows.",
+      "verifying": "verifying...",
+      "verify": "verify & turn on",
+      "cancel": "cancel",
+      "backupIntro": "Two-step is on. Save these backup codes somewhere safe. Each one works once if you ever lose your phone. You won't see them again.",
+      "copyCodes": "copy codes",
+      "savedThem": "I saved them",
+      "turnOff": "Turn off two-step verification",
+      "disablePlaceholder": "Current code or a backup code",
+      "confirmTurnOff": "confirm turn off"
+    },
+    "account": {
+      "title": "Account",
+      "contactHeading": "Resume Contact Info",
+      "signedInAs": "Signed in as",
+      "unknown": "Unknown",
+      "edit": "Edit",
+      "name": "Name:",
+      "phone": "Phone:",
+      "email": "Email:",
+      "location": "Location:",
+      "notSet": "Not set",
+      "noContact": "No contact info set. Complete your profile on the dashboard.",
+      "editHeading": "Edit {heading}",
+      "fullName": "Full name",
+      "phonePlaceholder": "Phone",
+      "resumeEmail": "Resume email",
+      "city": "City",
+      "state": "State",
+      "saving": "saving...",
+      "save": "save",
+      "cancel": "Cancel",
+      "methodsTitle": "Sign-in Methods",
+      "emailPassword": "Email & Password",
+      "emailPasswordBody": "Sign in with your email and a password you set",
+      "active": "Active",
+      "magicLink": "Magic Link",
+      "magicLinkBody": "One-time sign-in link sent to your email. No password needed.",
+      "available": "Available",
+      "lostDevice": "Lost your device? Use the magic link option on the sign-in page to get back in. You can set a new password anytime below."
+    }
+  },
+  "tour": {
+    "kicker": "The Refinery, with t.ROY",
+    "yourBase": "Your base",
+    "fromForge": "From the Forge",
+    "baseResume": "Your base resume",
+    "trueHistory": "Your true history",
+    "offer": "The offer",
+    "nextStep": "And then the next step",
+    "badge": "Hires people with records",
+    "chips": {
+      "job": "This job",
+      "facts": "Same facts",
+      "copy": "A new copy"
+    },
+    "toYou": "To: you",
+    "notes": {
+      "whenItComes": "When it comes up",
+      "whatISay": "What I say",
+      "whatISayNext": "What I say next"
+    },
+    "question": "Tell me about a hard day at work.",
+    "answer": "Here is one real example.",
+    "steps": {
+      "saved": "Saved",
+      "applied": "Applied",
+      "interview": "Interview",
+      "offer": "Offer"
+    },
+    "stations": {
+      "find": {
+        "label": "Find a real job",
+        "line": "A real opening"
+      },
+      "tailor": {
+        "label": "Tailor the base",
+        "line": "Same facts, this job"
+      },
+      "package": {
+        "label": "Package to you",
+        "line": "Back to you"
+      },
+      "plan": {
+        "label": "Plan what to say",
+        "line": "Your record, your words"
+      },
+      "practice": {
+        "label": "Practice",
+        "line": "When it gets close"
+      },
+      "track": {
+        "label": "Track to the offer",
+        "line": "Saved to offer"
+      }
+    },
+    "lock": {
+      "tailorLabel": "Tailor your resume",
+      "tailorReason": "Choose a job and a resume so the changes have a clear purpose.",
+      "openEarly": "Open early",
+      "lockedForNow": "Locked for now",
+      "isOpen": "{step} is open. The recommended preparation is still there when you need it.",
+      "opened": "{step} opened at your request.",
+      "ask": "Ask t.ROY to open it early",
+      "actionsPerDay": "AI actions per day",
+      "stairs": {
+        "toStart": "To start",
+        "afterTailor": "After you tailor",
+        "afterApply": "After you apply"
+      },
+      "needMore": "Need more?",
+      "flowAsk": "<b>Ask t.ROY.</b>",
+      "flowEarned": "<b>Earned it?</b> It's added.",
+      "flowNotYet": "<b>Not yet?</b> You okay a short note, and Troy reviews it."
+    },
+    "chart": {
+      "kicker": "What you'd otherwise stitch together, and what's here",
+      "portraitKicker": "What you'd otherwise use",
+      "status": {
+        "here": "Here",
+        "limits": "Here, with limits",
+        "absent": "Not here"
+      }
+    },
+    "rows": {
+      "resume": {
+        "need": "Resume builder"
+      },
+      "check": {
+        "need": "Resume checker",
+        "limit": "Five lenses, no one score"
+      },
+      "jobs": {
+        "need": "Job board",
+        "limit": "A source can be down"
+      },
+      "employers": {
+        "need": "Employer list",
+        "limit": "Small, dated, checked"
+      },
+      "tailor": {
+        "need": "Tailoring tool",
+        "limit": "Some sites block links"
+      },
+      "interview": {
+        "need": "Interview app",
+        "limit": "Voice is sponsored"
+      },
+      "disclosure": {
+        "need": "Disclosure coach",
+        "limit": "Coaching, not legal advice"
+      },
+      "local": {
+        "need": "Local help directory",
+        "limit": "Finds places, no matching"
+      },
+      "track": {
+        "need": "Application tracker"
+      },
+      "vault": {
+        "need": "Document safe"
+      },
+      "coach": {
+        "need": "AI career coach"
+      },
+      "network": {
+        "need": "Employer network",
+        "here": "No employer hires through Steel Man, and nobody posts jobs here"
+      },
+      "apply": {
+        "need": "Apply for me",
+        "here": "Nothing submits an application for you. You apply the employer's way"
+      },
+      "ats": {
+        "need": "One ATS score",
+        "here": "No single score, and no imitation of a named tracking system"
+      }
+    },
+    "meter": {
+      "title": "Steel Man meter, an example",
+      "one": "One thing, over and over",
+      "many": "A little of everything",
+      "say": {
+        "0": "It fills as you do the work.",
+        "1": "One thing, over and over, barely moves it.",
+        "2": "A little of everything moves it far.",
+        "3": "This one is an example. Yours starts at the real number."
+      }
+    }
+  },
+  "lesson": {
+    "summary": "Learn your settings: eight practical lessons",
+    "intro": "Take this at your own pace. Read a lesson, visit the actual controls, then return here. Nothing changes until you use a setting yourself.",
+    "navAria": "Settings lessons",
+    "tabs": {
+      "account": "Account",
+      "coach": "Coach",
+      "accessibility": "Reading & motion",
+      "privacy": "Privacy",
+      "security": "Security",
+      "data": "Data",
+      "usage": "Usage",
+      "help": "Help"
+    },
+    "showControls": "Show these controls",
+    "previous": "Previous lesson",
+    "next": "Next lesson",
+    "orientationCheck": "Take the optional orientation check",
+    "mainTour": "Return to the main tour",
+    "revisit": "You can revisit any chapter.",
+    "lessons": {
+      "account": {
+        "title": "The right contact details",
+        "why": "An employer needs a working way to reach you.",
+        "body": "Check Resume Contact Info separately from the account you sign in with. A change here is not proof an older downloaded file changed. Inspect your next exported packet.",
+        "try": "Read the email and phone on your actual resume before sending it."
+      },
+      "coach": {
+        "title": "A coach you can work with",
+        "why": "Good help should fit the way you want to learn.",
+        "body": "Choose your coach’s name, style, answer length, focus and creativity. Low creativity keeps t.ROY on the usual path. High creativity adds one less obvious option and says which is which. The middle of the slider changes nothing. Use the Save control to keep those choices. Direct or warm changes the delivery; it does not make a suggestion more accurate. The decision log explains recorded suggestions, not hidden AI reasoning.",
+        "try": "Ask for one question at a time, then check whether the response helps you give a specific example."
+      },
+      "accessibility": {
+        "title": "Make it easier to use",
+        "why": "Reading and motion preferences should help you stay with the task.",
+        "body": "Explore text size, comfortable or compact layout, and motion. Reading help includes plain language, read aloud and the coach’s reply language. Spanish replies do not translate the whole interface. These controls are separate, so you can choose what helps. Verify a change after returning to the page.",
+        "try": "Try larger text or Reduce motion. You can change back. The tour itself never changes your preferences."
+      },
+      "privacy": {
+        "title": "Know what you are sharing",
+        "why": "Receiving support and sharing personal information are separate decisions.",
+        "body": "Read each consent and sharing control, including the information requested and the organization involved. A program can have requirements; inspect them before agreeing. Do not assume a sponsored seat gives staff access to every document or conversation.",
+        "try": "Review the actual sharing choices before granting access. Only change one when you understand its scope."
+      },
+      "security": {
+        "title": "Protect your way back in",
+        "why": "Your work needs a reliable account you can access.",
+        "body": "Review your sign-in options, password controls, active devices and two-step verification. On a shared computer, sign out when finished. Keep recovery information somewhere you control.",
+        "try": "Check that you can reach your sign-in email before changing account security."
+      },
+      "data": {
+        "title": "Keep a copy. Delete deliberately.",
+        "why": "Exporting and deleting do different jobs.",
+        "body": "Review the categories in your data export. Deleting your data keeps your login; deleting your account removes the login too. Both require confirmation. An export can contain private information, so choose where to save it. Never use deletion just to tidy a screen.",
+        "try": "Read the confirmation before any destructive action. The lesson does not start an export or delete anything."
+      },
+      "usage": {
+        "title": "Understand the limits",
+        "why": "A clear allowance lets you plan the next useful request.",
+        "body": "Check the live usage display and access details. Guided access, AI actions and sponsored tools are different. An orientation reward opens guided tools, while usage and spending controls remain. Saved work does not become a new AI request just because you read it.",
+        "try": "Use the progress bar to see your current allowance. Ask for help if a limit blocks urgent preparation."
+      },
+      "help": {
+        "title": "Keep learning, ask for help",
+        "why": "You should not have to guess what a screen means.",
+        "body": "Replay the introduction, return to this lesson, or use the help routes. Describe the screen, what you tried, and what you expected. Do not include passwords or private documents in a bug report.",
+        "try": "When ready, take the orientation check. You can review any lesson and retry without losing access."
+      }
+    }
+  },
+  "sharing": {
+    "notSaved": "That did not save. Nothing was changed.",
+    "title": "Who can see what",
+    "caseManager": "Your case manager there is {name}.",
+    "noCaseManager": "You do not have a case manager assigned there yet.",
+    "someone": "Someone at your organization",
+    "askedToSee": "{who} asked to see <strong>{scope}</strong>.",
+    "shareIt": "Share it",
+    "notNow": "Not now",
+    "notNowOk": "Saying not now is fine. They are not told why.",
+    "confirmStop": "{org} requires this.\n\n{stopping}\n\nStop sharing it?",
+    "requiredBy": "Required by {org}",
+    "stopped": "You stopped sharing this. {org} can see that you did.",
+    "theySee": "They would see:",
+    "staysPrivate": "Stays private:",
+    "shareAria": "Share {what} with {org}",
+    "logTitle": "Who has opened what",
+    "logEmpty": "Nobody has opened anything you shared.",
+    "logLine": "{line} on {when}"
+  },
+  "aiCosts": {
+    "show": "Show",
+    "hide": "Hide",
+    "ownTitle": "Your AI usage",
+    "ownSubtitle": "Recorded costs and estimates for your account (last 30 days)",
+    "loading": "Loading...",
+    "loadError": "Could not load usage.",
+    "ownTotals": "across {calls} AI calls ({input} in / {output} out tokens)",
+    "voiceMinutes": "Includes {minutes} minutes of voice practice.",
+    "feature": "Feature",
+    "calls": "Calls",
+    "cost": "Cost",
+    "estimated": "{estimated} is estimated. {unpriced} calls have no price yet, and {legacy} use earlier accounting. This is not a bill.",
+    "trackingBegan": "Cost tracking began Aug 2, 2026. AI work before that date is not shown here.",
+    "sponsorSees": "If a partner organization sponsors your account, they see this too. That is how your access stays free.",
+    "endpoints": {
+      "interview-practice": "Interview practice (text)",
+      "interview": "Interview practice (text)",
+      "interview-voice": "Interview practice (voice)",
+      "resume-generate-full": "Resume tailoring",
+      "resume-full": "Resume tailoring",
+      "resume-generate": "Bullet suggestions",
+      "resume": "Bullet suggestions",
+      "resume-assist": "Forge resume help",
+      "forge-resume-assist": "Forge resume help",
+      "job-search": "Job search enrichment",
+      "jobs": "Job search enrichment",
+      "mini-forge": "Quick Forge",
+      "disclosure-guide": "Disclosure planning",
+      "disclosure": "Disclosure planning",
+      "disclosure-strengths": "Strength discovery",
+      "disclosure-takeaways": "Practice takeaways",
+      "analyze": "Career analysis",
+      "apply-email": "Application email draft",
+      "follow-up": "Follow-up draft",
+      "parse": "Resume parsing",
+      "fit-check": "Fit check",
+      "next-step-why": "Next-step advice",
+      "career-plan": "Career planner",
+      "assistant": "t.ROY chat",
+      "coach": "t.ROY chat",
+      "unknown": "Other AI work"
+    }
+  },
+  "security": {
+    "title": "Your Data: Who Sees It",
+    "intro": "We built this tool for people who need to trust it. Here's exactly how we protect you.",
+    "collect": {
+      "title": "What We Collect",
+      "resume": "Your resume text, so we can find your skills and match you to jobs",
+      "answers": "Your answers to Forge questions, so we can match jobs and resources to your situation",
+      "refinery": "Your activity in the Refinery, so we can track your progress and suggest next steps",
+      "chats": "Your chats with t.ROY, if you are signed in and turned on Better help, so he can remember your recent work. You can delete them anytime in Settings.",
+      "connect": "Some basic facts about how you connect: your IP address, your device type, and the rough city it points to. We use them to stop abuse and to show you where you are signed in.",
+      "noTrack": "We do not track what you do on other sites, and we do not look at your social media."
+    },
+    "who": {
+      "title": "Who Can See Your Data",
+      "banner": "You decide. Program staff cannot read your work unless you share it.",
+      "nothing": "<lead>If you share nothing:</lead> your name is not on their caseload list. They cannot read your resume, letters, jobs or anything you wrote. Staff who signed you up, or who you shared with before, may still see your name, email and step.",
+      "progress": "<lead>If you share your progress:</lead> they see your name, email, your step, how many jobs you saved and applied to, when you were last on, and if you got hired. They also see how many times you practiced and whether you made a record plan. They cannot read either one.",
+      "more": "<lead>You can share more, one item at a time,</lead> if your program offers it: your job applications, your resumes or your cover letters. You see what each one shows first. Staff can read them. They cannot change them.",
+      "noRead": "<lead>No program can read these through sharing:</lead> your record plan (what you make in the Disclosure Planner), {checks, select, yes {your saved record checks, } other {}}your interview practice, or your vault files.",
+      "stop": "<lead>Stop any time in Settings.</lead> That ends new viewing. It cannot take back what someone already read or wrote down.",
+      "logged": "<lead>You can see who looked.</lead> Where your program uses the full workspace, each time staff open something you shared is logged, and you can see the list in Settings.",
+      "rule": "<lead>If a program has its own sharing rule,</lead> you see the rule and its reason first. Nothing opens until you say you saw it, and we will not call it your choice.",
+      "law": "A boss, a PO or the police do not get in just because of who they are. If the law makes us hand something over, we have to.",
+      "staff": "Our own staff can open an account to help you when you ask for support or something breaks. Each time is logged with who and when."
+    },
+    "lives": {
+      "title": "Where Your Data Lives",
+      "db": "Stored in a database that is encrypted at rest. If someone stole the physical disks, they could not read your data.",
+      "https": "Every connection uses HTTPS, so your data is encrypted while it moves between your device and our servers",
+      "vault": "Files you upload to your Vault get a second lock on top of the database: each one is sealed with AES-256-GCM encryption tied to your account, so it can only be opened for you."
+    },
+    "ai": {
+      "title": "What the AI Sees",
+      "job": "The AI reads your resume and answers to help you. That's its only job.",
+      "record": "Most AI steps leave a short record: which tool ran, which AI model, and a short note about the step. The note does not include the words you typed, and the record does not keep a copy of what the AI wrote to you.",
+      "memory": "When you are signed in and Better help is on, t.ROY remembers your recent chats so he can pick up where you left off. You can delete that history anytime. Without an account, t.ROY does not save your chats.",
+      "versions": "When you are signed in, each checked version of your resume is saved to your account, with the answers you gave about its lines. You can download or delete them in Settings.",
+      "recordStep": "The record check is the only screen that asks for your offense, and it asks for your yes first. What you type there goes to Anthropic, which picks items for your checklist from our own list. If you type your record somewhere else, like the chat or the disclosure planner, the AI sees it there too. A saved checklist keeps the list and the state, and keeps what you typed only if you tick the box for it. Taking back your yes deletes your saved checklists.",
+      "recordPlain": "If you type your record in the chat or the disclosure planner, the AI sees it there.",
+      "never": "The AI never shares your information with other users"
+    },
+    "control": {
+      "title": "You're in Control",
+      "export": {
+        "title": "Export Your Data",
+        "description": "Download a copy of your data: your resume, Forge results, applications, chat history, and more. You can pick which parts to include. We ask you to confirm it's you first.",
+        "button": "Export in Settings"
+      },
+      "delete": {
+        "title": "Delete Your Data or Account",
+        "description": "You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone. Short AI records from before you signed in are not tied to your account, so they stay. They hold no name and none of your words. Abuse-prevention counts are deleted after 30 days.",
+        "button": "Delete in Settings"
+      },
+      "consent": {
+        "title": "Consent Preferences",
+        "description": "Manage optional sharing in Settings. You can stop access through the sharing feature; copies and program records already made may remain.",
+        "button": "Manage Consent"
+      },
+      "noAccount": {
+        "title": "No Account Required",
+        "description": "The Forge works without an account. We don't save your resume or answers on our servers unless you sign in. Your work stays saved in this web browser until you start over, press Clear this computer, or leave it untouched for a day. On a shared or library computer, press Clear this computer when you finish. To stop abuse we count uses per internet connection, kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed."
+      },
+      "oneAccount": {
+        "title": "One Free Account",
+        "description": "The Forge asks you to sign in with a free account, the same one the Refinery uses. That is how your work follows you to another device, and how you can download or delete it in Settings. Until it is saved to your account, your work also sits in this web browser. On a shared or library computer, sign out and press Clear this computer when you finish. To stop abuse we count uses per account and per internet connection. The connection is kept as a code made from your IP address that changes every day, never the address itself, and deleted after 30 days. Short AI records say which step ran, not what you typed. The free resume check works without signing in and saves nothing."
+      }
+    },
+    "lock": {
+      "title": "Locking Down Your Account",
+      "password": "Set a password, or sign in with a one-time magic link sent to your email. Passwords are stored as a scrambled hash, not as the words you typed.",
+      "twoStep": "Turn on two-step verification. Every sign-in then asks for a code from an authenticator app, whether you use a password, an email link, or Google, and you get one-time backup codes in case you lose your phone. The secret behind those codes is stored encrypted.",
+      "devices": "See every device signed in to your account and sign out any one you don't recognize. It loses access right away.",
+      "proof": "Exporting or deleting your data asks you to prove it's you first, with your password, or by typing DELETE if you use magic-link sign-in. That way a borrowed or unlocked device can't wipe or copy your data."
+    },
+    "choice": {
+      "title": "What You Share Is Your Choice",
+      "intro": "You control a few separate choices in Settings. You can change any of them anytime:",
+      "better": "<b>Better help:</b> let the AI use more of your Forge answers to give you sharper, more personal suggestions.",
+      "research": "<b>Research:</b> allow your data, with your name and details removed, to help study what helps people find work.",
+      "outcomes": "<b>Outcomes:</b> share whether you landed a job so partner programs can see if this is working. You can share this without sharing anything else."
+    },
+    "dont": {
+      "title": "What We Don't Do",
+      "ads": "No ads. Ever.",
+      "sell": "No selling your data. Ever.",
+      "networks": "No ad networks and no data brokers. We count visits with Google Analytics and Vercel to see which tools help people. They see which pages get used, not what you type. We keep them off disclosure practice, interview practice, the Vault, your documents, and invitation links that carry a code or a name.",
+      "providers": "We use service providers for hosting, storage, AI, email, bot checks, job listings and visit counting. Program sharing and legally required disclosures are described above.",
+      "mining": "No data mining",
+      "surprises": "No surprises. If something changes, we'll tell you first"
+    },
+    "orgs": {
+      "title": "For Organizations",
+      "intro": "If you're considering this platform for your clients:",
+      "staff": "Staff access to participant materials is limited by organization, staff permissions and the participant's active sharing grants",
+      "record": "Most AI steps leave a short record (tool, model, time) for review. The record does not hold the AI's full reply.",
+      "voice": "Voice practice audio passes through OpenAI, which may retain it up to 30 days for abuse monitoring. We do not store the audio. If the person chooses to save a practice run, we keep the written words, encrypted.",
+      "users": "Users control their own data. They can export or delete it on their own, without going through you",
+      "rate": "Rate limiting protects against abuse. Programs that share one internet connection can use an access code so their group gets a bigger shared limit.",
+      "codes": "Partner access codes let you onboard your clients with elevated permissions"
+    },
+    "tech": {
+      "title": "Technical Details",
+      "intro": "For security professionals and compliance teams:"
+    },
+    "contact": {
+      "question": "Questions about your data or privacy?",
+      "ask": "Ask t.ROY. He's on every page. Or email us at <email></email>"
+    }
+  }
+}

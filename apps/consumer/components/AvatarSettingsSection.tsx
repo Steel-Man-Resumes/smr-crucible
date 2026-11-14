@@ -24,6 +24,7 @@
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { TBtn } from "@crucible/consumer-ui";
 import { IllustratedAvatar, AVATAR_FILLS } from "@/components/IllustratedAvatar";
 import { UI_PREFS_EVENT } from "@/lib/ui-prefs-apply";
@@ -38,18 +39,6 @@ import {
   type UiPrefs,
 } from "@crucible/core/src/uiPrefsShared";
 
-const SHAPE_LABELS: Record<AvatarShape, string> = {
-  circle: "Circle",
-  square: "Rounded",
-  hex: "Hex",
-  shield: "Shield",
-};
-const ACCENT_LABELS: Record<AvatarAccent, string> = {
-  solid: "Plain",
-  ring: "Ring",
-  corner: "Dot",
-};
-
 const MAX_DIM = 512; // client crop/compress target square edge
 
 interface AvatarAssetView {
@@ -63,6 +52,7 @@ interface AvatarAssetView {
 }
 
 export function AvatarSettingsSection() {
+  const t = useTranslations("refineryAccount.avatarSettings");
   const { data: session } = useSession();
   // Staff seats build no resume (staff pass S2, walk T03).
   const staff = !!useEffectiveRole()?.orgRole;
@@ -172,13 +162,13 @@ export function AvatarSettingsSection() {
       const res = await fetch("/api/avatar/photo", { method: "POST", body: fd });
       if (!res.ok) {
         const j = await res.json().catch(() => null);
-        setMsg(j?.error || "Could not upload that photo.");
+        setMsg(j?.error || t("uploadError"));
         return;
       }
       await refreshAssets();
-      setMsg("Photo uploaded. Choose it below to use it.");
+      setMsg(t("uploaded"));
     } catch {
-      setMsg("Could not read that image. Try a JPG, PNG, or WebP.");
+      setMsg(t("readError"));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -199,7 +189,7 @@ export function AvatarSettingsSection() {
         setSelectedPhotoId(assetId);
         if (j?.data) dispatchPrefs(j.data as UiPrefs);
       } else {
-        setMsg("Could not use that photo.");
+        setMsg(t("useError"));
       }
     } finally {
       setBusy(false);
@@ -240,7 +230,7 @@ export function AvatarSettingsSection() {
         }
         await refreshAssets();
       } else {
-        setMsg("Could not remove that photo.");
+        setMsg(t("removeError"));
       }
     } finally {
       setBusy(false);
@@ -253,10 +243,9 @@ export function AvatarSettingsSection() {
 
   return (
     <div className="bg-t-panel p-5 border border-t-line mt-4">
-      <h3 className="font-semibold text-t-white mb-1">Your picture</h3>
+      <h3 className="font-semibold text-t-white mb-1">{t("title")}</h3>
       <p className="text-sm text-t-phos-dim mb-4">
-        Use a simple drawing or a photo for your account. This picture is only for
-        your account.{staff ? "" : " It is never automatically added to your resume."}
+        {t("intro")}{staff ? "" : ` ${t("introResume")}`}
       </p>
 
       {/* ---- Illustrated builder ---- */}
@@ -270,22 +259,22 @@ export function AvatarSettingsSection() {
 
         <div className="flex-1 space-y-4">
           <div>
-            <label className="text-xs text-t-phos-dim uppercase block mb-2">Shape</label>
+            <label className="text-xs text-t-phos-dim uppercase block mb-2">{t("shape")}</label>
             <div className="flex flex-wrap gap-2">
               {AVATAR_SHAPES.map((s) => (
-                <Pill key={s} label={SHAPE_LABELS[s]} selected={choice.shape === s} onClick={() => update("shape", s as AvatarShape)} />
+                <Pill key={s} label={t(`shapes.${s}`)} selected={choice.shape === s} onClick={() => update("shape", s as AvatarShape)} />
               ))}
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-t-phos-dim uppercase block mb-2">Color</label>
+            <label className="text-xs text-t-phos-dim uppercase block mb-2">{t("color")}</label>
             <div className="flex flex-wrap gap-2">
               {AVATAR_COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  aria-label={c}
+                  aria-label={t(`colors.${c}`)}
                   aria-pressed={choice.color === c}
                   onClick={() => update("color", c as AvatarColor)}
                   className={`t-focus h-9 w-9 rounded-full border-2 transition-transform ${
@@ -298,16 +287,16 @@ export function AvatarSettingsSection() {
           </div>
 
           <div>
-            <label className="text-xs text-t-phos-dim uppercase block mb-2">Accent</label>
+            <label className="text-xs text-t-phos-dim uppercase block mb-2">{t("accent")}</label>
             <div className="flex flex-wrap gap-2">
               {AVATAR_ACCENTS.map((a) => (
-                <Pill key={a} label={ACCENT_LABELS[a]} selected={choice.accent === a} onClick={() => update("accent", a as AvatarAccent)} />
+                <Pill key={a} label={t(`accents.${a}`)} selected={choice.accent === a} onClick={() => update("accent", a as AvatarAccent)} />
               ))}
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-t-phos-dim uppercase block mb-2">Letter</label>
+            <label className="text-xs text-t-phos-dim uppercase block mb-2">{t("letter")}</label>
             <input
               value={choice.initial}
               onChange={(e) => update("initial", e.target.value.slice(0, 1).toUpperCase())}
@@ -321,9 +310,9 @@ export function AvatarSettingsSection() {
 
       <div className="flex items-center gap-3 mt-5">
         <TBtn onClick={saveIllustrated} disabled={status === "saving"} size="sm">
-          {status === "saving" ? "saving..." : "save drawing"}
+          {status === "saving" ? t("saving") : t("saveDrawing")}
         </TBtn>
-        {status === "saved" && <span className="text-sm text-t-amber-bright">Saved.</span>}
+        {status === "saved" && <span className="text-sm text-t-amber-bright">{t("saved")}</span>}
         {usingPhoto && (
           <button
             type="button"
@@ -331,17 +320,16 @@ export function AvatarSettingsSection() {
             disabled={busy}
             className="t-focus text-sm text-t-phos-dim underline hover:text-t-white disabled:opacity-50"
           >
-            Use this drawing instead of my photo
+            {t("useDrawing")}
           </button>
         )}
       </div>
 
       {/* ---- Photo path ---- */}
       <div className="mt-6 pt-5 border-t border-t-line">
-        <h4 className="font-semibold text-t-white mb-1">Use a photo</h4>
+        <h4 className="font-semibold text-t-white mb-1">{t("photoTitle")}</h4>
         <p className="text-sm text-t-phos-dim mb-3">
-          Add a photo of yourself. It is cropped to a square on your device before
-          it is sent, kept encrypted, and only you can open it.{staff ? "" : " It is never added to your resume."}
+          {t("photoIntro")}{staff ? "" : ` ${t("photoIntroResume")}`}
         </p>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -360,16 +348,16 @@ export function AvatarSettingsSection() {
             disabled={busy}
             size="sm"
           >
-            {busy ? "working..." : "upload a photo"}
+            {busy ? t("working") : t("uploadPhoto")}
           </TBtn>
         </div>
 
         {assets.length > 0 && (
           <div className="mt-4">
             <label className="text-xs text-t-phos-dim uppercase block mb-2">
-              Your photos
+              {t("yourPhotos")}
             </label>
-            <div className="flex flex-wrap gap-4" role="group" aria-label="Your photos">
+            <div className="flex flex-wrap gap-4" role="group" aria-label={t("yourPhotos")}>
               {assets.map((a) => {
                 const active = a.id === selectedPhotoId;
                 return (
@@ -379,8 +367,8 @@ export function AvatarSettingsSection() {
                       aria-pressed={active}
                       aria-label={
                         a.kind === "generated_headshot"
-                          ? "Use generated headshot"
-                          : "Use uploaded photo"
+                          ? t("useGenerated")
+                          : t("useUploaded")
                       }
                       onClick={() => selectPhoto(a.id)}
                       disabled={busy}
@@ -399,8 +387,8 @@ export function AvatarSettingsSection() {
                       />
                     </button>
                     <span className="text-[11px] text-t-phos-dim">
-                      {a.kind === "generated_headshot" ? "Generated" : "Uploaded"}
-                      {active ? " (in use)" : ""}
+                      {a.kind === "generated_headshot" ? t("generated") : t("uploadedLabel")}
+                      {active ? ` ${t("inUse")}` : ""}
                     </span>
                     <button
                       type="button"
@@ -408,7 +396,7 @@ export function AvatarSettingsSection() {
                       disabled={busy}
                       className="t-focus text-[11px] text-t-phos-dim underline hover:text-t-white disabled:opacity-50"
                     >
-                      remove
+                      {t("remove")}
                     </button>
                   </div>
                 );

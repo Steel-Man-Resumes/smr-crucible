@@ -12,12 +12,13 @@ import type React from "react";
  */
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { CheckCircle2, ChevronDown, LockKeyhole } from "lucide-react";
 import { lockedToolLine } from "@crucible/core/src/journeyStages";
 import { previewIdForHref } from "@/lib/featurePreviews";
 import { navKeepsDirectAccess, progressStateLabel, stepForNav, type ProgressStep, type ProgressStepId } from "@/lib/progression-ui";
 import {
-  ASK_TROY_ACTION, ASK_TROY_HINT, BOARD_GROUPS, STATIONS, boardShowsItem, boardSwitchAllows, expandedStation, linkIsCurrent, stationForPath, stationStatus,
+  BOARD_GROUPS, STATIONS, boardShowsItem, boardSwitchAllows, expandedStation, linkIsCurrent, stationForPath, stationStatus,
   type BoardLink, type Station, type StationId, type StationStatus,
 } from "@/lib/refinery-nav";
 import type { UserTier } from "@/lib/useUserTier";
@@ -48,6 +49,22 @@ export interface RefineryBoardProps {
   onItemClick?: () => void;
 }
 
+/** The slug a nav label is looked up by in the catalog (refineryShell.nav.labels), so the lib keeps the English. */
+function navSlug(english: string): string {
+  return english.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+/** The English words progressStateLabel returns, and the catalog key each one reads from. */
+const STATE_KEYS: Record<string, string> = {
+  "Completed": "completed",
+  "Recommended now · early access": "recommendedEarly",
+  "Early access": "early",
+  "Recommended now": "recommended",
+  "Next · locked": "nextLocked",
+  "Next · available": "nextAvailable",
+  "Available": "available",
+};
+
 interface Access {
   step: ProgressStep | null;
   guidedLocked: boolean;
@@ -59,6 +76,17 @@ interface Access {
 
 export function RefineryBoard(props: RefineryBoardProps) {
   const { userTier, pathname, steps, currentStepId, carryIds, onItemClick } = props;
+  const t = useTranslations("refineryShell.nav");
+  /** A nav label in the person's language; a label with no entry keeps its English. */
+  const word = (english: string): string => {
+    const key = `labels.${navSlug(english)}`;
+    return t.has(key) ? t(key) : english;
+  };
+  const stateWord = (step: ProgressStep): string => {
+    const english = progressStateLabel(step);
+    const key = STATE_KEYS[english];
+    return key ? t(`states.${key}`) : english;
+  };
   const here = stationForPath(pathname);
   const auto = expandedStation(pathname, currentStepId);
   const [opened, setOpened] = useState<Partial<Record<StationId, boolean>>>({});
@@ -83,8 +111,8 @@ export function RefineryBoard(props: RefineryBoardProps) {
     return (
       <button type="button" aria-haspopup="dialog" onClick={() => { onItemClick?.(); props.ask(step); }}
         className="t-focus board-ask mt-1 flex min-h-touch w-full flex-col items-start text-left">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-t-amber-bright underline underline-offset-2"><LockKeyhole size={11} aria-hidden="true" />{ASK_TROY_ACTION}</span>
-        <span className="text-[10px] leading-snug text-t-bone-dim">{ASK_TROY_HINT}</span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-t-amber-bright underline underline-offset-2"><LockKeyhole size={11} aria-hidden="true" />{t("askAction")}</span>
+        <span className="text-[10px] leading-snug text-t-bone-dim">{t("askHint")}</span>
       </button>
     );
   }
@@ -95,7 +123,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
     const header = opts.header;
     const current = a.unlocked && linkIsCurrent(item.href, pathname);
     const id = carryIds ? item.legacyId : undefined;
-    const label = props.labelFor(item);
+    const label = word(props.labelFor(item));
     const stepLine = header ? opts.status?.step ?? a.step : a.step;
     const cls = header
       ? `t-focus board-station-link ${current ? "is-here" : ""}`
@@ -103,10 +131,10 @@ export function RefineryBoard(props: RefineryBoardProps) {
     const body = (
       <span className="min-w-0 flex-1">
         <span className="block">{label}</span>
-        {header && !stepLine && header.blurb ? <span className="board-sub">{header.blurb}</span> : null}
-        {stepLine ? <span className="board-sub">{a.guidedLocked && a.directAccess ? "Guided step: " : ""}{header && opts.status?.named ? `${stepLine.label}: ` : ""}{progressStateLabel(stepLine)}</span> : null}
+        {header && !stepLine && header.blurb ? <span className="board-sub">{t(`blurbs.${header.id}`)}</span> : null}
+        {stepLine ? <span className="board-sub">{a.guidedLocked && a.directAccess ? t("guidedStep") : ""}{header && opts.status?.named ? `${stepLine.label}: ` : ""}{stateWord(stepLine)}</span> : null}
         {!a.unlocked ? <span className="board-sub board-lock-line">{a.lockLine}</span> : null}
-        {a.guidedLocked && !a.directAccess ? <span className="board-sub board-ask-hint"><LockKeyhole size={10} aria-hidden="true" className="mr-1 inline" />{ASK_TROY_ACTION}. {ASK_TROY_HINT}</span> : null}
+        {a.guidedLocked && !a.directAccess ? <span className="board-sub board-ask-hint"><LockKeyhole size={10} aria-hidden="true" className="mr-1 inline" />{t("askAction")}. {t("askHint")}</span> : null}
       </span>
     );
     const mark = !header ? (a.guidedLocked || !a.unlocked ? <LockKeyhole size={12} className="shrink-0 opacity-70" aria-hidden="true" /> : a.step?.state === "completed" ? <CheckCircle2 size={13} className="shrink-0 text-t-phos" aria-hidden="true" /> : null) : null;
@@ -118,7 +146,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
       control = (
         <Link id={id} href={a.unlocked ? item.href : `/dashboard/preview/${a.previewId}`} onClick={onItemClick}
           data-tour={`nav-${item.href.split(/[?#]/)[0].split("/").pop()}`} aria-current={current ? "page" : undefined}
-          title={!a.unlocked ? `${a.lockLine} See a preview.` : undefined} className={cls}>
+          title={!a.unlocked ? t("seePreview", { line: a.lockLine }) : undefined} className={cls}>
           {body}{mark}
         </Link>
       );
@@ -144,8 +172,8 @@ export function RefineryBoard(props: RefineryBoardProps) {
   const stations = STATIONS.filter((s) => boardShowsItem(s, userTier));
   return (
     <div className="refinery-board">
-      <p className="board-eyebrow">Your path</p>
-      <ol className="board-path" aria-label="Your path, in order">
+      <p className="board-eyebrow">{t("yourPath")}</p>
+      <ol className="board-path" aria-label={t("pathInOrder")}>
         {stations.map((station, index) => {
           const status = stationStatus(station, steps, currentStepId);
           const children = station.children.filter((c) => boardShowsItem(c, userTier) && boardSwitchAllows(c, props.switches));
@@ -159,14 +187,14 @@ export function RefineryBoard(props: RefineryBoardProps) {
                 <div className="min-w-0 flex-1">{row(station, { header: station, status, guided: true })}</div>
                 {children.length ? (
                   <button type="button" className="t-focus board-toggle" aria-expanded={isOpen} aria-controls={childrenId}
-                    aria-label={`${isOpen ? "Hide" : "Show"} ${station.label} views`}
+                    aria-label={t(isOpen ? "hideViews" : "showViews", { label: word(station.label) })}
                     onClick={() => setOpened((o) => ({ ...o, [station.id]: !isOpen }))}>
                     <ChevronDown size={14} aria-hidden="true" className={isOpen ? "rotate-180" : ""} />
                   </button>
                 ) : null}
               </div>
               {children.length ? (
-                <ul id={childrenId} hidden={!isOpen} aria-label={`${station.label} views`} className="board-children">
+                <ul id={childrenId} hidden={!isOpen} aria-label={t("views", { label: word(station.label) })} className="board-children">
                   {children.map((child) => (
                     <li key={`${child.href}:${child.label}`}>{row(child, { guided: child.href === "/dashboard/application-tailor" })}</li>
                   ))}
@@ -183,8 +211,8 @@ export function RefineryBoard(props: RefineryBoardProps) {
         const items = group.items.filter((item) => boardShowsItem(item, userTier) && boardSwitchAllows(item, props.switches) && !(group.id === "program" && props.hidePartner));
         if (!items.length) return null;
         return (
-          <section key={group.id} id={carryIds ? group.navId : undefined} data-tour={group.navId} aria-label={group.label} className="board-group">
-            <p className="board-eyebrow">{group.label}</p>
+          <section key={group.id} id={carryIds ? group.navId : undefined} data-tour={group.navId} aria-label={word(group.label)} className="board-group">
+            <p className="board-eyebrow">{word(group.label)}</p>
             <ul>{items.map((item) => <li key={`${item.href}:${item.label}`}>{row(item, { guided: false })}</li>)}</ul>
           </section>
         );

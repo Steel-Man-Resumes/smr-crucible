@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { CareerPlanner } from "@/components/paths/CareerPlanner";
 import { PathExplorer } from "@/components/paths/PathExplorer";
 
@@ -10,14 +11,15 @@ import { PathExplorer } from "@/components/paths/PathExplorer";
  * one tap away for anyone who already has some idea.
  */
 export default function PathsPage() {
+  const t = useTranslations("refineryJobs.pathsPage");
   const [compare, setCompare] = useState(false);
   return (
     <div className="space-y-10">
       <CareerPlanner />
-      <section aria-label="Compare directions yourself" className="border-t border-t-line pt-6">
+      <section aria-label={t("compareAria")} className="border-t border-t-line pt-6">
         {compare ? <PathExplorer headingLevel={2} /> : (
           <button type="button" aria-expanded={false} onClick={() => setCompare(true)} className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
-            Already have some idea? Compare directions yourself
+            {t("compareButton")}
           </button>
         )}
       </section>
