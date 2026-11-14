@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { TierGate } from "@/components/TierGate";
 import { useServerText } from "@/components/ServerTextProvider";
@@ -144,6 +144,7 @@ export default function ApplicationsPageWrapper() {
 
 function ApplicationsPage() {
   const t = useTranslations("refineryResume.applications");
+  const locale = useLocale();
   const ts = useServerText();
   // Shared-computer rule: only a local run marked as this user's is read.
   const ownerUid = useSession().data?.user?.id;
@@ -378,7 +379,7 @@ function ApplicationsPage() {
                                   {app.salary}
                                 </span>
                               )}
-                              <span>{timeAgo(app.status_updated_at, t)}</span>
+                              <span>{timeAgo(app.status_updated_at, t, locale)}</span>
                             </div>
                             {/* Per-job status (R1): what's done for this job. */}
                             <div className="mt-2">
@@ -589,7 +590,7 @@ function ApplicationsPage() {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function timeAgo(dateStr: string, t: (key: string, values?: Record<string, string | number>) => string): string {
+function timeAgo(dateStr: string, t: (key: string, values?: Record<string, string | number>) => string, locale?: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return t("ago.now");
@@ -598,5 +599,5 @@ function timeAgo(dateStr: string, t: (key: string, values?: Record<string, strin
   if (hours < 24) return t("ago.hours", { n: hours });
   const days = Math.floor(hours / 24);
   if (days < 7) return t("ago.days", { n: days });
-  return new Date(dateStr).toLocaleDateString();
+  return new Date(dateStr).toLocaleDateString(locale === "es" ? "es-US" : undefined);
 }

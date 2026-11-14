@@ -1,12 +1,13 @@
 "use client";
 import {useEffect,useState} from 'react';
-import {useTranslations} from 'next-intl';
+import {useLocale, useTranslations} from 'next-intl';
 import type {PublishedResource,PublishedResourceStep} from '@crucible/core';
 type SavedList={id:string;created_at:string};
 type Reopened={status:string;services:{id:string;status:string;data:PublishedResource|null}[];chains:{key:string;status:string;data:PublishedResourceStep[]}[]};
 const safeLink=(url:string|null)=>url && /^https?:\/\//i.test(url)?url:null;
 export function SavedResources({refresh=0}:{refresh?:number}){
  const t=useTranslations('refineryJobs.savedResources');
+ const locale=useLocale();
  const [lists,setLists]=useState<SavedList[]>([]),[opened,setOpened]=useState<Reopened|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{let live=true;fetch('/api/artifacts?type=resource_list&limit=20',{cache:'no-store'}).then(async res=>{
   if(!res.ok)throw new Error('Saved choices could not be read.');const body=await res.json();if(live)setLists(Array.isArray(body.data)?body.data:[]);
@@ -19,7 +20,7 @@ export function SavedResources({refresh=0}:{refresh?:number}){
   {error && <p role="status" className="text-sm text-t-amber">{error}</p>}
   {lists.length>0 && <details><summary className="cursor-pointer text-t-steel">{t('title')}</summary>
    <p className="my-2 text-sm text-t-phos-dim">{t('intro')}</p>
-   <ul>{lists.map((list,index)=><li key={list.id}><button type="button" disabled={busy} className="min-h-touch text-t-steel underline" onClick={()=>void open(list.id)}>{t('savedOn',{date:new Date(list.created_at).toLocaleDateString(),number:index+1})}</button></li>)}</ul>
+   <ul>{lists.map((list,index)=><li key={list.id}><button type="button" disabled={busy} className="min-h-touch text-t-steel underline" onClick={()=>void open(list.id)}>{t('savedOn',{date:new Date(list.created_at).toLocaleDateString(locale === "es" ? "es-US" : undefined),number:index+1})}</button></li>)}</ul>
   </details>}
   {opened?.status==='invalid' && <p role="status">{t('invalid')}</p>}
   {opened && <div className="mt-3 space-y-3">{opened.services.map(item=><div key={item.id} className="border border-t-line p-3">

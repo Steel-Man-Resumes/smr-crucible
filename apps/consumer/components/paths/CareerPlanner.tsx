@@ -283,7 +283,7 @@ export function CareerPlanner() {
           <ul className="mt-3 space-y-3">
             {notes.map((n) => (
               <li key={n.id} className="border-t border-t-line pt-3 space-y-1">
-                <p className="text-xs text-t-phos-dim">{new Date(n.savedAt).toLocaleDateString()}</p>
+                <p className="text-xs text-t-phos-dim">{new Date(n.savedAt).toLocaleDateString(locale === "es" ? "es-US" : undefined)}</p>
                 <p>{t("lookedAt",{list:n.directions.map((d) => ts(d.title)).join(", ")})}</p>
                 {n.choices.length > 0 && <p className="text-t-phos-dim">{t("saidMatters",{list:n.choices.map(ts).join("; ")})}</p>}
                 {n.nextStep && <p>{t("nextStep",{text:ts(n.nextStep)})}</p>}

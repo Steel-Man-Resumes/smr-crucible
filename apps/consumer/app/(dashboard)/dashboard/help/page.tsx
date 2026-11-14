@@ -18,7 +18,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
   readIdea,
   SUPPORT_CATEGORIES,
@@ -52,6 +52,7 @@ export default function HelpPage() {
 
 function HelpContent() {
   const t = useTranslations("refineryHome.help");
+  const locale = useLocale();
   const words = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
   const ts = useServerText();
   const searchParams = useSearchParams();
@@ -395,7 +396,7 @@ function HelpContent() {
                     {r.category
                       ? ((SUPPORT_CATEGORY_LABELS as Record<string, string>)[r.category] !== undefined ? t(`modes.${r.category}.label`) : r.category)
                       : t("messageFallback")}{" "}
-                    &middot; {new Date(r.created_at).toLocaleDateString()}
+                    &middot; {new Date(r.created_at).toLocaleDateString(locale === "es" ? "es-US" : undefined)}
                   </span>
                   <span className="text-xs px-2 py-0.5 border border-t-line text-t-phos-dim">
                     {r.category === "idea" ? t(`stages.${readIdea(r.context, r.status).stage}`) : words(`status.${displaySupportStatus(r.status)}`, displaySupportStatus(r.status))}

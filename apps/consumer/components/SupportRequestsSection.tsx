@@ -9,6 +9,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useLocale } from "next-intl";
 import {
   IDEA_STAGES, IDEA_STAGE_LABELS, readIdea, type IdeaStage,
   SUPPORT_CATEGORIES,
@@ -35,6 +36,7 @@ interface SupportRequest {
 const STATUS_ACTIONS = ["received", "seen", "fixed", "closed"] as const;
 
 export function SupportRequestsSection() {
+  const locale = useLocale();
   const [requests, setRequests] = useState<SupportRequest[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
@@ -190,7 +192,7 @@ export function SupportRequestsSection() {
                     {r.email || "no email"}
                     {r.page ? ` · from ${r.page}` : ""}
                     {" · "}
-                    {new Date(r.created_at).toLocaleString()}
+                    {new Date(r.created_at).toLocaleString(locale === "es" ? "es-US" : undefined)}
                     {filedByAssistant ? " · filed by t.ROY" : ""}
                   </span>
                 </div>
