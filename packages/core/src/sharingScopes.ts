@@ -54,7 +54,7 @@ export const SHARING_SCOPE_TEXT: Record<SharingScope, SharingScopeText> = {
   },
   resume: {
     label: "Your resume",
-    shows: "Your resumes as they are right now, including ones you tailored to a job, to read. They cannot change them.",
+    shows: "The resumes in your library as they are right now, including ones you tailored to a job, to read. They cannot change them.",
     never: "The edit history of a resume, your disclosure plan, and anything you said to the coach while building it.",
     firstTime: "This includes the resumes you have already made, not only new ones.",
   },
