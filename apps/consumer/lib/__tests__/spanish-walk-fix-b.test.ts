@@ -4,8 +4,8 @@
  * progress; plural agreement; dates; the five application status tiles at a
  * phone's width). Each test fails on the code before the fix.
  *
- * F14 is a layout finding. These tests read the classes and structure; they do
- * not render a browser, so the fix is NOT visually verified.
+ * F14 (layout) is held on branch fix/spanish-walk-b-f14 until Troy has looked at it. These tests
+ * render components and read catalogs; no browser is used, so nothing here is visually verified.
  */
 import { test } from "node:test";
 import React, { createElement } from "react";
@@ -145,19 +145,6 @@ test("F13: a draft shows 'Revisar y terminar' in Spanish and 'Check and finish' 
   assert.match(en, /Draft: check it before you send it\./);
   const fin = intlMarkup(createElement(CheckAndFinish, { artifactId: "a1", status: "finished" }), "es");
   assert.match(fin, /Terminado\. Las descargas usan la versión revisada\./);
-});
-
-// ---- F14: the five status tiles at 390 px (structure only; not visually verified) -------------------
-
-test("F14: the status tiles lay out as a grid that cannot be wider than the phone", () => {
-  for (const file of ["app/(dashboard)/dashboard/applications/page.tsx", "app/(dashboard)/dashboard/progress/page.tsx"]) {
-    const src = read(file);
-    assert.doesNotMatch(src, /min-w-\[80px\]/, `${file}: the 80 px minimum (5 x 80 + gaps = 432 px) is gone`);
-    assert.match(src, /className="grid grid-cols-3 gap-2 (?:mb-6 )?sm:grid-cols-5">/, file);
-    assert.match(src, /className=\{?[`"]min-w-0 break-words p-3 border text-center/, file);
-  }
-  // The tour still finds the overview.
-  assert.match(read("app/(dashboard)/dashboard/applications/page.tsx"), /id="refinery-tool-application-overview" className="grid grid-cols-3/);
 });
 
 // ---- F15, F16, F17: the guide line on three pages -----------------------------------------------------
