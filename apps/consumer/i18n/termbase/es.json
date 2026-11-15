@@ -14,6 +14,16 @@
       "status": "locked"
     },
     {
+      "id": "ai-allowance",
+      "en": "AI allowance",
+      "es": "cupo de IA",
+      "avoid": [
+        "\\bcuotas?\\s+(?:diaria\\s+|actual\\s+)?de\\s+(?:IA|gasto)"
+      ],
+      "note": "Locked wording in the 2026-11-15 fix brief (signed-in walk F01, F20): the AI allowance is \"cupo de IA\", never \"cuota de IA\". \"cuota\" reads as a fee or a sales quota. Fees stay \"cuotas\" in the plans text.",
+      "status": "locked"
+    },
+    {
       "id": "clear-this-computer",
       "en": "clear this computer",
       "es": "borrar los datos de esta computadora",

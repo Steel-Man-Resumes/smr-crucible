@@ -220,7 +220,7 @@
   },
   "errors": {
     "access": "No pude revisar tu acceso al chat. Tu trabajo guardado está seguro. Inténtalo de nuevo en un rato; si sigue pasando, reporta un error de acceso al coach.",
-    "allowance": "Se usó tu cuota actual de IA. Puedes pedir más desde la barra de progreso o volver después del reinicio diario. Tu trabajo guardado sigue disponible.",
+    "allowance": "Se usó tu cupo de IA actual. Puedes pedir más desde la barra de progreso o volver después del reinicio diario. Tu trabajo guardado sigue disponible.",
     "generic": "El coach no pudo terminar esta respuesta. Tu trabajo guardado sigue disponible. Inténtalo de nuevo en un momento."
   },
   "input": {
