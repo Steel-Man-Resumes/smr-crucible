@@ -42,6 +42,8 @@ export interface AiCallMeta {
   outcome?: 'succeeded' | 'failed' | 'unknown';
   /** Provider gave no usage (including transport failures). Never imply free. */
   usageMissing?: boolean;
+  /** Sampling temperature for the Anthropic call. Unset sends nothing (the provider default), as every other caller does. Never stored. */
+  temperature?: number;
 }
 export interface CostMeasurement {
   costUsd: number | null;

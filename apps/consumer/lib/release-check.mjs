@@ -31,6 +31,7 @@ export const RELEASE_REQUIRES_ACCOUNTS_ENV = "SMR_RELEASE_REQUIRES_ACCOUNTS";
 export const RELEASE_WALL_ENV = "NEXT_PUBLIC_FORGE_SIGN_IN_WALL";
 export const RELEASE_PREMIUM_ENV = "PREMIUM_GATE";
 export const RELEASE_RECORD_CHECK_ENV = "RECORD_CHECK_ENABLED";
+export const RELEASE_SPANISH_READING_ENV = "SPANISH_READING_ENABLED";
 
 /**
  * An on/off switch. Unset or blank is "unset". "on"/"off" in any case, with
@@ -87,6 +88,7 @@ export function releaseCheck(env) {
   const wall = readOnOff(env[RELEASE_WALL_ENV]);
   const premium = readOnOff(env[RELEASE_PREMIUM_ENV]);
   const recordsSwitch = readOnOff(env[RELEASE_RECORD_CHECK_ENV]);
+  const spanishReading = readOnOff(env[RELEASE_SPANISH_READING_ENV]);
 
   if (req.malformed) {
     errors.push(
@@ -125,13 +127,20 @@ export function releaseCheck(env) {
         `At run time anything but "on" keeps the record check off.`
     );
   }
+  if (spanishReading.malformed) {
+    errors.push(
+      `${RELEASE_SPANISH_READING_ENV}="${env[RELEASE_SPANISH_READING_ENV]}" is not "on" or "off". ` +
+        `At run time anything but "on" keeps the Spanish reading off.`
+    );
+  }
 
   summary.push(
     `accounts required by release flag: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : req.set ? "no (set to 0)" : "no (not set)"}`,
     `production build: ${isProductionBuild(env) ? "yes" : "no"}`,
     `Forge sign-in wall switch: ${wall.malformed ? "UNREADABLE" : wall.value ?? "unset (account requirement active by default)"}`,
     `premium gate: ${premium.malformed ? "UNREADABLE" : premium.value === "on" ? "on" : "off"}`,
-    `record check: ${recordsSwitch.malformed ? "UNREADABLE" : recordsSwitch.value === "on" ? "on" : "off"}`
+    `record check: ${recordsSwitch.malformed ? "UNREADABLE" : recordsSwitch.value === "on" ? "on" : "off"}`,
+    `Spanish reading: ${spanishReading.malformed ? "UNREADABLE" : spanishReading.value === "on" ? "on" : "off"}`
   );
 
   return { ok: errors.length === 0, errors, summary };
