@@ -159,7 +159,7 @@ export const TOOLS: Array<{ group: string; name: string; body: string; art?: str
   { group: "Find work", name: "Employers That Hire", body: "Employers with dated public evidence that they hire people with records. Each mark shows the source, the date we checked and when it expires." },
   { group: "Find work", name: "Applications", body: "Track every application from saved to offer. When a follow-up comes due, your coach tells you and helps draft the note." },
   { group: "Find work", name: "Get support", body: "Rides, ID, a place to stay, food, and legal help with a record, close to where you live." },
-  { group: "My stuff", name: "Library and Vault", body: "Everything you make is kept to reopen. The Vault holds ID, certificates, letters and court papers, encrypted, opened only from your own signed-in session." },
+  { group: "My stuff", name: "My resumes and Vault", body: "Everything you make is kept to reopen. The Vault holds ID, certificates, letters and court papers, encrypted, opened only from your own signed-in session." },
   { group: "My stuff", name: "Your next step", body: "Rules pick the one most useful next step. Your progress page counts real actions, not guesses." },
 ];
 

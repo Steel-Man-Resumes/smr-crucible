@@ -98,7 +98,7 @@
       "p1": "Las preguntas sobre antecedentes penales piden saber en qué situaciones sale el tema, qué tipo de antecedentes penales tienes, hace cuánto tiempo, si estás bajo supervisión y tus propias palabras. Puedes saltarte cualquiera. Este plan nunca te pregunta qué pasó.",
       "p2": "Con tu sí, esas respuestas pueden ir a un servicio de IA (el principal, o uno de respaldo si el principal no funciona) para que te vuelva a leer tu plan, y tus propias palabras sobre tus antecedentes penales se usan en la práctica con t.ROY. La IA nunca reescribe tus líneas sobre tus antecedentes penales. Sin tu sí, ninguna respuesta sobre tus antecedentes penales va a ninguna IA.",
       "p3": "Tu sí se guarda en tu cuenta con la fecha, y puedes retirarlo aquí cuando quieras.",
-      "p4": "Tus respuestas y tus palabras sobre tus antecedentes penales nunca se guardan: ni en tu plan, ni en tu Biblioteca, ni con una solicitud de trabajo. Cópialas o descárgalas antes de salir de la página.",
+      "p4": "Tus respuestas y tus palabras sobre tus antecedentes penales nunca se guardan: ni en tu plan, ni en Mis currículums, ni con una solicitud de trabajo. Cópialas o descárgalas antes de salir de la página.",
       "yes": "Sí, un servicio de IA puede usarlas",
       "no": "No, mantén mis respuestas sobre antecedentes penales lejos de la IA"
     },
@@ -148,7 +148,7 @@
     },
     "toast": {
       "title": "Plan guardado",
-      "body": "Está en tu Biblioteca"
+      "body": "Está en Mis currículums"
     }
   },
   "coach": {
@@ -347,7 +347,7 @@
       "title": "Comentarios sobre tu entrevista",
       "intro": "Así te fue. Recuerda, esto es práctica, no perfección.",
       "savingRecord": "Guardando el registro de tu práctica...",
-      "recordFailed": "No se confirmó el guardado del registro de tu práctica. Tu informe sigue aquí. Revisa tu Biblioteca antes de intentarlo de nuevo, o descarga una copia.",
+      "recordFailed": "No se confirmó el guardado del registro de tu práctica. Tu informe sigue aquí. Revisa Mis currículums antes de intentarlo de nuevo, o descarga una copia.",
       "retrySave": "Volver a guardar la práctica",
       "didWell": "Lo que hiciste bien",
       "workOn": "En qué puedes mejorar",
@@ -453,14 +453,14 @@
     "coaching": {
       "lead": "Esto es orientación profesional, no asesoría legal.",
       "body": "Se arma con tus respuestas. Lo que no contestaste queda abierto. Aquí no se llena nada con una suposición.",
-      "saved": "Lo que se guarda en tu Biblioteca: el trabajo que nombraste y tu plan para los otros obstáculos (y queda ligado a ese trabajo si llegaste aquí desde uno). Lo que no se guarda: la parte de tus antecedentes penales, cualquier otra cosa que escribiste y la lectura de t.ROY. La parte de tus antecedentes penales solo queda en esta pantalla hasta que la copies o la descargues."
+      "saved": "Lo que se guarda en Mis currículums: el trabajo que nombraste y tu plan para los otros obstáculos (y queda ligado a ese trabajo si llegaste aquí desde uno). Lo que no se guarda: la parte de tus antecedentes penales, cualquier otra cosa que escribiste y la lectura de t.ROY. La parte de tus antecedentes penales solo queda en esta pantalla hasta que la copies o la descargues."
     },
     "save": {
-      "saved": "Guardado en tu Biblioteca, sin la parte de tus antecedentes penales. Puedes volver a verlo ahí.",
+      "saved": "Guardado en Mis currículums, sin la parte de tus antecedentes penales. Puedes volver a verlo ahí.",
       "saving": "Guardando tu plan...",
       "failed": "{error} Tu plan sigue aquí. Intenta guardarlo de nuevo, o descarga una copia.",
       "idle": "Todavía no se guarda.",
-      "openLibrary": "Abrir Biblioteca",
+      "openLibrary": "Abrir Mis currículums",
       "tryAgain": "Intentar guardar de nuevo",
       "saveThis": "Guardar este plan"
     },

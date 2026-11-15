@@ -98,7 +98,7 @@
       "p1": "The record questions ask where it comes up, the kind of record, how long ago, supervision, and your own words. Every one can be skipped. This plan never asks what happened.",
       "p2": "With your yes, those answers can go to an AI service (our main one, or a backup if it is down) to read your plan back to you, and your own record words go into practice with t.ROY. AI never rewrites your record lines. Without your yes, no record answer goes to any AI.",
       "p3": "Your yes is saved to your account with the date, and you can take it back here any time.",
-      "p4": "Your record answers and your record words are never saved: not in your plan, not in your Library, not with a job application. Copy or download them before you leave the page.",
+      "p4": "Your record answers and your record words are never saved: not in your plan, not in My resumes, not with a job application. Copy or download them before you leave the page.",
       "yes": "Yes, an AI service can use them",
       "no": "No, keep my record answers away from AI"
     },
@@ -148,7 +148,7 @@
     },
     "toast": {
       "title": "Plan saved",
-      "body": "It's in your Library"
+      "body": "It's in My resumes"
     }
   },
   "coach": {
@@ -347,7 +347,7 @@
       "title": "Interview Feedback",
       "intro": "Here's how you did. Remember, this is about practice, not perfection.",
       "savingRecord": "Saving your practice record...",
-      "recordFailed": "Your practice record save has not been confirmed. Your report is still here. Check your Library before retrying, or download a copy.",
+      "recordFailed": "Your practice record save has not been confirmed. Your report is still here. Check My resumes before retrying, or download a copy.",
       "retrySave": "Retry saving practice",
       "didWell": "What you did well",
       "workOn": "Areas to work on",
@@ -453,14 +453,14 @@
     "coaching": {
       "lead": "This is coaching, not legal advice.",
       "body": "It is built from your answers. Anything you did not answer stays open. Nothing here is filled in with a guess.",
-      "saved": "What gets saved to your Library: the job you named and your plan for the other hurdles (and it stays with a job if you came here from one). Not saved: the record part, anything else you typed, and t.ROY's reading. The record part stays only on this screen until you copy or download it."
+      "saved": "What gets saved in My resumes: the job you named and your plan for the other hurdles (and it stays with a job if you came here from one). Not saved: the record part, anything else you typed, and t.ROY's reading. The record part stays only on this screen until you copy or download it."
     },
     "save": {
-      "saved": "Saved to your Library, without the record part. You can come back to it there.",
+      "saved": "Saved in My resumes, without the record part. You can come back to it there.",
       "saving": "Saving your plan...",
       "failed": "{error} Your plan is still here. Try saving again, or download a copy.",
       "idle": "Not saved yet.",
-      "openLibrary": "Open Library",
+      "openLibrary": "Open My resumes",
       "tryAgain": "Try saving again",
       "saveThis": "Save this plan"
     },

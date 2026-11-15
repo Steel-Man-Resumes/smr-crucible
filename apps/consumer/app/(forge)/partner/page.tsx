@@ -87,7 +87,7 @@ const WHAT_CLIENTS_GET = [
   { tool: "Disclosure Planner", desc: "When and how to talk about their record with specific employers" },
   { tool: "Interview Practice", desc: "Text or voice mock interviews, including disclosure-specific questions" },
   { tool: "Applications Tracker", desc: "Track every application by company, status, resume version used, and follow-up emails" },
-  { tool: "Library", desc: "Every resume, cover letter, disclosure plan and follow-up the person made" },
+  { tool: "My resumes", desc: "Every resume, cover letter, disclosure plan and follow-up the person made" },
   { tool: "t.ROY (AI coach)", desc: "Available on every page. Research-grounded, 10 behavioral rules, never prescriptive" },
 ];
 

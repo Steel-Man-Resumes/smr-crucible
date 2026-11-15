@@ -30,7 +30,7 @@ export interface PersonView {
 
 export const SHARE_SCOPES: { key: ShareScope; label: string; wouldShow: string }[] = [
   { key: "applications", label: "Applications", wouldShow: "the jobs they are tracking, where each one stands, and their follow-up dates. Never their private notes on a job or the pay they wrote down." },
-  { key: "resume", label: "Resumes", wouldShow: "the resumes in their library as they stand now, to read. Never the edit history, and never their disclosure plan." },
+  { key: "resume", label: "Resumes", wouldShow: "their resumes as they stand now, to read. Never the edit history, and never their disclosure plan." },
   { key: "documents", label: "Cover letters", wouldShow: "their cover letters as they stand now, to read." },
 ];
 
@@ -186,7 +186,7 @@ export interface ScreenArea { station: StationId; holds: string; scopes: ShareSc
 export const THEIR_SCREEN: readonly ScreenArea[] = [
   { station: "overview", holds: "Where they are and the next step they are being shown.", scopes: [] },
   { station: "find", holds: "Where they search for jobs, explore paths and look up employers.", scopes: ["applications"] },
-  { station: "tailor", holds: "Their resume library, the resumes they fit to one job, and their cover letters.", scopes: ["resume", "documents"] },
+  { station: "tailor", holds: "Their resumes, including the ones they fit to one job, and their cover letters.", scopes: ["resume", "documents"] },
   { station: "plan", holds: "Their plan for if and how to talk about their record, and their private records and documents.", scopes: [], never: "Never shared with staff, by design. No program can require it." },
   { station: "practice", holds: "Interview practice, including voice practice.", scopes: [], never: "Never shared with staff, by design. With progress sharing on you see only how many sessions." },
   { station: "apply", holds: "Each application they are tracking and where it stands.", scopes: ["applications"] },

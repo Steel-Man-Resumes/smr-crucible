@@ -50,7 +50,7 @@ test("every tool from the old nav is still on the board", () => {
     "/dashboard/settings#data", "/dashboard/partner", "/dashboard/help", "/dashboard/help?mode=idea", "/dashboard/settings", "/dashboard/admin",
     "/dashboard/admin/access-requests"]) assert.ok(hrefs.has(href), href);
   const tailor = STATIONS.find((s) => s.id === "tailor")!;
-  assert.deepEqual(tailor.children.map((c) => c.label), ["Master Draft", "Resumes and versions", "Tailor for a job", "Creative work", "CV", "Performer page"]);
+  assert.deepEqual(tailor.children.map((c) => c.label), ["Master Draft", "My resumes", "Tailor for a job", "Creative work", "CV", "Performer page"]);
   const plan = STATIONS.find((s) => s.id === "plan")!;
   assert.deepEqual(plan.children.map((c) => c.label), ["Disclosure plan", "Vault"]);
   // Interview practice never needed a disclosure plan (Phase 5 R4.5).

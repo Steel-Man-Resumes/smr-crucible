@@ -380,7 +380,7 @@ describe("save truth", () => {
   it("a 200 with an id is saved", async () => {
     const s = await attempt(new Response(JSON.stringify({ data: { id: "123e4567-e89b-12d3-a456-426614174000" } }), { status: 200 }));
     assert.equal(s.status, "saved");
-    assert.match(saveLine(s), /^Saved to your Library/);
+    assert.match(saveLine(s), /^Saved in My resumes/);
   });
   it("a late receipt for an older plan does not mark the new plan saved", () => {
     let s = saveReducer(INITIAL_SAVE, { type: "changed" });
