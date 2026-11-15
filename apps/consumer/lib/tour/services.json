@@ -105,7 +105,7 @@
    "need": "Vault",
    "services": [
     "Vault",
-    "Library of your work"
+    "My resumes"
    ],
    "status": "here"
   },
@@ -511,7 +511,7 @@
   },
   {
    "station": "Toolbox",
-   "service": "Library of your work",
+   "service": "My resumes",
    "status": "LIVE"
   },
   {

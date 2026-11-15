@@ -245,7 +245,7 @@ test("generator refusals map to per-job codes", () => {
   assert.equal(generatorFailure({ ok: false, status: 500, body: {} }).code, "tailor_failed");
 });
 
-test("an application already past saved keeps its resume; the new one goes to the Library", async () => {
+test("an application already past saved keeps its resume; the new one goes to My resumes", async () => {
   const acct = account();
   acct.applications.push({ id: "00000000-0000-4000-8000-00000000bbbb", title: "Warehouse Associate 1", company: "Example Co 1", source_id: "job-1", status: "interviewing" });
   const final = await runBatch(newBatch([job(1)]), [0], clientDeps(acct));

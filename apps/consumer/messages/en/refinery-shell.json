@@ -256,7 +256,7 @@
       "explore_paths": "Explore paths",
       "employers": "Employers",
       "master_draft": "Master Draft",
-      "resumes_and_versions": "Resumes and versions",
+      "my_resumes": "My resumes",
       "tailor_for_a_job": "Tailor for a job",
       "creative_work": "Creative work",
       "cv": "CV",
@@ -331,8 +331,8 @@
       "j5": {
         "time": "Ongoing",
         "name": "Applications + Follow-Up",
-        "what": "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them to the Library.",
-        "tech": "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. Library = everything you made (the My resumes page)."
+        "what": "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them in My resumes.",
+        "tech": "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. My resumes = everything you made."
       }
     },
     "protocolTitle": "The behavioral protocol",

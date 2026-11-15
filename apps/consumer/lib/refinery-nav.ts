@@ -66,7 +66,7 @@ export const STATIONS: readonly Station[] = [
     ...C, steps: ["foundation", "tailor"], currentFor: ["foundation", "tailor"],
     children: [
       { href: "/dashboard/master", label: "Master Draft", ...C },
-      { href: "/dashboard/vault", label: "Resumes and versions", ...C },
+      { href: "/dashboard/vault", label: "My resumes", ...C },
       { href: "/dashboard/application-tailor", label: "Tailor for a job", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/creative", label: "Creative work", ...C },
       { href: "/dashboard/cv", label: "CV", ...C },

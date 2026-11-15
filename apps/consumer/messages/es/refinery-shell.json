@@ -256,7 +256,7 @@
       "explore_paths": "Explorar caminos",
       "employers": "Empleadores",
       "master_draft": "Borrador maestro",
-      "resumes_and_versions": "Currículums y versiones",
+      "my_resumes": "Mis currículums",
       "tailor_for_a_job": "Adaptar para una oferta",
       "creative_work": "Trabajo creativo",
       "cv": "CV",
@@ -331,8 +331,8 @@
       "j5": {
         "time": "Continuo",
         "name": "Solicitudes y seguimiento",
-        "what": "Lleva el registro de cada solicitud: empresa, estado, fechas y qué versión del currículum usaste. Genera correos de seguimiento y guárdalos en la Biblioteca.",
-        "tech": "Tabla job_application en Neon. Sistema de artefactos de The Refinery para los correos de seguimiento y las cartas de presentación. Biblioteca = todo lo que hiciste (la página Mis currículums)."
+        "what": "Lleva el registro de cada solicitud: empresa, estado, fechas y qué versión del currículum usaste. Genera correos de seguimiento y guárdalos en Mis currículums.",
+        "tech": "Tabla job_application en Neon. Sistema de artefactos de The Refinery para los correos de seguimiento y las cartas de presentación. Mis currículums = todo lo que hiciste."
       }
     },
     "protocolTitle": "El protocolo de conducta",

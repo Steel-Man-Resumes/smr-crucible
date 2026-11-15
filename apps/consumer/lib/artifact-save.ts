@@ -7,6 +7,6 @@ export async function saveArtifactReceipt(payload: unknown, expectedAccountId: s
   });
   const result = await response.json().catch(() => null);
   const id = result?.data?.id;
-  if (!response.ok || typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error("The save could not be confirmed. Your work is still here. Check your Library before retrying.");
+  if (!response.ok || typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) throw new Error("The save could not be confirmed. Your work is still here. Check My resumes before retrying.");
   return id;
 }
