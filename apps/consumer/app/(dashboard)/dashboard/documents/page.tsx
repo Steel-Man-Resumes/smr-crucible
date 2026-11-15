@@ -266,7 +266,8 @@ export default function VaultDocumentsPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
-      <p className="text-t-phos-dim mt-1">
+      <p className="text-sm uppercase tracking-wide text-t-phos-dim mt-1" data-testid="vault-subtitle">{t("subtitle")}</p>
+      <p className="text-t-phos-dim mt-3">
         {t("intro")}
       </p>
       <p className="text-xs text-t-phos-dim mt-2" data-testid="vault-lanes-note">

@@ -246,7 +246,7 @@
       "redeemError": "No se pudo canjear el código",
       "wentWrong": "Algo salió mal. Inténtalo de nuevo.",
       "exportFailed": "No se pudieron exportar tus datos. Inténtalo de nuevo.",
-      "documentsFailed": "No se pudieron descargar tus documentos en un solo ZIP. Descárgalos uno por uno desde Registros y documentos privados.",
+      "documentsFailed": "No se pudieron descargar tus documentos en un solo ZIP. Descárgalos uno por uno desde la Bóveda.",
       "sections": {
         "account": "Cuenta",
         "coach": "Coach e IA",
@@ -290,7 +290,7 @@
       "handleSell": "Nunca vendemos tu información personal. Solo llega a los servicios que hacen funcionar la app, y a un programa cuando tú decides compartirla con él",
       "handleAnytime": "Puedes exportar o eliminar tus datos en cualquier momento",
       "downloadTitle": "Descarga tus datos",
-      "downloadBody": "Recibe una copia de lo que tenemos guardado, en un solo archivo. Deja todas las casillas marcadas para una copia completa. Tus archivos de documentos vienen aparte, con el botón de más abajo.",
+      "downloadBody": "Recibe una copia de lo que tenemos guardado, en un solo archivo. Deja todas las casillas marcadas para una copia completa. Los archivos de tu Bóveda vienen aparte, con el botón de más abajo.",
       "passwordLabel": "Contraseña para las descargas",
       "passwordHelp": "Si tu cuenta tiene contraseña, escríbela aquí. Si no tiene, déjalo en blanco. Confirma el dispositivo abajo antes de descargar.",
       "boxes": {
@@ -311,7 +311,7 @@
         "disclosure_rehearsal": "las transcripciones de tu práctica para hablar de tus antecedentes penales",
         "interview_voice": "las transcripciones de tu práctica de entrevista",
         "avatar": "la lista de tus fotos",
-        "vault": "la lista de tus documentos"
+        "vault": "la lista de lo que hay en tu Bóveda"
       },
       "leavesOut": "Esta copia no incluye {list}. Marca todas las casillas para una copia completa.",
       "sharedWarning": "Estos archivos tienen tu historial de chat, tus revisiones de antecedentes penales y tus documentos. En una computadora compartida o de biblioteca, cualquiera que abra la carpeta de Descargas puede leerlos. Descarga solo en tu propio teléfono o computadora, o borra los archivos y vacía la papelera cuando termines.",
@@ -319,8 +319,8 @@
       "preparing": "Preparando...",
       "downloaded": "Descargado",
       "export": "Exportar",
-      "docsTitle": "Tus archivos de documentos",
-      "docsBody": "Todos los archivos de Registros y documentos privados, en un solo ZIP, hasta unos 4 MB a la vez. Si tienes más que eso, descárgalos uno por uno desde esa página.",
+      "docsTitle": "Los archivos de tu Bóveda",
+      "docsBody": "Todos los archivos de tu Bóveda, en un solo ZIP, hasta unos 4 MB a la vez. Si tienes más que eso, descárgalos uno por uno desde esa página.",
       "docsButton": "Descargar mis documentos"
     },
     "accountExtras": {
@@ -554,7 +554,7 @@
         "need": "Seguimiento de postulaciones"
       },
       "vault": {
-        "need": "Caja segura de documentos"
+        "need": "Bóveda"
       },
       "coach": {
         "need": "Coach de carrera con IA"

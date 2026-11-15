@@ -102,9 +102,9 @@
   },
   {
    "id": "vault",
-   "need": "Document safe",
+   "need": "Vault",
    "services": [
-    "Private documents vault",
+    "Vault",
     "Library of your work"
    ],
    "status": "here"
@@ -506,7 +506,7 @@
   },
   {
    "station": "What comes next",
-   "service": "Private documents vault",
+   "service": "Vault",
    "status": "LIVE"
   },
   {

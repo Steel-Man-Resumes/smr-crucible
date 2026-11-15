@@ -262,7 +262,7 @@
       "cv": "CV",
       "performer_page": "Performer page",
       "disclosure_plan": "Disclosure plan",
-      "private_records_and_documents": "Private records and documents",
+      "vault": "Vault",
       "local_help": "Local help",
       "toolbox": "Toolbox",
       "you": "You",
@@ -332,7 +332,7 @@
         "time": "Ongoing",
         "name": "Applications + Follow-Up",
         "what": "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them to the Library.",
-        "tech": "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. Library = the vault of all your generated documents."
+        "tech": "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. Library = everything you made (the My resumes page)."
       }
     },
     "protocolTitle": "The behavioral protocol",

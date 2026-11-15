@@ -107,7 +107,7 @@ export const TOUR_TOOLS: readonly TourTool[] = [
   { name: "My resumes", line: "Every resume and letter you make, saved in one place.", segment: "vault" },
   { name: "Disclosure Planner", line: "Plan what to say about your record, and practice it out loud.", segment: "disclosure" },
   { name: "Interview Prep", line: "Mock interviews by text or voice, with feedback.", segment: "interview" },
-  { name: "Private documents", line: "A private place for your ID, certificates and reference letters.", segment: "documents" },
+  { name: "Vault", line: "A private place for your ID, certificates, reference letters and court papers.", segment: "documents" },
   { name: "Applications", line: "Track each job from saved to offered.", segment: "applications" },
 ];
 

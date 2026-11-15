@@ -112,7 +112,7 @@ export const SHARING_REQUIRED_TEXT = {
     "Acknowledging opens the listed items to the staff described below, which may include program administrators. They can read these items here but cannot edit them here. Their access through this sharing feature is logged for you to see. Stopping sharing cannot take back information they already read or copied.",
   coversExisting: "This covers what you have already made here, not only what you make from now on.",
   coversFuture: "This requirement opens only items created after you acknowledge it. Earlier items are not opened by this requirement. Anything you already chose to share stays shared until you turn that sharing off.",
-  neverRequired: "This sharing feature does not let programs require access to your disclosure plan, interview practice or vault files. Resumes and cover letters are separate items and can be listed above. Sensitive information you put into a shared resume, letter or application may still be visible there.",
+  neverRequired: "This sharing feature does not let programs require access to your disclosure plan, interview practice or Vault files. Resumes and cover letters are separate items and can be listed above. Sensitive information you put into a shared resume, letter or application may still be visible there.",
   notLockedOut:
     "Declining this acknowledgement does not close your Steel Man account or delete your work. It does not open the listed items under this requirement. Your program can see that you have not acknowledged; information you already shared and program membership records may still be visible. Ask the program what declining means for its services or any court or supervision requirements.",
   stopping:

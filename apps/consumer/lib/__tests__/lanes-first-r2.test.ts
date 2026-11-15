@@ -452,10 +452,16 @@ test("Check and finish appears on the lane home, My resumes and the Tailor resul
 test("Refinery names: the board's stations and every tool still in the nav", () => {
   // The nav became a path of stations (2026-10-23); its labels live in lib/refinery-nav.ts.
   const shell = read("lib/refinery-nav.ts");
-  for (const label of ["Overview", "Find work", "Tailor and package", "Plan what to say", "Practice", "Apply and track", "What comes next", "Local help", "Private records and documents", "Tailor for a job", "Creative work", "CV", "Performer page", "Disclosure plan", "Progress", "Settings"]) {
+  for (const label of ["Overview", "Find work", "Tailor and package", "Plan what to say", "Practice", "Apply and track", "What comes next", "Local help", "Vault", "Tailor for a job", "Creative work", "CV", "Performer page", "Disclosure plan", "Progress", "Settings"]) {
     assert.ok(shell.includes(`label: "${label}"`), label);
   }
-  for (const old of ['label: "Job Paths"', 'label: "Library"', 'label: "Vault"']) assert.ok(!shell.includes(old), old);
+  for (const old of ['label: "Job Paths"', 'label: "Library"']) assert.ok(!shell.includes(old), old);
+  // Vault names the document store (/dashboard/documents) and never the resume library (/dashboard/vault).
+  const navLines = shell.split("\n");
+  const resumeLines = navLines.filter((l) => l.includes('href: "/dashboard/vault"'));
+  const documentLines = navLines.filter((l) => l.includes('href: "/dashboard/documents"'));
+  assert.ok(resumeLines.length > 0 && resumeLines.every((l) => !l.includes('label: "Vault"')), "resume library must not be labeled Vault");
+  assert.ok(documentLines.length > 0 && documentLines.every((l) => l.includes('label: "Vault"')), "documents must be labeled Vault");
 });
 
 test("Get support reads R3's fields: coverage line, last checked, source; older answers still render", () => {

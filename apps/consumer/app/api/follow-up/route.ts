@@ -4,7 +4,7 @@
  * Drafts a short, professional follow-up message for a saved job application,
  * using the application's details (role, company, how long since applied) and the
  * candidate's strengths. Closes the Stage 6 loop: when a follow-up comes due, the
- * user can generate a message to send. Saves a `follow_up` artifact to the vault.
+ * user can generate a message to send. Saves a `follow_up` artifact to the Library (My resumes).
  */
 
 import { NextResponse } from "next/server";
@@ -120,7 +120,7 @@ Return JSON only:
     }
     result = plainPunctuation(result, logDashSwaps("follow-up"));
 
-    // Save to the vault as a follow_up artifact (not a journey gate).
+    // Save to the Library (My resumes) as a follow_up artifact (not a journey gate).
     try {
       await createArtifact(
         session.user.id,

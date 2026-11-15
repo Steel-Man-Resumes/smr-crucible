@@ -246,7 +246,7 @@
       "redeemError": "Could not redeem code",
       "wentWrong": "Something went wrong. Try again.",
       "exportFailed": "Failed to export data. Please try again.",
-      "documentsFailed": "Your documents could not be downloaded in one ZIP. Download them one at a time from Private records and documents.",
+      "documentsFailed": "Your documents could not be downloaded in one ZIP. Download them one at a time from the Vault.",
       "sections": {
         "account": "Account",
         "coach": "Coach & AI",
@@ -290,7 +290,7 @@
       "handleSell": "We never sell your personal information. It goes only to the services that run the app, and to a program when you choose to share with it",
       "handleAnytime": "You can export or delete your data at any time",
       "downloadTitle": "Download your data",
-      "downloadBody": "Get a copy of what we have stored, as one file. Keep every box ticked for a full copy. Your document files come separately, with the button further down.",
+      "downloadBody": "Get a copy of what we have stored, as one file. Keep every box ticked for a full copy. Your Vault files come separately, with the button further down.",
       "passwordLabel": "Password for downloads",
       "passwordHelp": "If your account has a password, enter it here. If it has no password, leave this blank. Confirm the device below before downloading.",
       "boxes": {
@@ -311,7 +311,7 @@
         "disclosure_rehearsal": "disclosure practice transcripts",
         "interview_voice": "interview practice transcripts",
         "avatar": "the list of your photos",
-        "vault": "the list of your documents"
+        "vault": "the list of what is in your Vault"
       },
       "leavesOut": "This copy leaves out {list}. Tick every box for a full copy.",
       "sharedWarning": "These files hold your chat history, record checks and documents. On a shared or library computer, anyone who opens the Downloads folder can read them. Download only on your own phone or computer, or delete the files and empty the trash when you finish.",
@@ -319,8 +319,8 @@
       "preparing": "Preparing...",
       "downloaded": "Downloaded",
       "export": "Export",
-      "docsTitle": "Your document files",
-      "docsBody": "Every file in Private records and documents, in one ZIP, up to about 4 MB at a time. If you have more than that, download them one at a time from that page.",
+      "docsTitle": "Your Vault files",
+      "docsBody": "Every file in your Vault, in one ZIP, up to about 4 MB at a time. If you have more than that, download them one at a time from that page.",
       "docsButton": "Download my documents"
     },
     "accountExtras": {
@@ -554,7 +554,7 @@
         "need": "Application tracker"
       },
       "vault": {
-        "need": "Document safe"
+        "need": "Vault"
       },
       "coach": {
         "need": "AI career coach"
@@ -737,7 +737,7 @@
       "nothing": "<lead>If you share nothing:</lead> your name is not on their caseload list. They cannot read your resume, letters, jobs or anything you wrote. Staff who signed you up, or who you shared with before, may still see your name, email and step.",
       "progress": "<lead>If you share your progress:</lead> they see your name, email, your step, how many jobs you saved and applied to, when you were last on, and if you got hired. They also see how many times you practiced and whether you made a record plan. They cannot read either one.",
       "more": "<lead>You can share more, one item at a time,</lead> if your program offers it: your job applications, your resumes or your cover letters. You see what each one shows first. Staff can read them. They cannot change them.",
-      "noRead": "<lead>No program can read these through sharing:</lead> your record plan (what you make in the Disclosure Planner), {checks, select, yes {your saved record checks, } other {}}your interview practice, or your vault files.",
+      "noRead": "<lead>No program can read these through sharing:</lead> your record plan (what you make in the Disclosure Planner), {checks, select, yes {your saved record checks, } other {}}your interview practice, or your Vault files.",
       "stop": "<lead>Stop any time in Settings.</lead> That ends new viewing. It cannot take back what someone already read or wrote down.",
       "logged": "<lead>You can see who looked.</lead> Where your program uses the full workspace, each time staff open something you shared is logged, and you can see the list in Settings.",
       "rule": "<lead>If a program has its own sharing rule,</lead> you see the rule and its reason first. Nothing opens until you say you saw it, and we will not call it your choice.",

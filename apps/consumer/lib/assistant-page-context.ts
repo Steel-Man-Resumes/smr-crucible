@@ -4,7 +4,7 @@ const LABELS: Record<string, string> = {
   dashboard: "Overview", vault: "My resumes", master: "Master Draft", jobs: "Find work",
   "application-tailor": "Application tailoring", applications: "Applications", interview: "Interview prep",
   disclosure: "Plan what to say", resources: "Support", employers: "Employer evidence", settings: "Settings",
-  help: "Help", progress: "Progress", paths: "Career paths", documents: "Private documents",
+  help: "Help", progress: "Progress", paths: "Career paths", documents: "Vault",
   creative: "Creative work", cv: "CV", performer: "Performer work", start: "Forge start",
 };
 export interface AssistantUiContext {
