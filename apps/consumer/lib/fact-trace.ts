@@ -25,6 +25,7 @@ import { namedCredentialRe } from "@crucible/core/src/credentialWords";
 import { isPeopleScopeHit, scopeHits, scopeHitsNotTheirs, straightQuotes } from "@crucible/core/src/scopeWords";
 import { numbersInContext } from "@crucible/core/src/resumeStatus";
 import { isSectionHeader } from "@crucible/core/src/pageFitShared";
+import { esCharacterWords, esResultWords, esScaleWords, esSizeWords, esWordSaid } from "@crucible/core/src/scopeLexicon";
 
 export type FactKind = "number" | "date" | "name" | "tool" | "skill" | "credential" | "result" | "scope" | "character";
 
@@ -108,7 +109,7 @@ const STOP = new Set(["and", "of", "the", "for", "with", "in", "on", "to", "a", 
  * `section` says whether the line sits under a skills heading (each term is a
  * skill claim there).
  */
-export function untracedFacts(line: string, source: string | SourceIndex, opts: { section?: "skills" | "other"; job?: string } = {}): UntracedFact[] {
+export function untracedFacts(line: string, source: string | SourceIndex, opts: { section?: "skills" | "other"; job?: string; locale?: "en" | "es" } = {}): UntracedFact[] {
   const src = typeof source === "string" ? indexSource(source) : source;
   const out: UntracedFact[] = [];
   const t = straightQuotes(line.trim());
@@ -131,10 +132,18 @@ export function untracedFacts(line: string, source: string | SourceIndex, opts: 
   // Results, character and setting claims, by their words.
   for (const m of hits(RESULT_RE, t)) if (!saidStem(src, m.split(/\s+/)[0]) && !saidPhrase(src, m)) push("result", m);
   for (const m of hits(CHARACTER_RE, t)) if (!saidPhrase(src, m) && !saidStem(src, m.split(/[\s-]+/)[0])) push("character", m);
+  // Spanish lane E: with locale "es" the Spanish result and character words are read too (scopeLexicon). Adds only.
+  if (opts.locale === "es") {
+    for (const w of esResultWords(t)) if (!esWordSaid(src.text, w)) push("result", w.text);
+    for (const w of esCharacterWords(t)) if (!esWordSaid(src.text, w)) push("character", w.text);
+  }
 
   // Scope: running people the person did not say they ran (meaning, not the exact verb),
   // and words that widen what the work covered.
-  for (const h of scopeHitsNotTheirs(t, src.text, { job: opts.job })) push("scope", h.word);
+  for (const h of scopeHitsNotTheirs(t, src.text, { job: opts.job, locale: opts.locale })) push("scope", h.word);
+  if (opts.locale === "es") {
+    for (const w of [...esSizeWords(t), ...esScaleWords(t)]) if (!esWordSaid(src.text, w)) push("scope", w.text);
+  }
   for (const m of hits(SIZE_RE, t)) {
     const w = m.toLowerCase();
     if (src.flat.includes(` ${w} `) || saidPhrase(src, m)) continue;
@@ -198,7 +207,7 @@ export function untracedFacts(line: string, source: string | SourceIndex, opts: 
  * not carry (empty array: every fact traces back). Lines are trimmed; the
  * skills section is read term by term.
  */
-export function traceDocument(output: string, source: string): Array<{ line: string; untraced: UntracedFact[] }> {
+export function traceDocument(output: string, source: string, opts: { locale?: "en" | "es" } = {}): Array<{ line: string; untraced: UntracedFact[] }> {
   const src = indexSource(source);
   let section: "skills" | "other" = "other";
   // The job header each line sits under: scope is read against that job's words (r2 ruling).
@@ -211,7 +220,7 @@ export function traceDocument(output: string, source: string): Array<{ line: str
       return { line, untraced: [] };
     }
     if (line.includes("|") && !/^[-*\u2022]/.test(line) && !line.includes("@")) job = line;
-    return { line, untraced: line ? untracedFacts(line, src, { section, job }) : [] };
+    return { line, untraced: line ? untracedFacts(line, src, { section, job, locale: opts.locale }) : [] };
   });
 }
 
