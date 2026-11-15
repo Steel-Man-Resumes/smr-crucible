@@ -10,13 +10,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CHECK_AND_FINISH_LABEL, DRAFT_BADGE } from "@/lib/lane-task";
-import { CHECK_OPENING_LINE, CHECK_SLOW_LINE, CHECK_SLOW_LINK, CHECK_SLOW_MS } from "@/lib/tailor-readiness";
+import { useTranslations } from "next-intl";
+import { CHECK_SLOW_MS } from "@/lib/tailor-readiness";
 
 export const checkAndFinishHref = (artifactId: string) => `/output?check=${encodeURIComponent(artifactId)}`;
 
 /** The draft line and the link. `status` known: shown at once; unknown: read from the newest revision. */
 export function CheckAndFinish({ artifactId, status, className = "", showBadge = true }: { artifactId: string; status?: "draft" | "finished" | null; className?: string; showBadge?: boolean }) {
+  // The words live in the catalog (messages/*/refinery-home.json, laneHome); the English there is the original wording.
+  const t = useTranslations("refineryHome.laneHome");
   const [known, setKnown] = useState<"draft" | "finished" | null>(status ?? null);
   // W13 (2026-10-28): the click always answers. The line says the check is
   // opening; if the page has not changed after a few seconds, it offers a
@@ -47,7 +49,7 @@ export function CheckAndFinish({ artifactId, status, className = "", showBadge =
   if (known === "finished") {
     return (
       <p className={`text-xs text-t-phos ${className}`} data-testid="finished-line">
-        Finished. Downloads use the checked version.
+        {t("finishedLine")}
       </p>
     );
   }
@@ -55,23 +57,23 @@ export function CheckAndFinish({ artifactId, status, className = "", showBadge =
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${className}`} data-testid="check-and-finish">
       {showBadge && (
         <span className="text-xs font-medium text-t-amber-bright" data-testid="draft-badge">
-          {DRAFT_BADGE}
+          {t("draftBadge")}
         </span>
       )}
       <Link href={checkAndFinishHref(artifactId)} onClick={() => setOpening(true)} aria-busy={opening} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline underline-offset-2 hover:text-t-amber" data-testid="check-and-finish-link">
-        {CHECK_AND_FINISH_LABEL}
+        {t("action.checkAndFinish")}
       </Link>
       {opening && (
         <p role="status" className="w-full text-xs text-t-phos" data-testid="check-and-finish-opening">
           {slow ? (
             <>
-              {CHECK_SLOW_LINE}{" "}
+              {t("checkSlow")}{" "}
               <a href={checkAndFinishHref(artifactId)} className="t-focus underline underline-offset-2" data-testid="check-and-finish-direct">
-                {CHECK_SLOW_LINK}
+                {t("checkSlowLink")}
               </a>
             </>
           ) : (
-            CHECK_OPENING_LINE
+            t("checkOpening")
           )}
         </p>
       )}

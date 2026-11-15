@@ -59,11 +59,11 @@
     "skillsAria": "Habilidades de la historia que compartiste",
     "savedAcross": "Guardado en todas tus rutas: {list}.",
     "types": {
-      "resume": "{count} currículums",
-      "cover_letter": "{count} cartas de presentación",
-      "disclosure_plan": "{count} planes de divulgación",
-      "hurdle_plan": "{count} planes para superar obstáculos",
-      "interview_prep": "{count} sesiones de entrevista"
+      "resume": "{count, plural, =1 {# currículum} other {# currículums}}",
+      "cover_letter": "{count, plural, =1 {# carta de presentación} other {# cartas de presentación}}",
+      "disclosure_plan": "{count, plural, =1 {# plan de divulgación} other {# planes de divulgación}}",
+      "hurdle_plan": "{count, plural, =1 {# plan para superar obstáculos} other {# planes para superar obstáculos}}",
+      "interview_prep": "{count, plural, =1 {# sesión de entrevista} other {# sesiones de entrevista}}"
     },
     "anotherLane": "¿Apuntas a otro tipo de trabajo? <link>Empieza una ruta en Mis currículums</link>. Tu historial de trabajo se queda junto, y cada meta tiene sus propios documentos.",
     "profile": {
@@ -253,6 +253,10 @@
     "version": "Versión {number}",
     "finishedSuffix": ", terminada",
     "draftBadge": "Borrador: revísalo antes de enviarlo.",
+    "finishedLine": "Terminado. Las descargas usan la versión revisada.",
+    "checkOpening": "Abriendo la revisión de este currículum.",
+    "checkSlow": "Esto está tardando más de lo normal.",
+    "checkSlowLink": "Abrir la página de revisión",
     "myResumes": "Mis currículums",
     "unversioned": "Tienes un currículum guardado en esta ruta. Todavía no tiene una versión revisada.",
     "noVersion": "Todavía no hay una versión guardada de tu currículum en esta ruta.",
