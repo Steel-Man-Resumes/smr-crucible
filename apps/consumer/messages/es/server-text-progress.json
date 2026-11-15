@@ -50,6 +50,8 @@
  "progress_allow_daily": "{base} acciones de IA diarias en The Refinery{stop} Se reinicia a la medianoche UTC. Los otros límites de herramientas y de gasto siguen vigentes.",
  "progress_allow_daily_bonus": "{base} acciones de IA diarias en The Refinery{plus} {bonus} de bonificación{stop} Se reinicia a la medianoche UTC. Los otros límites de herramientas y de gasto siguen vigentes.",
  "progress_celebration_title": "Un avance sobre el que vale la pena seguir construyendo",
+ "progress_grant_first_tailored": "Conectaste tu experiencia con un trabajo real.",
+ "progress_grant_first_applied": "Registraste tu primera solicitud. Ten ese paquete listo.",
  "progress_msg_request_changed": "Esta solicitud cambió mientras respondías. Actualiza tus solicitudes para ver la decisión.",
  "progress_msg_reply_saved": "Tu respuesta quedó guardada para que Troy la revise.",
  "progress_msg_bonus_expired_prev": "Esta solicitud se aprobó antes. Esa bonificación ya venció; revisa tu cupo actual en la barra de progreso.",
