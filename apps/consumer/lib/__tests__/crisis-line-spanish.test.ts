@@ -35,3 +35,15 @@ test("a chat error (allowance, access or generic) always carries the 988 note, i
   }
   assert.match(es.crisis.chatNote, /llama o envía un mensaje de texto al 988/);
 });
+
+test("Spanish readers get a plain note above the English-only sharing consent (settings and join prompt)", () => {
+  assert.match(read("components", "SharingConsentSection.tsx"), /locale === "es"[\s\S]{0,200}tCommon\("consentEnglishNote"\)/);
+  assert.match(read("components", "JoinSharingPrompt.tsx"), /locale === "es"[\s\S]{0,200}tCommon\("consentEnglishNoteJoin"\)/);
+  for (const k of ["consentEnglishNote", "consentEnglishNoteJoin"]) {
+    assert.ok(typeof en[k] === "string" && typeof es[k] === "string", k);
+  }
+  assert.match(es.consentEnglishNote, /solo en inglés/);
+  assert.match(es.consentEnglishNoteJoin, /Not now/);
+  // The note must not say the Spanish is reviewed or coming from a person who already reads it.
+  assert.doesNotMatch(es.consentEnglishNote + es.consentEnglishNoteJoin, /revis(a|ada|ó|ando)/);
+});

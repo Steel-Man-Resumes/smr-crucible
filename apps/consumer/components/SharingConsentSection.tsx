@@ -11,12 +11,15 @@
  */
 
 import { useState, useEffect } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { SETTINGS_SHARING_TEXT as TEXT } from "@crucible/core/src/joinSharingPromptShared";
 import { SHARING_CHANGED_EVENT } from "@/lib/join-sharing-prompt";
 import { readSaveError } from "@/lib/save-error";
 import { SaveError } from "./SaveError";
 
 export function SharingConsentSection() {
+  const locale = useLocale();
+  const tCommon = useTranslations("common");
   const [sharing, setSharing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,6 +72,9 @@ export function SharingConsentSection() {
   return (
     <section className="mb-8" id="settings-share-progress">
       <h2 className="text-lg font-bold text-t-white mb-4">{TEXT.heading}</h2>
+      {locale === "es" && (
+        <p className="mb-3 border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white" data-testid="consent-english-note">{tCommon("consentEnglishNote")}</p>
+      )}
       <div className="bg-t-panel border border-t-line p-5">
         <div className="flex items-start justify-between gap-4">
           <div>

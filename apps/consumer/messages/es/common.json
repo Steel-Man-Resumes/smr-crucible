@@ -23,6 +23,8 @@
     "body": "No se perdió nada. Tu trabajo está guardado en este dispositivo. Inténtalo de nuevo y, si sigue pasando, recarga la página.",
     "tryAgain": "Intentar de nuevo"
   },
+  "consentEnglishNote": "Esta sección todavía está solo en inglés. Estamos preparando una versión en español. Mientras tanto, si tienes dudas sobre lo que dice, deja el interruptor apagado y pregunta a alguien de confianza. Puedes cambiarlo cuando quieras.",
+  "consentEnglishNoteJoin": "Esta pregunta todavía está solo en inglés. Estamos preparando una versión en español. Mientras tanto, si tienes dudas sobre lo que dice, elige «Not now» (ahora no) y pregunta a alguien de confianza. Puedes cambiarlo después en Configuración.",
   "crisis": {
     "line": "<name>Línea 988 de Prevención del Suicidio y Crisis:</name> <call>llama</call> o <text>envía un mensaje de texto</text> al 988. Gratis, a cualquier hora.",
     "chatNote": "Si estás en peligro o piensas en hacerte daño, llama o envía un mensaje de texto al 988 a cualquier hora. Es gratis."
