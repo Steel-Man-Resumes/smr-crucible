@@ -149,7 +149,7 @@ test('controller: the answers ride on the completion write, a retry is the same 
   assert.match(ctl, /run\.current = \{ id: data\.runId, sequence: data\.sequence \?\? 0, account: data\.accountId \};\n    completed\.current = true;/, 'the questions alone reuse the finished run, no start write');
   assert.match(ctl, /const chip = settingsChipFor\(slot, DEF\.version\);/);
   assert.match(ctl, /\{chip === 'quiz' && !conflict[^\n]*data-tour-chip="quiz"/);
-  assert.match(ctl, /\{chip === 'early' && !conflict[^\n]*data-tour-chip="early"[^\n]*SETTINGS_TOUR_COPY\.startOver/);
+  assert.match(ctl, /\{chip === 'early' && !conflict[^\n]*data-tour-chip="early"[^\n]*tc\("startOver"\)/);
   assert.match(ctl, /\{chip === 'returning' && !conflict[^\n]*data-tour-chip="returning"/);
   assert.match(ctl, /bonusClaimedAt=\{slot\?\.rewardClaimedAt\}/);
   assert.match(ctl, /document\.documentElement\.dataset\.settingsTour = 'true';/);

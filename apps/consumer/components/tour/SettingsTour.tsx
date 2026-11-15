@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useUserTier } from '@/lib/useUserTier';
 import { useEffectiveRole } from '@/components/RoleProvider';
 import { TOUR_COPY } from '@/lib/tour/beats';
@@ -58,6 +59,8 @@ export function openSettingsTour() {
 }
 
 export function SettingsTour() {
+  // The chip's words come from the catalog (refineryAccount.settings.tourChip); the tour itself is still English.
+  const tc = useTranslations("refineryAccount.settings.tourChip");
   const tier = useUserTier();
   const role = useEffectiveRole();
   const allowed = settingsTourAllowed({ tier, orgRole: role?.orgRole, impersonating: role?.impersonating });
@@ -349,11 +352,11 @@ export function SettingsTour() {
     const fresh = !open && chip === 'new';
     return <>
       {conflict && <RunConflictNotice onDismiss={() => setConflict(false)} />}
-      {open && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="resume"><p>{SETTINGS_TOUR_COPY.chipResume}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.pickUp}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}
-      {chip === 'quiz' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="quiz"><p>{SETTINGS_TOUR_COPY.chipQuiz}</p><button type="button" disabled={loading} onClick={() => void load('quiz')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.takeQuiz}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}
-      {chip === 'early' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="early"><p>{SETTINGS_TOUR_COPY.chipEarly}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.startOver}</button></div>}
-      {fresh && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="new"><p>{SETTINGS_TOUR_COPY.chipNew}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.showMe}</button></div>}
-      {chip === 'returning' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="returning"><p>{SETTINGS_TOUR_COPY.chipReturning}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.showMe}</button></div>}
+      {open && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="resume"><p>{tc("chipResume")}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : tc("pickUp")}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{tc("startOver")}</button></div>}
+      {chip === 'quiz' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="quiz"><p>{tc("chipQuiz")}</p><button type="button" disabled={loading} onClick={() => void load('quiz')}>{loading ? TOUR_COPY.loading : tc("takeQuiz")}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{tc("startOver")}</button></div>}
+      {chip === 'early' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="early"><p>{tc("chipEarly")}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : tc("startOver")}</button></div>}
+      {fresh && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="new"><p>{tc("chipNew")}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : tc("showMe")}</button></div>}
+      {chip === 'returning' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="returning"><p>{tc("chipReturning")}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : tc("showMe")}</button></div>}
       {unsavedWarning && <div className="et-notice" role="status"><p>{TOUR_COPY.unsaved}</p><button type="button" onClick={() => { dirty.current = false; setUnsavedWarning(false); void load('open'); }}>{TOUR_COPY.unsavedConfirm}</button><button type="button" onClick={() => setUnsavedWarning(false)}>{TOUR_COPY.unsavedStay}</button></div>}
       {!conflict && (notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button type="button" onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
     </>;
