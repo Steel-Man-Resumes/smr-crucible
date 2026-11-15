@@ -28,5 +28,12 @@
   "crisis": {
     "line": "<name>988 Suicide and Crisis Lifeline:</name> <call>call</call> or <text>text</text> 988. Free, any time.",
     "chatNote": "If you are in danger or thinking about hurting yourself, call or text 988 any time. It is free."
+  },
+  "speech": {
+    "speak": "Speak it",
+    "listening": "Listening... tap to stop",
+    "startAria": "Speak instead of typing",
+    "stopAria": "Stop talking",
+    "stopTitle": "Stop"
   }
 }

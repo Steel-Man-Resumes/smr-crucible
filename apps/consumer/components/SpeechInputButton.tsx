@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface SpeechInputButtonProps {
   /** Called with the recognized text (appended by the caller as desired). */
@@ -21,6 +22,7 @@ interface SpeechInputButtonProps {
 }
 
 export function SpeechInputButton({ onText, compact, className }: SpeechInputButtonProps) {
+  const t = useTranslations("common.speech");
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const recRef = useRef<any>(null);
@@ -77,8 +79,8 @@ export function SpeechInputButton({ onText, compact, className }: SpeechInputBut
       type="button"
       onClick={toggle}
       aria-pressed={listening}
-      aria-label={listening ? "Stop talking" : "Speak instead of typing"}
-      title={listening ? "Stop" : "Speak instead of typing"}
+      aria-label={listening ? t("stopAria") : t("startAria")}
+      title={listening ? t("stopTitle") : t("startAria")}
       className={`t-focus inline-flex items-center gap-1.5 border transition-colors ${
         compact ? "px-2 py-1 text-[11px]" : "px-3 py-2 text-xs"
       } ${
@@ -97,7 +99,7 @@ export function SpeechInputButton({ onText, compact, className }: SpeechInputBut
         <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
         <path d="M3 8a5 5 0 0010 0M8 13v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       </svg>
-      {listening ? "Listening... tap to stop" : "Speak it"}
+      {listening ? t("listening") : t("speak")}
     </button>
   );
 }
