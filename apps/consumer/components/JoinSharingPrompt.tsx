@@ -14,6 +14,7 @@
  * Self-contained: renders nothing when signed out or when there is nothing to ask.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { JOIN_SHARING_PROMPT_TEXT as TEXT } from "@crucible/core/src/joinSharingPromptShared";
 import {
   ORG_JOINED_EVENT,
@@ -33,6 +34,8 @@ const cookies = () => {
 };
 
 export function JoinSharingPrompt() {
+  const locale = useLocale();
+  const tCommon = useTranslations("common");
   const [decision, setDecision] = useState<Decision | null>(null);
   const [state, setState] = useState<"ask" | "saving" | "saved" | "failed" | "closed">("ask");
 
@@ -108,6 +111,9 @@ export function JoinSharingPrompt() {
         <h2 id="join-sharing-title" className="text-lg font-bold text-t-white">
           {TEXT.title(decision.orgName || "your organization")}
         </h2>
+        {locale === "es" && (
+        <p className="mt-2 border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white" data-testid="consent-english-note">{tCommon("consentEnglishNoteJoin")}</p>
+      )}
         <p className="mt-2 text-sm leading-relaxed text-t-phos">{TEXT.sees}</p>
         <p className="mt-1 text-sm leading-relaxed text-t-phos">{TEXT.never}</p>
         <p className="mt-1 text-sm leading-relaxed text-t-phos-dim">{TEXT.control}</p>

@@ -237,6 +237,7 @@ export function AssistantChat(props: AssistantChatProps) {
 function AssistantChatContent({ context, sessionId, coach, staff }: AssistantChatProps) {
   const t = useTranslations("assistant");
   const tc = useTranslations("common.actions");
+  const tCommon = useTranslations("common");
   // The site language (i18n/locale.ts): read-aloud and the message area follow it.
   const siteLocale = useLocale();
   const router = useRouter();
@@ -1044,6 +1045,11 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           <div className="bg-amber-50 rounded-[6px] p-3 border border-amber-200">
             <p className="text-sm text-amber-800">
               {errorText(error.message || "")}
+            </p>
+            {/* The model never answered, so its safety lines never appeared. A static line, no detection: nobody in crisis is left with only an allowance message. */}
+            <p className="mt-2 text-sm text-amber-900" data-testid="chat-error-crisis-note">
+              {tCommon("crisis.chatNote")}{" "}
+              <a href="tel:988" className="underline">988</a>
             </p>
           </div>
         )}

@@ -22,5 +22,11 @@
     "title": "That step hiccuped.",
     "body": "Nothing is lost. Your work is saved on this device. Try again, and if it keeps happening, reload the page.",
     "tryAgain": "Try again"
+  },
+  "consentEnglishNote": "This section is in English for now.",
+  "consentEnglishNoteJoin": "This question is in English for now.",
+  "crisis": {
+    "line": "<name>988 Suicide and Crisis Lifeline:</name> <call>call</call> or <text>text</text> 988. Free, any time.",
+    "chatNote": "If you are in danger or thinking about hurting yourself, call or text 988 any time. It is free."
   }
 }
