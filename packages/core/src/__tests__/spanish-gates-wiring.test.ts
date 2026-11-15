@@ -123,3 +123,10 @@ test("English documents read the same with locale es (no Spanish word makes an E
     assert.deepEqual(scopeHitsNotTheirs(line, src, { locale: "es" }), scopeHitsNotTheirs(line, src), line);
   }
 });
+
+test("supervise and mentor words are already caught in Spanish by the English prefix rules (no Spanish entry needed)", () => {
+  // Not a new behavior: pinned so a future edit of the English patterns does not silently drop them.
+  for (const line of ["Supervisé a 12 personas", "Fui supervisora de turno", "Mentoré a los nuevos", "Fui mentora de aprendices"]) {
+    assert.ok(scopeHits(line).length > 0, line);
+  }
+});
