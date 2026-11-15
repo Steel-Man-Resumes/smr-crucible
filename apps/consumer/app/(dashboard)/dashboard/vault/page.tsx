@@ -18,7 +18,7 @@ import { SpanishReading } from "@/components/resume/SpanishReading";
 import { EarlierVersions } from "@/components/lanes/EarlierVersions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { printResumePdf } from "@/components/resume/resumePrint";
 import { MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
@@ -55,9 +55,10 @@ const GROUPS: { type: string; label: string }[] = [
   { type: "interview_prep", label: "Interview Practice" },
 ];
 
-function fmt(s: string): string {
+/** `locale` is the date language: "es-US" while the site is Spanish, otherwise the browser's own. Printed documents keep calling it without one. */
+function fmt(s: string, locale?: string): string {
   const d = new Date(s);
-  return isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString(locale, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function title(a: Artifact): string {
@@ -137,6 +138,8 @@ function isBaseResume(a: Artifact): boolean {
 
 export default function VaultPage() {
   const t = useTranslations("refineryResume.library");
+  const siteLocale = useLocale();
+  const dateLocale = siteLocale === "es" ? "es-US" : undefined;
   /** The card title in the person's language. The plain title() stays for exports and search. */
   const displayTitle = (a: Artifact): string => {
     const job = a.target_context?.targetJob;
@@ -144,7 +147,7 @@ export default function VaultPage() {
     if (job && co) return t("jobAt", { job, company: co });
     if (job) return job;
     if (a.artifact_type === "resume") return t("baseResume");
-    return fmt(a.updated_at);
+    return fmt(a.updated_at, dateLocale);
   };
   const [items, setItems] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -575,7 +578,7 @@ ${body}
             {laneFilter === "all" && !a.is_demo && (
               <p className="text-xs text-t-phos-dim mt-0.5" data-testid="item-lane">{t("lane", { name: laneName(a.lane_id) })}</p>
             )}
-            <p className="text-xs text-t-phos-dim mt-0.5">{t("updated", { date: fmt(a.updated_at) })}</p>
+            <p className="text-xs text-t-phos-dim mt-0.5">{t("updated", { date: fmt(a.updated_at, dateLocale) })}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button

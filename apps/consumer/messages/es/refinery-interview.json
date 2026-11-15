@@ -330,6 +330,7 @@
       "resume": "¿Con qué currículum quieres entrevistarte?",
       "resumeHint": "(para que las preguntas encajen con tu experiencia real)",
       "resumeFrom": "Currículum de {when}",
+      "resumeFromDate": "Currículum del {when}",
       "yourAccount": "tu cuenta",
       "resumeGeneral": "General (sin un currículum específico)",
       "resumeNote": "Las preguntas se basarán en los trabajos, herramientas y resultados reales de este currículum.",

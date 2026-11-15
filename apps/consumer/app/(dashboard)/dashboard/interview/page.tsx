@@ -842,7 +842,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                   const label = [r.targetJob, r.targetCompany].filter(Boolean).join(" at ");
                   return (
                     <option key={r.id} value={r.id}>
-                      {label || t("setup.resumeFrom", { when: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : t("setup.yourAccount") })}
+                      {label || (r.createdAt ? t("setup.resumeFromDate", { when: (locale === "es" ? new Date(r.createdAt).toLocaleDateString("es-US", { day: "numeric", month: "short", year: "numeric" }) : new Date(r.createdAt).toLocaleDateString()) }) : t("setup.resumeFrom", { when: t("setup.yourAccount") }))}
                     </option>
                   );
                 })}
