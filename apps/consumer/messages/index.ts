@@ -47,6 +47,8 @@ import enRefineryShell from "./en/refinery-shell.json";
 import esRefineryShell from "./es/refinery-shell.json";
 import enRefineryResume from "./en/refinery-resume.json";
 import esRefineryResume from "./es/refinery-resume.json";
+import enSpanishReading from "./en/spanish-reading.json";
+import esSpanishReading from "./es/spanish-reading.json";
 import enServerTextApi from "./en/server-text-api.json";
 import esServerTextApi from "./es/server-text-api.json";
 import enServerTextFinish from "./en/server-text-finish.json";
@@ -86,6 +88,7 @@ export const MESSAGES = {
     refineryAccount: enRefineryAccount,
     refineryShell: enRefineryShell,
     refineryResume: enRefineryResume,
+    spanishReading: enSpanishReading,
     serverText: { ...enServerTextApi, ...enServerTextFinish, ...enServerTextProgress, ...enServerTextPlans, ...enServerTextJobs, ...enServerTextHelp, ...enServerTextExtras, ...enServerTextRecordcheck },
   },
   es: {
@@ -109,6 +112,7 @@ export const MESSAGES = {
     refineryAccount: esRefineryAccount,
     refineryShell: esRefineryShell,
     refineryResume: esRefineryResume,
+    spanishReading: esSpanishReading,
     serverText: { ...esServerTextApi, ...esServerTextFinish, ...esServerTextProgress, ...esServerTextPlans, ...esServerTextJobs, ...esServerTextHelp, ...esServerTextExtras, ...esServerTextRecordcheck },
   },
 } as const;
