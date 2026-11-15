@@ -14,6 +14,7 @@
  */
 
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
+import { SpanishReading } from "@/components/resume/SpanishReading";
 import { EarlierVersions } from "@/components/lanes/EarlierVersions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -750,6 +751,8 @@ ${body}
             {isResume && <CheckAndFinish artifactId={a.id} className="mt-3" />}
             {/* R2 review H3: every saved version stays reachable, and an earlier one can come back. */}
             {isResume && <EarlierVersions artifactId={a.id} />}
+            {/* Lane D1: Spanish readers only, switch off by default; renders nothing otherwise. Not a resume. */}
+            {isResume && !a.is_demo && <SpanishReading artifactId={a.id} version={a.updated_at} />}
           </div>
         )}
       </div>

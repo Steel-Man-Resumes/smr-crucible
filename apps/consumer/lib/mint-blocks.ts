@@ -6,8 +6,8 @@
  */
 import { runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
 
-export function hasOpenMintBlock(resumeText: string, sourceText: string): boolean {
+export function hasOpenMintBlock(resumeText: string, sourceText: string, opts: { locale?: "en" | "es" } = {}): boolean {
   if (!resumeText || !sourceText) return false;
-  const result = runMintCheck({ output: resumeText, source: sourceText, kind: "resume" });
+  const result = runMintCheck({ output: resumeText, source: sourceText, kind: "resume", locale: opts.locale });
   return result.findings.some((f) => f.severity === "BLOCK");
 }

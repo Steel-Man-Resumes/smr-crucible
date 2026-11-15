@@ -12,6 +12,8 @@ import { createContext, useContext, type ReactNode } from "react";
 export interface ServerSwitches {
   /** The record check step (D11) is on (lib/server-switch.ts). */
   recordStep: boolean;
+  /** The Spanish reading of a saved resume is on (lib/server-switch.ts SPANISH_READING_ENABLED). Absent means off. */
+  spanishReading?: boolean;
 }
 
 const OFF: ServerSwitches = { recordStep: false };

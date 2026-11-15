@@ -1,0 +1,18 @@
+{
+  "button": "Leer en español",
+  "title": "Lectura en español de tu currículum",
+  "notResume": "Esta lectura no es tu currículum. Tu currículum sigue en inglés.",
+  "machine": "Una computadora escribió este español. Una revisión automática solo compara los números y los nombres, y ninguna persona lo ha leído.",
+  "feedbackLead": "Avísanos si algo se lee mal:",
+  "feedbackLink": "Ayuda y comentarios",
+  "loading": "Preparando tu lectura...",
+  "missingLine": "Revisa estos datos, no los pudimos comprobar: {items}",
+  "limitLine": "Este currículum ya usó sus lecturas en español. Si necesitas más, puedes pedirlas.",
+  "askMore": "Pedir más",
+  "failed": "No pudimos hacer la lectura. Tu currículum no cambió. Intenta de nuevo en un momento.",
+  "allowanceUsed": "Tu cupo de IA de hoy ya se usó. Tu trabajo guardado sigue aquí.",
+  "signedOut": "Inicia sesión de nuevo e intenta otra vez.",
+  "close": "Cerrar la lectura",
+  "tryAgain": "Intentar de nuevo",
+  "readingLabel": "Texto de la lectura en español"
+}

@@ -26,6 +26,7 @@ import { normalizeDigits, numberTokens, numberValues } from "./numberRead";
 import { stemOf } from "./wordStem";
 import { isCredentialTerm } from "./credentialWords";
 import { skillScopeNotTheirs } from "./scopeWords";
+import { esCharacterWords, esEuphemismsUnsaid, esLegalStatusUnsaid, esWordSaid } from "./scopeLexicon";
 import { RESUME_RULES_VERSION } from "./resumeRules";
 
 export type MintSeverity = "BLOCK" | "FIX";
@@ -47,6 +48,11 @@ export interface MintCheckInput {
   /** Only the person's own words: their resume text, answers, notes. */
   source: string;
   kind?: "resume" | "cover_letter";
+  /**
+   * "es" also reads the Spanish scope, character, euphemism and legal-status words (scopeLexicon), on top of the
+   * English ones. Default: English only, exactly as before. Spanish documents are not offered yet.
+   */
+  locale?: "en" | "es";
 }
 
 export interface MintCheckResult {
@@ -181,7 +187,7 @@ function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintChec
 // ---- STD-T07: no character or setting claims the person did not make -----
 const CHARACTER_RE = /\b(dependable|reliable|hard[- ]?working|trustworthy|punctual|consistent|fast[- ]paced|high[- ]volume|busy|peak)\b/gi;
 
-function checkCharacter(out: string, src: string, f: MintFinding[]) {
+function checkCharacter(out: string, src: string, f: MintFinding[], locale?: "en" | "es") {
   const seen = new Set<string>();
   for (const m of out.match(CHARACTER_RE) ?? []) {
     const w = squash(m);
@@ -195,6 +201,20 @@ function checkCharacter(out: string, src: string, f: MintFinding[]) {
       why: `"${m}" is a claim you didn't make about yourself or the work. Keep it only if it's true and you'd say it.`,
     });
   }
+  if (locale === "es") {
+    for (const w of esCharacterWords(out, { core: true })) {
+      const key = squash(w.text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (esWordSaid(src, w)) continue;
+      f.push({
+        rule: "STD-T07",
+        severity: "FIX",
+        line: lineContaining(out, w.text),
+        why: `"${w.text}" is a claim you didn't make about yourself or the work. Keep it only if it's true and you'd say it.`,
+      });
+    }
+  }
 }
 
 // ---- STD-C05: no euphemism a record will contradict ----------------------
@@ -207,7 +227,7 @@ const familyStem = (m: string) => {
   return /^selfemploy/.test(s) ? "selfemploy" : /^freelanc/.test(s) ? "freelanc" : s;
 };
 
-function checkEuphemisms(out: string, src: string, f: MintFinding[]) {
+function checkEuphemisms(out: string, src: string, f: MintFinding[], locale?: "en" | "es") {
   for (const m of out.match(EUPHEMISM_RE) ?? []) {
     if (squash(src).includes(familyStem(m))) continue;
     f.push({
@@ -217,12 +237,22 @@ function checkEuphemisms(out: string, src: string, f: MintFinding[]) {
       why: `"${m}" is not in your words. A phrase that a record could contradict will come up at the background check.`,
     });
   }
+  if (locale === "es") {
+    for (const p of esEuphemismsUnsaid(out, src)) {
+      f.push({
+        rule: "STD-C05",
+        severity: "BLOCK",
+        line: lineContaining(out, p.text),
+        why: `"${p.text}" is not in your words. A phrase that a record could contradict will come up at the background check.`,
+      });
+    }
+  }
 }
 
 // ---- STD-C07: legal status never overstated -------------------------------
 const LEGAL_STATUS_RE = /\b(fully resolved|completed (?:all )?(?:probation|parole|supervision)|expunged|sealed|pardoned|record (?:is )?(?:clean|cleared))\b/gi;
 
-function checkLegalStatus(out: string, src: string, f: MintFinding[]) {
+function checkLegalStatus(out: string, src: string, f: MintFinding[], locale?: "en" | "es") {
   for (const m of out.match(LEGAL_STATUS_RE) ?? []) {
     if (saidBy(src, m)) continue;
     f.push({
@@ -231,6 +261,16 @@ function checkLegalStatus(out: string, src: string, f: MintFinding[]) {
       line: lineContaining(out, m),
       why: `"${m}" says something about your legal status that you didn't say. Never put that on paper unless it's exactly true.`,
     });
+  }
+  if (locale === "es") {
+    for (const p of esLegalStatusUnsaid(out, src)) {
+      f.push({
+        rule: "STD-C07",
+        severity: "BLOCK",
+        line: lineContaining(out, p.text),
+        why: `"${p.text}" says something about your legal status that you didn't say. Never put that on paper unless it's exactly true.`,
+      });
+    }
   }
 }
 
@@ -399,7 +439,7 @@ const PLAN_STEMS = new Set(["plan", "budget", "negotiat", "forecast"]);
 // A credential term is checked as a credential (credentialMentions), never as
 // a skill. One shared test (credentialWords), so nothing is both.
 
-function checkGrid(out: string, src: string, f: MintFinding[]) {
+function checkGrid(out: string, src: string, f: MintFinding[], locale?: "en" | "es") {
   const ls = linesOf(out);
   const start = ls.findIndex((l) => GRID_RE.test(l));
   if (start < 0) return;
@@ -425,7 +465,7 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
         const sc = scopeOf(w);
         return sc !== undefined && PLAN_STEMS.has(sc) && !srcWordList.some((x) => x.startsWith(sc));
       });
-      const scopeHitsUnsaid = skillScopeNotTheirs(term, src);
+      const scopeHitsUnsaid = skillScopeNotTheirs(term, src, { locale });
       const scopeUnsaid = planUnsaid.length > 0 || scopeHitsUnsaid.length > 0;
       if (!scopeUnsaid && words.some((w) => srcStems.has(stemOf(w)))) continue;
       // Name the word that is not theirs, so the card says what to change ("mentoring"), not the whole term.
@@ -614,15 +654,15 @@ export function runMintCheck(input: MintCheckInput): MintCheckResult {
   const findings: MintFinding[] = [];
   checkYears(out, src, findings);
   checkNumbers(out, src, findings, input.kind);
-  checkCharacter(out, src, findings);
-  checkEuphemisms(out, src, findings);
-  checkLegalStatus(out, src, findings);
+  checkCharacter(out, src, findings, input.locale);
+  checkEuphemisms(out, src, findings, input.locale);
+  checkLegalStatus(out, src, findings, input.locale);
   checkPlaceholders(out, input.kind, findings);
   checkToolMarks(out, src, findings);
   if (input.kind !== "cover_letter") {
     checkDatedPage(out, findings);
     checkExperienceDates(out, findings);
-    checkGrid(out, src, findings);
+    checkGrid(out, src, findings, input.locale);
     checkSoleActor(out, src, findings);
   }
   checkDashes(out, findings);

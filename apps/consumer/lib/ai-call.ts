@@ -44,6 +44,7 @@ async function callAnthropic(
   const body = {
     model,
     max_tokens: maxTokens,
+    ...(typeof meta?.temperature === "number" ? { temperature: meta.temperature } : {}),
     ...(system ? { system } : {}),
     messages: messages
       .filter((m) => m.role !== "system")
