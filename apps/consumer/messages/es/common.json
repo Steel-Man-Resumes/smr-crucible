@@ -22,5 +22,9 @@
     "title": "Ese paso falló.",
     "body": "No se perdió nada. Tu trabajo está guardado en este dispositivo. Inténtalo de nuevo y, si sigue pasando, recarga la página.",
     "tryAgain": "Intentar de nuevo"
+  },
+  "crisis": {
+    "line": "<name>Línea 988 de Prevención del Suicidio y Crisis:</name> <call>llama</call> o <text>envía un mensaje de texto</text> al 988. Gratis, a cualquier hora.",
+    "chatNote": "Si estás en peligro o piensas en hacerte daño, llama o envía un mensaje de texto al 988 a cualquier hora. Es gratis."
   }
 }
