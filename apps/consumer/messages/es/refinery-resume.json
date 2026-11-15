@@ -979,6 +979,7 @@
     "deleteFailedRetry": "No se pudo borrar ese documento. Inténtalo de nuevo.",
     "loading": "Cargando tu bóveda...",
     "title": "Bóveda",
+    "subtitle": "Registros y documentos privados",
     "intro": "Un lugar seguro para los documentos que prueban quién eres y lo que has logrado: tu identificación, certificados, cartas de recomendación, documentos del tribunal y notas. Está cifrado y se queda en tu cuenta hasta que lo borres. Solo tú puedes abrirlo aquí. Los programas y los empleadores no pueden, aunque compartas otras cosas con ellos.",
     "lanesNote": "Una sola bóveda para todas las rutas. Tus pruebas son las mismas sin importar a qué trabajo apuntes.",
     "notPassword": "Esto no es un guardador de contraseñas.",

@@ -979,6 +979,7 @@
     "deleteFailedRetry": "Could not delete that document. Please try again.",
     "loading": "Loading your Vault...",
     "title": "Vault",
+    "subtitle": "Private records and documents",
     "intro": "A safe home for the documents that prove who you are and what you have earned: your ID, certificates, reference letters, court papers, and notes. It is encrypted and stays in your account until you delete it. Only you can open it here. Programs and employers can't, even if you share other things with them.",
     "lanesNote": "One Vault for every lane. Your proof is the same whatever job you aim at.",
     "notPassword": "This is not a password keeper.",
