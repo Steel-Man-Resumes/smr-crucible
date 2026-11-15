@@ -134,5 +134,11 @@
  "extras_cr_line_not_in_record": "Una línea que no está en tu registro",
  "extras_cr_line_years_in_record": "{years}  Una línea de tu registro",
  "extras_cr_line_years_work": "{years}  Una obra de tu registro",
- "extras_cr_line_statement_version": "Declaración, versión guardada {n}"
+ "extras_cr_line_statement_version": "Declaración, versión guardada {n}",
+ "extras_proactive_forge_complete": "Tu base está construida y ya conozco tu historia. El siguiente paso es encontrar un empleo objetivo que te quede bien. Abre la Bolsa de trabajo y te ayudo a leer las coincidencias.",
+ "extras_proactive_follow_up_due": "Es hora de dar seguimiento a {company}. Unos cinco días después es el mejor momento. ¿Quieres que te ayude a redactar el mensaje?",
+ "extras_proactive_tailor_resume": "Guardaste {jobTitle} en {company}. Lo que consigue que te llamen es adaptar tu currículum a esa oferta. ¿Quieres empezar?",
+ "extras_proactive_disclosure": "Tu currículum está adaptado. Antes de postularte, planeemos cómo hablar de tus antecedentes penales. Es estrategia y momento oportuno, no una confesión.",
+ "extras_joined_proactive_practice_one": "Practicaste 1 vez esta semana. Esa repetición es lo que cambia cómo respondes bajo presión. ¿Quieres repasar tu última sesión?",
+ "extras_joined_proactive_practice_many": "Practicaste {n} veces esta semana. Esa repetición es lo que cambia cómo respondes bajo presión. ¿Quieres repasar tu última sesión?"
 }
