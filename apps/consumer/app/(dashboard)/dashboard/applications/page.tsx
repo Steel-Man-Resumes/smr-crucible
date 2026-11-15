@@ -324,7 +324,7 @@ function ApplicationsPage() {
       {activeApps.length > 0 && (
         <>
           {/* Pipeline summary */}
-          <div id="refinery-tool-application-overview" className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          <div id="refinery-tool-application-overview" className="grid grid-cols-3 gap-2 mb-6 sm:grid-cols-5">
             {PIPELINE.map((stage) => {
               const count = activeApps.filter(
                 (a) => a.status === stage.status
@@ -332,7 +332,7 @@ function ApplicationsPage() {
               return (
                 <div
                   key={stage.status}
-                  className={`flex-1 min-w-[80px] p-3 border text-center ${stage.bgColor} ${stage.borderColor}`}
+                  className={`min-w-0 break-words p-3 border text-center ${stage.bgColor} ${stage.borderColor}`}
                 >
                   <span className={`text-xl font-bold block ${stage.color}`}>
                     {count}

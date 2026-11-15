@@ -511,11 +511,11 @@ export default function ProgressPage() {
               {t("openTracker")}
             </Link>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
             {PIPELINE_STAGES.map((stage) => (
               <div
                 key={stage.key}
-                className="flex-1 min-w-[80px] p-3 border text-center bg-t-panel border-t-line"
+                className="min-w-0 break-words p-3 border text-center bg-t-panel border-t-line"
               >
                 <span className="text-xl font-bold block text-t-amber-bright">
                   {pipeline[stage.key]}
