@@ -29,7 +29,7 @@ export const FULL_COPY_ONLY = [
   { key: 'disclosure_rehearsal', label: 'disclosure practice transcripts' },
   { key: 'interview_voice', label: 'interview practice transcripts' },
   { key: 'avatar', label: 'the list of your photos' },
-  { key: 'vault', label: 'the list of your documents' },
+  { key: 'vault', label: 'the list of what is in your Vault' },
 ] as const;
 
 export const ALL_TICKED: ExportTicks = Object.fromEntries(EXPORT_BOXES.map(b => [b.key, true])) as ExportTicks;
@@ -77,9 +77,9 @@ export function noPasswordExportConfirmed(body: unknown): boolean {
  * download that can never finish. Streaming or a stored ZIP is a later lane.
  */
 export const VAULT_ZIP_MAX_BYTES = 4 * 1024 * 1024;
-export const VAULT_ZIP_TOO_LARGE = 'Too many files for one download. Download them one at a time from Private records and documents.';
+export const VAULT_ZIP_TOO_LARGE = 'Too many files for one download. Download them one at a time from the Vault.';
 /** The page's words when the download fails without the route saying why. */
-export const DOCUMENTS_DOWNLOAD_FAILED = 'Your documents could not be downloaded in one ZIP. Download them one at a time from Private records and documents.';
+export const DOCUMENTS_DOWNLOAD_FAILED = 'Your documents could not be downloaded in one ZIP. Download them one at a time from the Vault.';
 
 /** Sum the stored sizes before decrypting anything; over means the route refuses with 413. */
 export function vaultZipPlan(sizes: readonly number[], max = VAULT_ZIP_MAX_BYTES): { total: number; over: boolean } {
@@ -93,5 +93,5 @@ export function skippedFilesNote(count: number, names: readonly string[]): strin
   const n = Math.max(0, count | 0);
   const head = `${n} ${n === 1 ? 'file was' : 'files were'} not included in this ZIP because ${n === 1 ? 'it' : 'they'} could not be read or unlocked.`;
   const list = names.length ? `\n\nNot included:\n${names.map(x => `- ${x}`).join('\n')}` : '';
-  return `${head}${list}\n\nThe ${n === 1 ? 'file is' : 'files are'} still in Private records and documents. Open that page to download ${n === 1 ? 'it' : 'them'} one at a time, or ask for help if ${n === 1 ? 'it' : 'any'} will not open there either.\n`;
+  return `${head}${list}\n\nThe ${n === 1 ? 'file is' : 'files are'} still in the Vault. Open that page to download ${n === 1 ? 'it' : 'them'} one at a time, or ask for help if ${n === 1 ? 'it' : 'any'} will not open there either.\n`;
 }

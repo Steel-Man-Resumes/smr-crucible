@@ -87,6 +87,14 @@
       "avoid": [],
       "note": "Never \"eliminar\" or \"borrar\" for record relief: it reads as a guaranteed erasure, and sealed or expunged records can still be seen by some agencies. Keep the English legal term in parentheses so a person can look it up. \"Eliminar/borrar\" stays correct for deleting a person's own data in the product.",
       "status": "proposed"
+    },
+    {
+      "id": "vault",
+      "en": "Vault",
+      "es": "Bóveda",
+      "avoid": [],
+      "note": "The Refinery's private document store (/dashboard/documents). Capital V in English, Bóveda in Spanish. The resume library (/dashboard/vault, shown as My resumes) is never called the Vault. Machine suggestion, waiting for a bilingual reader.",
+      "status": "proposed"
     }
   ]
 }

@@ -36,7 +36,7 @@ export const PLATFORM_CHANGELOG: ChangelogEntry[] = [
   {
     date: "2026-08-07",
     title:
-      "Your Materials vault is a real home base now: pin your current resume, search everything, and download any document as Word or PDF in one click.",
+      "My resumes is a real home base now: pin your current resume, search everything, and download any document as Word or PDF in one click.",
     meaning:
       "Keep your active resume pinned and grab a Word copy the moment an application asks for one.",
     page: "vault",

@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   if (body?.confirm !== true) {
     return NextResponse.json(
-      { error: "Set confirm: true to acknowledge this downloads all your vault files." },
+      { error: "Set confirm: true to acknowledge this downloads all your Vault files." },
       { status: 400, headers: NO_STORE_HEADERS }
     );
   }
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     const docs = await listVaultDocuments(userId);
     if (docs.length === 0) {
       return NextResponse.json(
-        { error: "Your vault is empty. There is nothing to download yet." },
+        { error: "Your Vault is empty. There is nothing to download yet." },
         { status: 404, headers: NO_STORE_HEADERS }
       );
     }
@@ -149,7 +149,7 @@ export async function POST(req: Request) {
     if (skipped.length === docs.length) {
       // Nothing could be read: no ZIP of one note.
       return NextResponse.json(
-        { error: "None of your files could be read right now. They are still in Private records and documents. Try again in a moment." },
+        { error: "None of your files could be read right now. They are still in the Vault. Try again in a moment." },
         { status: 500, headers: NO_STORE_HEADERS }
       );
     }
@@ -173,7 +173,7 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("Vault export error:", err?.message || err);
     return NextResponse.json(
-      { error: "Your documents could not be downloaded right now. They are still in Private records and documents." },
+      { error: "Your documents could not be downloaded right now. They are still in the Vault." },
       { status: 500, headers: NO_STORE_HEADERS }
     );
   }

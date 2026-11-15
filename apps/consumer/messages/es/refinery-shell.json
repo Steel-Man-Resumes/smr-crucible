@@ -262,7 +262,7 @@
       "cv": "CV",
       "performer_page": "Página de artista",
       "disclosure_plan": "Plan para hablar de tus antecedentes penales",
-      "private_records_and_documents": "Registros y documentos privados",
+      "vault": "Bóveda",
       "local_help": "Ayuda local",
       "toolbox": "Herramientas",
       "you": "Tú",
@@ -332,7 +332,7 @@
         "time": "Continuo",
         "name": "Solicitudes y seguimiento",
         "what": "Lleva el registro de cada solicitud: empresa, estado, fechas y qué versión del currículum usaste. Genera correos de seguimiento y guárdalos en la Biblioteca.",
-        "tech": "Tabla job_application en Neon. Sistema de artefactos de The Refinery para los correos de seguimiento y las cartas de presentación. Biblioteca = el archivo de todos los documentos que generaste."
+        "tech": "Tabla job_application en Neon. Sistema de artefactos de The Refinery para los correos de seguimiento y las cartas de presentación. Biblioteca = todo lo que hiciste (la página Mis currículums)."
       }
     },
     "protocolTitle": "El protocolo de conducta",

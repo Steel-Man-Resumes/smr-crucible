@@ -231,7 +231,7 @@ test("staff Settings words: role chip, usage line, data lines, trust link", () =
   const page = read("app/(dashboard)/dashboard/settings/page.tsx");
   assert.match(page, /\{recordStep && !isOrgStaff && \(/);
   assert.match(page, /\{!isOrgStaff && <div className="mt-5 border-t border-t-line pt-4">\s*<h4 className="text-sm font-semibold text-t-white">\{t\("docsTitle"\)\}<\/h4>/);
-  assert.equal((MESSAGES.en.refineryAccount.settings.data as unknown as Record<string, string>).docsTitle, "Your document files");
+  assert.equal((MESSAGES.en.refineryAccount.settings.data as unknown as Record<string, string>).docsTitle, "Your Vault files");
   assert.match(page, /accountChipText\(\{ orgRole: accountRole\?\.orgRole/);
   assert.match(page, /isOrgStaff \? \(\s*<p className="text-xs text-t-phos-dim pt-1">\s*\{STAFF_DATA_WORDS\.trustLink\.before\}/);
   assert.equal(STAFF_DATA_WORDS.trustLink.href, "/dashboard/org-security");

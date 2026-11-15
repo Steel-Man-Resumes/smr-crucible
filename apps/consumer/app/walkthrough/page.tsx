@@ -404,7 +404,7 @@ export default function WalkthroughPage() {
         </div>
         <Reveal className="mt-8">
           <p className="text-sm text-[#8f897a]">
-            Also in the Refinery: lanes for creative work, a CV and performers; private documents; progress; settings to make text larger,
+            Also in the Refinery: lanes for creative work, a CV and performers; the Vault; progress; settings to make text larger,
             use plain language, or have replies read aloud. Illustrations are from steelmanresumes.com.{" "}
             <a href={`${SITE}/refinery`} className="text-[#dbc173] underline underline-offset-4">Every tool in detail</a>
           </p>

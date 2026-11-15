@@ -56,8 +56,14 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: "save-work",
     title: "Where is my saved work?",
-    keywords: ["saved work", "my materials", "where is my resume", "vault", "find my resume"],
+    keywords: ["saved work", "my materials", "where is my resume", "find my resume"],
     body: "Everything you make lands in My resumes. Open it any time to reopen or reuse a resume, cover letter, or plan. Your work is saved to your account, so it is here when you come back.",
+  },
+  {
+    id: "vault",
+    title: "What is the Vault?",
+    keywords: ["vault", "id", "court papers", "documents", "upload", "certificate"],
+    body: "The Vault is a private place for files you upload: your ID, certificates, reference letters, court papers and notes. Each file is encrypted and only you can open it. Programs and employers cannot, even if you share other things. Do not put passwords or bank logins in it.",
   },
   {
     id: "human",

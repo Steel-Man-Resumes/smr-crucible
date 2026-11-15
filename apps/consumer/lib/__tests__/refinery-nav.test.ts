@@ -52,7 +52,7 @@ test("every tool from the old nav is still on the board", () => {
   const tailor = STATIONS.find((s) => s.id === "tailor")!;
   assert.deepEqual(tailor.children.map((c) => c.label), ["Master Draft", "Resumes and versions", "Tailor for a job", "Creative work", "CV", "Performer page"]);
   const plan = STATIONS.find((s) => s.id === "plan")!;
-  assert.deepEqual(plan.children.map((c) => c.label), ["Disclosure plan", "Private records and documents"]);
+  assert.deepEqual(plan.children.map((c) => c.label), ["Disclosure plan", "Vault"]);
   // Interview practice never needed a disclosure plan (Phase 5 R4.5).
   assert.equal(STATIONS.find((s) => s.id === "practice")!.requiresDisclosure, undefined);
 });

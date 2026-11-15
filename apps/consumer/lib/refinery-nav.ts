@@ -76,7 +76,7 @@ export const STATIONS: readonly Station[] = [
     ...C, steps: [], currentFor: [],
     children: [
       { href: "/dashboard/disclosure", label: "Disclosure plan", ...C },
-      { href: "/dashboard/documents", label: "Private records and documents", ...C },
+      { href: "/dashboard/documents", label: "Vault", ...C },
     ] },
   { id: "practice", short: "Practice", navId: "refinery-nav-practice", legacyId: "refinery-nav-interview", href: "/dashboard/interview", label: "Practice", blurb: "Interview practice when the time is right",
     ...C, steps: ["interview"], currentFor: ["interview"], children: [] },
