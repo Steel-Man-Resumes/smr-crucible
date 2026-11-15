@@ -6,6 +6,7 @@ export const AI_WORKFLOWS = [
   'interview','interview-voice-token',
   'quick-apply','follow-up','intake-followups','disclosure','disclosure-takeaways',
   'apply-email','parse','rush-resume','resume-fine-tune','next-step-why','fit-check','disclosure-strengths','career-plan',
+  'spanish-reading',
 ] as const;
 export type AiWorkflow = typeof AI_WORKFLOWS[number];
 export function isAiWorkflow(value: string): value is AiWorkflow {

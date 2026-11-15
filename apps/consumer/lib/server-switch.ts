@@ -26,6 +26,19 @@ export function recordStepOn(env: Record<string, string | undefined> = typeof pr
   return serverSwitchOn(env[RECORD_CHECK_ENABLED_ENV]);
 }
 
+/**
+ * THE SPANISH READING STAYS OFF UNTIL TROY TURNS IT ON (2026-11-15). Off by
+ * default. While off, POST /api/resume/spanish-reading answers 404 exactly like
+ * a route that does not exist, and the "Leer en español" button on a saved
+ * resume is not rendered. A typo in the value fails the release check
+ * (lib/release-check.mjs) and is read as off at run time.
+ */
+export const SPANISH_READING_ENABLED_ENV = "SPANISH_READING_ENABLED";
+
+export function spanishReadingOn(env: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {}): boolean {
+  return serverSwitchOn(env[SPANISH_READING_ENABLED_ENV]);
+}
+
 /** The answer every route of a switched-off step gives: the same as a route that does not exist. */
 export function switchedOffResponse(): Response {
   return new Response(JSON.stringify({ error: "Not found" }), {
