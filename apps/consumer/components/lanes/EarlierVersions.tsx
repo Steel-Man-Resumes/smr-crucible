@@ -8,6 +8,7 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface Version {
   id: string;
@@ -18,6 +19,7 @@ interface Version {
 }
 
 export function EarlierVersions({ artifactId, onRestored }: { artifactId: string; onRestored?: () => void }) {
+  const t = useTranslations("refineryResume.lanes.earlier");
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -43,9 +45,9 @@ export function EarlierVersions({ artifactId, onRestored }: { artifactId: string
       });
       const j = await r.json().catch(() => null);
       if (!r.ok) {
-        setNote(typeof j?.error === "string" ? j.error : "That didn't work. Try again.");
+        setNote(typeof j?.error === "string" ? j.error : t("didntWork"));
       } else {
-        setNote(`Version ${v.number} is back. It's now the newest version.`);
+        setNote(t("back", { number: v.number }));
         await load();
         onRestored?.();
       }
@@ -57,18 +59,17 @@ export function EarlierVersions({ artifactId, onRestored }: { artifactId: string
   const earlier = (versions ?? []).slice(1);
   return (
     <details className="mt-3 border-t border-t-line pt-2" data-testid="earlier-versions" onToggle={(e) => (e.target as HTMLDetailsElement).open && versions === null && void load()}>
-      <summary className="t-focus cursor-pointer text-xs text-t-phos underline decoration-dotted underline-offset-2">Earlier versions</summary>
+      <summary className="t-focus cursor-pointer text-xs text-t-phos underline decoration-dotted underline-offset-2">{t("summary")}</summary>
       {versions === null ? (
-        <p className="mt-2 text-xs text-t-phos-dim">Loading...</p>
+        <p className="mt-2 text-xs text-t-phos-dim">{t("loading")}</p>
       ) : earlier.length === 0 ? (
-        <p className="mt-2 text-xs text-t-phos-dim">No earlier versions yet.</p>
+        <p className="mt-2 text-xs text-t-phos-dim">{t("none")}</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {earlier.map((v) => (
             <li key={v.id} className="border border-t-line bg-t-bg px-3 py-2" data-testid="earlier-version">
               <p className="text-xs font-semibold text-t-white">
-                Version {v.number}
-                {v.status === "finished" ? ", finished" : ", draft"}
+                {v.status === "finished" ? t("versionFinished", { number: v.number }) : t("versionDraft", { number: v.number })}
               </p>
               <p className="text-xs text-t-phos-dim">{v.preview}</p>
               <button
@@ -78,7 +79,7 @@ export function EarlierVersions({ artifactId, onRestored }: { artifactId: string
                 className="t-focus mt-1 min-h-touch text-xs font-semibold text-t-amber-bright underline underline-offset-2 disabled:opacity-60"
                 data-testid="restore-version"
               >
-                {busy === v.id ? "Bringing it back..." : "Bring this one back"}
+                {busy === v.id ? t("bringing") : t("bringBack")}
               </button>
             </li>
           ))}

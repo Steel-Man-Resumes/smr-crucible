@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useServerText } from "@/components/ServerTextProvider";
 
 const cache = new Map<string, { words: string; pages: number | null }>();
 
@@ -26,6 +27,7 @@ export function PageFitLine({
   /** The measured page count (null until known, or when it could not be measured). */
   onPages?: (pages: number | null) => void;
 }) {
+  const ts = useServerText();
   const [words, setWords] = useState<string>("");
   const [failed, setFailed] = useState(false);
   const seq = useRef(0);
@@ -79,7 +81,7 @@ export function PageFitLine({
       className={`text-sm font-medium text-t-white ${className}`}
       data-testid="page-fit-line"
     >
-      {failed ? "We could not count the pages just now." : words || "Counting pages..."}
+      {failed ? "We could not count the pages just now." : words ? ts(words) : "Counting pages..."}
     </p>
   );
 }

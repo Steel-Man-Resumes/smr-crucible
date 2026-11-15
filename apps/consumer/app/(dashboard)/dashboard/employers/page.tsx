@@ -8,9 +8,10 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useLanes } from "@/components/lanes/useLanes";
-import { employerEvidenceLabel } from "@/lib/directory-labels";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 
 interface Employer {
   id: string;
@@ -32,6 +33,8 @@ interface Employer {
 const PAGE_SIZE = 25;
 
 function EmployersList() {
+  const t = useTranslations("refineryJobs.employers");
+  const ts = useServerText();
   const searchParams = useSearchParams();
   const lanes = useLanes();
   const [selectedEmployerId,setSelectedEmployerId]=useState(searchParams.get("employerId")||"");
@@ -66,14 +69,14 @@ function EmployersList() {
         const d = await r.json().catch(() => ({}));
         if (!live) return;
         if (!r.ok) {
-          setError(d.error || "The list didn't load. Try again.");
+          setError(d.error || t("loadFailed"));
           return;
         }
         setEmployers(Array.isArray(d.employers) ? d.employers : []);
         setHasMore(d.hasMore === true);
         if (Array.isArray(d.industries)) setIndustries(d.industries);
       })
-      .catch(() => live && setError("The list didn't load. Try again."))
+      .catch(() => live && setError(t("loadFailed")))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
@@ -134,46 +137,42 @@ function EmployersList() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Employers That Hire People With Records</h1>
+      <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
       <p className="text-t-phos-dim mt-1 mb-4">
-        Employers with published hiring evidence. Checked and reported evidence are labeled separately. Each one shows where we looked
-        and when, and the words we found. Read the notes. Some have honest caveats.
+        {t("intro")}
       </p>
 
       {/* N2: honest "in progress" banner while the curated list is small and growing. */}
       <div className="mb-5 border-l-4 border-t-amber bg-t-panel-2 px-4 py-3">
-        <p className="text-sm font-bold text-t-amber-bright">This database is still being built.</p>
+        <p className="text-sm font-bold text-t-amber-bright">{t("buildingTitle")}</p>
         <p className="text-sm text-t-phos-dim mt-1 leading-relaxed">
-          The list is deliberately small: an employer is added only when we find current,
-          dated evidence that it hires people with records, and the mark runs out on its own
-          unless someone confirms it again. A name here means something. If your area is not covered yet, that is not a dead end. Use Job Search for
-          live listings and the disclosure planner to prepare. A missing employer is not a "no."
+          {t("buildingBody")}
         </p>
       </div>
 
-      <div className="my-3 flex items-center gap-3"><label htmlFor="employer-state" className="text-sm text-t-phos">State</label><input id="employer-state" value={stateFilter} maxLength={2} placeholder="Any" onChange={e=>{setSelectedEmployerId("");setManualSearch(true);setStateFilter(e.target.value.toUpperCase().replace(/[^A-Z]/g,""));setPage(0);}} className="w-20 border border-t-line bg-t-bg px-2 py-2 text-t-white" /><span className="text-sm text-t-phos-dim">Your lane helps start the search. Change any filter.</span></div>
+      <div className="my-3 flex items-center gap-3"><label htmlFor="employer-state" className="text-sm text-t-phos">{t("stateLabel")}</label><input id="employer-state" value={stateFilter} maxLength={2} placeholder={t("any")} onChange={e=>{setSelectedEmployerId("");setManualSearch(true);setStateFilter(e.target.value.toUpperCase().replace(/[^A-Z]/g,""));setPage(0);}} className="w-20 border border-t-line bg-t-bg px-2 py-2 text-t-white" /><span className="text-sm text-t-phos-dim">{t("laneHelps")}</span></div>
       <form onSubmit={search} className="mb-4 flex gap-2" role="search" data-testid="employer-search">
-        <label htmlFor="employer-q" className="sr-only">Search employers</label>
+        <label htmlFor="employer-q" className="sr-only">{t("searchLabel")}</label>
         <input
           id="employer-q"
           type="search"
           value={draft}
           onChange={(e) => {setManualSearch(true);setDraft(e.target.value);}}
           maxLength={80}
-          placeholder="Search by name, town or kind of work"
+          placeholder={t("searchPlaceholder")}
           className="t-focus min-h-touch w-full border border-t-line bg-t-panel px-3 py-2 text-sm text-t-white placeholder:text-t-phos-dim"
         />
         <button type="submit" className="t-focus min-h-touch shrink-0 bg-t-amber px-4 py-2 text-sm font-bold text-white hover:bg-t-amber-bright">
-          Search
+          {t("search")}
         </button>
       </form>
 
       {query && (
         <div className="mb-5 flex items-center justify-between gap-3 border border-t-amber bg-t-panel-2 px-4 py-3">
           <p className="text-sm text-t-amber-bright">
-            Showing employers matching{" "}
+            {t("showingMatching")}{" "}
             <span className="font-semibold">&ldquo;{query}&rdquo;</span>
-            {query === laneQ && laneQ ? " from your lane" : ""}.
+            {query === laneQ && laneQ ? t("fromLane") : ""}.
           </p>
           <button
             type="button"
@@ -184,7 +183,7 @@ function EmployersList() {
             }}
             className="text-sm font-medium text-t-amber-bright hover:text-t-amber whitespace-nowrap"
           >
-            Show all
+            {t("showAll")}
           </button>
         </div>
       )}
@@ -195,7 +194,7 @@ function EmployersList() {
             onClick={() => pickIndustry("all")}
             className={`t-focus px-3 py-1.5 text-xs font-medium border ${industry === "all" ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
-            All
+            {t("all")}
           </button>
           {industries.map((ind) => (
             <button
@@ -216,12 +215,12 @@ function EmployersList() {
       )}
 
       {loading && employers.length === 0 ? (
-        <div className="text-t-phos-dim py-8">Loading employers...</div>
+        <div className="text-t-phos-dim py-8">{t("loading")}</div>
       ) : employers.length === 0 && !error ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           {query || industry !== "all"
-            ? "No employers in the directory match that yet. Try another word, or show all."
-            : "No employers carry the mark here yet. Check back soon."}
+            ? t("noMatch")
+            : t("noneYet")}
         </div>
       ) : (
         <>
@@ -234,7 +233,7 @@ function EmployersList() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-t-phos-dim">
                       {e.industry && <span>{e.industry}</span>}
                       {e.location && <span>{e.location}</span>}
-                      <span>{employerEvidenceLabel(e.band)}</span>
+                      <span>{t(`evidence.${e.band === "A" ? "A" : e.band === "B" ? "B" : "unchecked"}`)}</span>
                     </div>
                   </div>
                   {e.applyUrl && (
@@ -244,25 +243,25 @@ function EmployersList() {
                       rel="noopener noreferrer"
                       className="t-focus flex-shrink-0 px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright min-h-touch"
                     >
-                      Apply
+                      {t("apply")}
                     </a>
                   )}
                 </div>
 
                 {e.band_reason && <p className="mt-2 text-xs text-t-phos-dim">{e.band_reason}</p>}
-                {e.sourceUrl && <a href={e.sourceUrl} target="_blank" rel="noopener noreferrer" className="t-focus mt-2 inline-block text-xs text-t-amber-bright underline">Read the evidence{e.lastVerified ? ` (${e.lastVerified.slice(0, 10)})` : ""}</a>}
+                {e.sourceUrl && <a href={e.sourceUrl} target="_blank" rel="noopener noreferrer" className="t-focus mt-2 inline-block text-xs text-t-amber-bright underline">{t("readEvidence")}{e.lastVerified ? ` (${e.lastVerified.slice(0, 10)})` : ""}</a>}
                 {e.roleTypes && (
                   <p className="text-sm text-t-phos mt-3">
-                    <span className="text-t-phos-dim">Roles: </span>
+                    <span className="text-t-phos-dim">{t("roles")} </span>
                     {e.roleTypes}
                   </p>
                 )}
                 {e.whyGoodFit && (
-                  <p className="text-sm text-t-phos mt-2 leading-relaxed">{e.whyGoodFit}</p>
+                  <p className="text-sm text-t-phos mt-2 leading-relaxed">{ts(e.whyGoodFit)}</p>
                 )}
                 {e.caveats && (
                   <p className="text-xs text-t-amber-bright bg-t-panel-2 border border-t-amber px-3 py-2 mt-3">
-                    Heads up: {e.caveats}
+                    {t("headsUp",{text:e.caveats})}
                   </p>
                 )}
 
@@ -270,14 +269,14 @@ function EmployersList() {
                   onClick={() => setOpenApply(openApply === e.id ? null : e.id)}
                   className="mt-3 text-sm font-medium text-t-amber-bright hover:text-t-amber"
                 >
-                  {openApply === e.id ? "Hide" : "Prepare to apply"}
+                  {openApply === e.id ? t("hide") : t("prepare")}
                 </button>
 
                 {openApply === e.id && (
                   <div className="mt-3 border border-t-line bg-t-panel-2 p-4 space-y-3">
                     <div>
                       <p className="text-xs font-semibold uppercase text-t-amber-bright mb-1">
-                        Your details to paste
+                        {t("detailsToPaste")}
                       </p>
                       {me?.name || me?.email || me?.city || me?.state ? (
                         <div className="text-sm text-t-white leading-relaxed">
@@ -290,32 +289,32 @@ function EmployersList() {
                             onClick={copyDetails}
                             className="mt-2 text-xs font-medium text-t-amber-bright hover:text-t-amber underline"
                           >
-                            {copied ? "Copied!" : "Copy my details"}
+                            {copied ? t("copied") : t("copyDetails")}
                           </button>
                         </div>
                       ) : (
                         <p className="text-sm text-t-phos-dim">
-                          Add your name and contact info in Settings to paste them here.
+                          {t("addInSettings")}
                         </p>
                       )}
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase text-t-amber-bright mb-1">
-                        Your resume
+                        {t("yourResume")}
                       </p>
                       {me?.hasResume ? (
                         <a
                           href="/dashboard/vault"
                           className="text-sm font-medium text-t-amber-bright hover:text-t-amber underline"
                         >
-                          Open your Library to copy or download it
+                          {t("openLibrary")}
                         </a>
                       ) : (
                         <a
                           href="/dashboard/application-tailor"
                           className="text-sm font-medium text-t-amber-bright hover:text-t-amber underline"
                         >
-                          Build a resume first
+                          {t("buildFirst")}
                         </a>
                       )}
                     </div>
@@ -326,12 +325,11 @@ function EmployersList() {
                         rel="noopener noreferrer"
                         className="t-focus inline-flex min-h-touch items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
                       >
-                        Open the application
+                        {t("openApplication")}
                       </a>
                     )}
                     <p className="text-xs text-t-phos-dim">
-                      We cannot fill the employer site for you, but everything you need is right
-                      here. Tailor your resume to this role first if you can.
+                      {t("cannotFill")}
                     </p>
                   </div>
                 )}
@@ -340,29 +338,29 @@ function EmployersList() {
           </div>
 
           {(page > 0 || hasMore) && (
-            <nav className="mt-6 flex items-center justify-between gap-3" aria-label="Employer pages" data-testid="employer-pager">
+            <nav className="mt-6 flex items-center justify-between gap-3" aria-label={t("pagesAria")} data-testid="employer-pager">
               <button
                 type="button"
                 disabled={page === 0 || loading}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-2 text-sm text-t-white disabled:opacity-40"
               >
-                Previous {PAGE_SIZE}
+                {t("previous",{count:PAGE_SIZE})}
               </button>
-              <span className="text-xs text-t-phos-dim">Page {page + 1}</span>
+              <span className="text-xs text-t-phos-dim">{t("page",{number:page + 1})}</span>
               <button
                 type="button"
                 disabled={!hasMore || loading}
                 onClick={() => setPage((p) => p + 1)}
                 className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-2 text-sm text-t-white disabled:opacity-40"
               >
-                Next {PAGE_SIZE}
+                {t("next",{count:PAGE_SIZE})}
               </button>
             </nav>
           )}
 
           <p className="text-xs text-t-phos-dim mt-6">
-            Evidence describes a reported hiring practice, not a job offer or a decision about your history. Confirm current openings directly with the employer.
+            {t("footer")}
           </p>
         </>
       )}

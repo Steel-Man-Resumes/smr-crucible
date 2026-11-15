@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createTranslator, useTranslations } from "next-intl";
 import { fixPanelIntro } from "@/lib/finish-copy";
+import { useServerText } from "@/components/ServerTextProvider";
 import enDefend from "@/messages/en/forge-defend.json";
 import {
   editableLine,
@@ -196,6 +197,7 @@ function SkillsCard({ group, index, actions }: { group: LineGroup; index: number
 /** D4: a credential the person never mentioned, asked as a memory prompt. */
 function CredentialPromptCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
   const t = useTranslations("forgeDefend");
+  const ts = useServerText();
   const [mode, setMode] = useState<"ask" | "yes" | "no">("ask");
   const kinds: readonly CredentialType[] = group.education ? EDUCATION_KINDS : CREDENTIAL_TYPES;
   const changes = mode === "no" && actions.onPreviewCut ? actions.onPreviewCut(group) : [];
@@ -216,7 +218,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
     <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-target={group.target} data-blocking="true" data-credential-prompt="true" className="border border-t-amber bg-t-panel px-3 py-3">
       <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{t("card.fixBeforeSend")}</p>
       <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
-      <p className="mt-1.5 text-sm text-t-phos">{prompt}</p>
+      <p className="mt-1.5 text-sm text-t-phos">{ts(prompt)}</p>
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {group.education ? (
@@ -499,6 +501,7 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
  */
 function JobCard({ group, index, onChange, actions }: { group: LineGroup; index: number; onChange: GroupHandler<boolean>; actions: CardActions }) {
   const t = useTranslations("forgeDefend");
+  const ts = useServerText();
   const tc = useTranslations("common.actions");
   const [fixing, setFixing] = useState(false);
   const [text, setText] = useState(() => editableLine(group.line));
@@ -529,7 +532,7 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
       {changed ? (
         <>
           <p className="mt-1.5 text-xs text-t-amber-bright" data-testid="job-changes">
-            {group.items[0]?.why || t("job.notOnPage", { changes: changes.map((c) => `"${c}"`).join(", ") })}
+            {group.items[0]?.why ? ts(group.items[0].why) : t("job.notOnPage", { changes: changes.map((c) => `"${c}"`).join(", ") })}
           </p>
           {job.ownHeader && (
             <p className="mt-1.5 text-xs text-t-phos" data-testid="job-own-header">
@@ -617,6 +620,7 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
  */
 function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[]; onChange: GroupHandler<boolean>; onSkip?: (line: string) => void }) {
   const t = useTranslations("forgeDefend");
+  const ts = useServerText();
   const tc = useTranslations("common.actions");
   const [skipped, setSkipped] = useState<string[]>([]);
   const [open, setOpen] = useState<string | null>(null);
@@ -632,7 +636,7 @@ function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[];
         {shown.map((p, n) => (
           <li key={p.line} className="border border-t-line bg-t-panel px-3 py-3" data-testid="number-prompt">
             <p className="text-sm text-t-white">&ldquo;{editableLine(p.line)}&rdquo;</p>
-            <p className="mt-1 text-xs text-t-phos">{t("numbers.countHere", { count: p.count })}</p>
+            <p className="mt-1 text-xs text-t-phos">{t("numbers.countHere", { count: ts(p.count) })}</p>
             {open === p.line ? (
               <div className="mt-2">
                 <label htmlFor={`num-${n}`} className="block text-xs font-semibold text-t-white">
@@ -712,6 +716,7 @@ function GroupCard({
   actions?: CardActions;
 }) {
   const t = useTranslations("forgeDefend");
+  const ts = useServerText();
   const tc = useTranslations("common.actions");
   const [mode, setModeState] = useState<Mode>("idle");
   const [who, setWho] = useState("");
@@ -816,10 +821,10 @@ function GroupCard({
       ) : (
         <>
           {uniqueQuestions(group.items).map((q) => (
-            <p key={q} className="mt-1.5 text-sm text-t-phos">{q}</p>
+            <p key={q} className="mt-1.5 text-sm text-t-phos">{ts(q)}</p>
           ))}
           {reasons.map((r) => (
-            <p key={r} className="mt-1 text-xs text-t-amber-bright">{r}</p>
+            <p key={r} className="mt-1 text-xs text-t-amber-bright">{ts(r)}</p>
           ))}
           {mode === "idle" && scope && (
             // Round 11: one tap for an honest scope claim, a shared form, or take it off.
@@ -923,7 +928,7 @@ function GroupCard({
               <p className="text-sm text-t-phos line-through">{editableLine(group.line)}</p>
               <p className="mt-2 text-xs text-t-phos-dim">{t("suggest.after")}</p>
               <p className="text-sm font-medium text-t-white">{suggestions[suggestionIndex]}</p>
-              <p className="mt-2 text-xs text-t-phos">{t.rich("suggest.why", { why: Array.from(new Set(group.items.map((item) => item.why))).join(" "), strong: (chunks) => <strong>{chunks}</strong> })}</p>
+              <p className="mt-2 text-xs text-t-phos">{t.rich("suggest.why", { why: Array.from(new Set(group.items.map((item) => ts(item.why)))).join(" "), strong: (chunks) => <strong>{chunks}</strong> })}</p>
               <p className="mt-2 text-xs text-t-phos-dim">{t("suggest.onlyKeep")}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice(t("suggest.staleLine")); }} className={BTN_MAIN} data-testid="use-fix">{t("suggest.useWording")}</button>
@@ -977,7 +982,7 @@ function GroupCard({
       {mode === "scopeYes" && scope && (
         <div className="mt-3">
           <label htmlFor={`${id}-who`} className="block text-xs font-semibold text-t-white">
-            {scope.question}
+            {ts(scope.question)}
           </label>
           <div className="mt-2 flex flex-wrap gap-2" data-testid="scope-chips">
             {SCOPE_CHIPS.map((chip) => (
@@ -1340,6 +1345,7 @@ export function DefendPanel({
   onBulk?: (picks: BulkPick[]) => number;
 }) {
   const t = useTranslations("forgeDefend");
+  const ts = useServerText();
   const progress = progressLine(view);
   const intro = fixPanelIntro(view);
   // finish-copy.ts returns the heading and subline as English text; the known lines are looked up in the catalog.
@@ -1378,8 +1384,8 @@ export function DefendPanel({
           {view.general.map((i: GateItem, n) => (
             <li key={n} className="border border-t-amber bg-t-panel px-3 py-3" data-testid="fix-general">
               {i.line && <p className="text-sm text-t-white">&ldquo;{editableLine(i.line)}&rdquo;</p>}
-              <p className="text-sm text-t-white">{i.why}</p>
-              <p className="mt-1 text-sm text-t-phos">{i.question}</p>
+              <p className="text-sm text-t-white">{ts(i.why)}</p>
+              <p className="mt-1 text-sm text-t-phos">{ts(i.question)}</p>
             </li>
           ))}
         </ul>

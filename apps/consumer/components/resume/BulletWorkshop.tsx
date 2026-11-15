@@ -15,11 +15,12 @@
  */
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
 import { countPromptsFor, quantityFromCounts } from "@/lib/count-prompts";
 import { hasChip, toggleChip, canGenerateBullet } from "@/lib/bullet-chips";
-import { WORKSHOP_PLACEHOLDERS } from "@/lib/workshop-placeholders";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -53,63 +54,16 @@ const DRAFT_PREFIX = "forge_bullet_workshop:";
  *
  * These are prompts, never claims: a chip only enters the answer when the
  * person taps it, and the generator still writes from their words alone.
+ * The words themselves live in the message catalog (oftenChip, improvedChip,
+ * why, stage), five and seven chips in that order.
  */
-const OFTEN_CHIPS = [
-  "every shift",
-  "daily",
-  "several times a week",
-  "weekly",
-  "during peak season",
-] as const;
+const OFTEN_CHIP_COUNT = 5;
+const IMPROVED_CHIP_COUNT = 7;
 
-const IMPROVED_CHIPS = [
-  "fewer mistakes",
-  "faster",
-  "safer",
-  "kept the schedule",
-  "trained others",
-  "less waste",
-  "saved money",
-] as const;
+type Translate = (key: string, values?: Record<string, string | number>) => string;
+const chipList = (t: Translate, prefix: string, count: number): string[] => Array.from({ length: count }, (_, i) => t(`${prefix}.${i}`));
 
-/**
- * The knowledge ladder: why each question earns the time it costs.
- *
- * Collapsed by default, because someone in a hurry should never have to read
- * past it. Open, it teaches the thing that outlasts this one bullet -- what
- * makes a resume line land. People who understand the rule start applying it
- * themselves, which is the actual goal.
- */
-const WHY = {
-  did: "Employers are scanning for what you handled, not what the job description said. Your own plain words are the raw material. They do not need to be polished.",
-  tools:
-    "Naming the equipment or system is the fastest proof you have actually done the work, and tools are exactly what employer software searches for.",
-  often:
-    "Frequency turns a duty into a scale. \"Ran the crusher pit\" and \"ran the crusher pit every shift\" are two different claims, and only one of them is specific.",
-  quantity:
-    "One real number does more than a page of description, and it is the thing almost no resume has. It does not need to be impressive. It needs to be true and yours.",
-  improved:
-    "This is the line between what you were assigned and what you changed. It is the hardest question here and usually the most valuable answer.",
-} as const;
-
-/**
- * Meet people where they said they were.
- *
- * The intake asks where someone is in their journey, and then nothing used that
- * answer at the moment it matters most -- the point where they are being asked
- * to do real work. Someone who told us they are just looking around should not
- * be met with the same pressure as someone actively applying.
- */
-const STAGE_INTRO: Record<string, string> = {
-  precontemplation:
-    "No pressure here. Answer whatever comes easily and skip the rest. Even one answer is enough to work with.",
-  contemplation:
-    "Answer what you can, in your own words. Even one answer is enough to start, and you can come back to the others.",
-  preparation:
-    "Answer in your own words. We use only what you tell us, and nothing gets invented.",
-  action:
-    "The more specific you get here, the harder this lands with an employer. Numbers especially.",
-};
+const STAGES = ["precontemplation", "contemplation", "preparation", "action"] as const;
 
 type WorkshopDraft = {
   did: string;
@@ -141,6 +95,10 @@ export function BulletWorkshop({
   onAccept,
   onClose,
 }: BulletWorkshopProps) {
+  const t = useTranslations("refineryResume.resume.bullet");
+  const ts = useServerText();
+  const oftenChips = chipList(t, "oftenChip", OFTEN_CHIP_COUNT);
+  const improvedChips = chipList(t, "improvedChip", IMPROVED_CHIP_COUNT);
   const [saved] = useState(() => loadDraft(storageKey));
   const [did, setDid] = useState(saved?.did ?? (initialBullet?.trim() || ""));
   const [tools, setTools] = useState(saved?.tools ?? "");
@@ -243,8 +201,8 @@ export function BulletWorkshop({
     };
   }, [jobTitle]);
 
-  function toggleTool(t: string) {
-    setTools((prev) => toggleChip(prev, t));
+  function toggleTool(tool: string) {
+    setTools((prev) => toggleChip(prev, tool));
   }
 
   async function generate() {
@@ -269,9 +227,9 @@ export function BulletWorkshop({
         setDraftFrom(requestKey);
         setDraftEdited(false);
       }
-      else setError(d.error || "Could not write that yet. Add a little more and try again.");
+      else setError(d.error || t("noWrite"));
     } catch {
-      setError("Something went wrong. Try again.");
+      setError(t("wrong"));
     } finally {
       setGenerating(false);
     }
@@ -314,67 +272,69 @@ export function BulletWorkshop({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label="Make this stronger"
+        aria-label={t("dialogAria")}
         className="bg-t-panel border border-t-line w-full sm:max-w-lg max-h-[92vh] overflow-y-auto p-5 focus:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between mb-1">
-          <h3 className="text-lg font-bold text-t-white">Make this stronger</h3>
+          <h3 className="text-lg font-bold text-t-white">{t("title")}</h3>
           <button
             onClick={onClose}
             className="text-t-phos-dim hover:text-t-white text-2xl leading-none px-1"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             &times;
           </button>
         </div>
         <p className="text-xs text-t-phos-dim mb-1">
-          {STAGE_INTRO[readinessStage ?? "preparation"] ?? STAGE_INTRO.preparation}
-          {jobTitle ? ` For your ${jobTitle} role.` : ""}
+          {t(`stage.${(STAGES as readonly string[]).includes(readinessStage ?? "preparation") ? (readinessStage ?? "preparation") : "preparation"}`)}
+          {jobTitle ? ` ${t("forRole", { job: jobTitle })}` : ""}
         </p>
         <p className="mb-4 text-[11px] text-t-phos-dim">
           {answered === 0
-            ? "Tap an answer below or type your own."
+            ? t("progress0")
             : answered === 1
-              ? "That is enough to write something. Add more if you want it sharper."
+              ? t("progress1")
               : answered >= 4
-                ? "That is a lot to work with. This one is going to be strong."
-                : `${answered} of 5 answered. That is more than most people give us.`}
+                ? t("progress4")
+                : t("progressN", { answered })}
         </p>
 
         <div className="space-y-3">
           <Field
-            label="What did you actually do?"
+            label={t("q.did")}
+            idSlug="what-did-you-actually-do"
             value={did}
             onChange={setDid}
-            placeholder={WORKSHOP_PLACEHOLDERS.did}
-            why={WHY.did}
+            placeholder={t("ph.did")}
+            why={t("why.did")}
             textarea
           />
           <div>
             <Field
-              label="What tools, equipment, or systems did you use?"
+              label={t("q.tools")}
+              idSlug="what-tools-equipment-or-systems-did-you-use"
               value={tools}
               onChange={setTools}
-              placeholder={WORKSHOP_PLACEHOLDERS.tools}
-              why={WHY.tools}
+              placeholder={t("ph.tools")}
+              why={t("why.tools")}
             />
             {toolHints.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                <span className="text-[11px] text-t-phos-dim mr-0.5">Common for this role. Tap if it fits:</span>
-                {toolHints.map((t) => (
+                <span className="text-[11px] text-t-phos-dim mr-0.5">{t("commonTools")}</span>
+                {toolHints.map((hint) => (
                   <button
-                    key={t}
+                    key={hint}
                     type="button"
-                    onClick={() => toggleTool(t)}
-                    aria-pressed={hasChip(tools, t)}
+                    onClick={() => toggleTool(hint)}
+                    aria-pressed={hasChip(tools, hint)}
                     className={`text-[11px] px-2 py-0.5 border transition-colors ${
-                      hasChip(tools, t)
+                      hasChip(tools, hint)
                         ? "bg-t-amber text-white border-t-amber font-semibold"
                         : "bg-t-panel-2 text-t-phos border-t-line hover:border-t-amber"
                     }`}
                   >
-                    {hasChip(tools, t) ? "\u2713 " : ""}{t}
+                    {hasChip(tools, hint) ? "\u2713 " : ""}{hint}
                   </button>
                 ))}
               </div>
@@ -390,26 +350,27 @@ export function BulletWorkshop({
           >
             <div>
               <h4 id="bw-proof-heading" className="text-sm font-semibold text-t-white">
-                Two quick ones that make this line stronger
+                {t("proofTitle")}
               </h4>
               <p className="mt-0.5 text-xs text-t-phos">
-                Optional. Tap an answer or type one. Only say what you know is true. Skip
-                anything you are not sure about.
+                {t("proofNote")}
               </p>
             </div>
           <Field
-            label="How often?"
+            label={t("q.often")}
+            idSlug="how-often"
             emphasis
             optional
             value={often}
             onChange={setOften}
-            placeholder={WORKSHOP_PLACEHOLDERS.often}
-            chips={OFTEN_CHIPS}
-            why={WHY.often}
+            placeholder={t("ph.often")}
+            chips={oftenChips}
+            why={t("why.often")}
           />
           <div>
             <Field
-              label="How many?"
+              label={t("q.quantity")}
+              idSlug="how-many"
               emphasis
               optional
               value={quantity}
@@ -418,14 +379,14 @@ export function BulletWorkshop({
                 setCounts({});
                 setQuantitySource(v.trim() ? "typed" : undefined);
               }}
-              placeholder={WORKSHOP_PLACEHOLDERS.quantity}
-              why={WHY.quantity}
+              placeholder={t("ph.quantity")}
+              why={t("why.quantity")}
             />
             {/* What could be counted for this line's work. Each prompt names the
                 thing to count and nothing else; the person types their own
                 figure beside it. No number, range or example is ever offered. */}
-            <div className="mt-2 space-y-1.5" role="group" aria-label="What could you count here?" data-testid="count-prompts">
-              <p className="text-[11px] text-t-phos">What could you count here? Type a number only if you know it.</p>
+            <div className="mt-2 space-y-1.5" role="group" aria-label={t("countGroup")} data-testid="count-prompts">
+              <p className="text-[11px] text-t-phos">{t("countNote")}</p>
               {countPromptsFor(did || initialBullet || "", jobTitle).map((prompt, i) => (
                 <label key={prompt} className="flex items-center gap-2 text-sm text-t-phos">
                   <input
@@ -440,10 +401,10 @@ export function BulletWorkshop({
                       setQuantity(q);
                       setQuantitySource(q ? "typed" : undefined);
                     }}
-                    aria-label={`How many ${prompt}`}
+                    aria-label={t("countAria", { prompt: ts(prompt) })}
                     className="t-focus min-h-touch w-20 shrink-0 border border-t-line bg-t-panel px-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
                   />
-                  <span>{prompt}</span>
+                  <span>{ts(prompt)}</span>
                 </label>
               ))}
               <button
@@ -456,12 +417,12 @@ export function BulletWorkshop({
                 }}
                 className="t-focus min-h-touch border border-t-line px-3 text-sm text-t-phos-dim transition-colors hover:border-t-amber"
               >
-                {"I'm not sure"}
+                {t("notSure")}
               </button>
             </div>
             {quantitySource === "unsure" && !quantity.trim() && (
               <p className="mt-1.5 text-[11px] text-t-phos-dim">
-                {"That's fine. We'll leave the number out. A true line with no number still works."}
+                {t("leaveOut")}
               </p>
             )}
           </div>
@@ -474,15 +435,16 @@ export function BulletWorkshop({
             surfaceId="bullet-quantity"
             enabled={!quantity.trim() && quantitySource !== "unsure"}
             delayMs={9000}
-            message="Pick something you counted and type the number you know is true."
+            message={t("attention")}
           />
           <Field
-            label="What got better because of you?"
+            label={t("q.improved")}
+            idSlug="what-got-better-because-of-you"
             value={improved}
             onChange={setImproved}
-            placeholder={WORKSHOP_PLACEHOLDERS.improved}
-            chips={IMPROVED_CHIPS}
-            why={WHY.improved}
+            placeholder={t("ph.improved")}
+            chips={improvedChips}
+            why={t("why.improved")}
             textarea
           />
         </div>
@@ -492,7 +454,7 @@ export function BulletWorkshop({
         {draft !== null && (
           <div className="mt-4 bg-t-panel-2 border border-t-amber p-3">
             <p className="text-[11px] font-semibold text-t-amber-bright uppercase mb-1">
-              Your stronger bullet
+              {t("yourBullet")}
             </p>
             <textarea
               value={draft}
@@ -505,8 +467,8 @@ export function BulletWorkshop({
             />
             <p className="text-[11px] text-t-phos-dim mt-1">
               {draftStale
-                ? "Your answers changed after this was written. Tap Rewrite, or fix the line yourself."
-                : "Edit it to sound like you. Check every number. If one isn't right, fix it."}
+                ? t("stale")
+                : t("editNote")}
             </p>
           </div>
         )}
@@ -517,7 +479,7 @@ export function BulletWorkshop({
             disabled={generating || !canGenerate}
             className="t-focus px-4 py-2.5 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
           >
-            {generating ? "Writing..." : draft !== null ? "Rewrite" : "Write a strong bullet"}
+            {generating ? t("writing") : draft !== null ? t("rewrite") : t("write")}
           </button>
           {draft !== null && (
             <button
@@ -525,19 +487,19 @@ export function BulletWorkshop({
               disabled={draftStale}
               className="t-focus px-4 py-2.5 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 disabled:border-t-line disabled:text-t-phos-dim transition-colors min-h-touch"
             >
-              Use this bullet
+              {t("use")}
             </button>
           )}
           <button
             onClick={onClose}
             className="px-3 py-2.5 text-t-phos-dim hover:text-t-white text-sm min-h-touch ml-auto"
           >
-            Close
+            {t("close")}
           </button>
         </div>
         {storageKey && (
           <p className="text-[11px] text-t-phos-dim mt-2">
-            Your answers are saved. Close anytime and pick up where you left off.
+            {t("saved")}
           </p>
         )}
       </div>
@@ -547,6 +509,7 @@ export function BulletWorkshop({
 
 function Field({
   label,
+  idSlug,
   value,
   onChange,
   placeholder,
@@ -557,6 +520,8 @@ function Field({
   optional,
 }: {
   label: string;
+  /** Stable id slug (never translated): the tour and focus code find the field by it. */
+  idSlug: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -570,9 +535,10 @@ function Field({
   /** Says plainly the question can be skipped. */
   optional?: boolean;
 }) {
+  const t = useTranslations("refineryResume.resume.bullet");
   const [showWhy, setShowWhy] = useState(false);
   // Associate label with input (id/htmlFor) for screen readers + testability.
-  const id = "bw-" + label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const id = "bw-" + idSlug;
   const cls =
     "w-full px-3 py-2 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors";
 
@@ -589,7 +555,7 @@ function Field({
         >
           {label}
           {optional && (
-            <span className="ml-1.5 text-[11px] font-normal text-t-phos-dim">(optional)</span>
+            <span className="ml-1.5 text-[11px] font-normal text-t-phos-dim">{t("optional")}</span>
           )}
         </label>
         {why && (
@@ -599,7 +565,7 @@ function Field({
             className="t-focus shrink-0 text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2 hover:text-t-white"
             aria-expanded={showWhy}
           >
-            {showWhy ? "hide" : "why this?"}
+            {showWhy ? t("hide") : t("whyThis")}
           </button>
         )}
       </div>

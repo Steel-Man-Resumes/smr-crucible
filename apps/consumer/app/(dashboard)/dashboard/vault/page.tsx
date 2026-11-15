@@ -17,13 +17,14 @@ import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { EarlierVersions } from "@/components/lanes/EarlierVersions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { printResumePdf } from "@/components/resume/resumePrint";
 import { MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
 import { useLanes } from "@/components/lanes/useLanes";
 import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
 import { LaneIntro } from "@/components/lanes/LaneIntro";
-import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, type LibraryLaneChoice } from "@/lib/lanes";
+import { laneFilterParam, laneIdForSave, type LibraryLaneChoice } from "@/lib/lanes";
 
 interface Artifact {
   id: string;
@@ -134,6 +135,16 @@ function isBaseResume(a: Artifact): boolean {
 }
 
 export default function VaultPage() {
+  const t = useTranslations("refineryResume.library");
+  /** The card title in the person's language. The plain title() stays for exports and search. */
+  const displayTitle = (a: Artifact): string => {
+    const job = a.target_context?.targetJob;
+    const co = a.target_context?.targetCompany;
+    if (job && co) return t("jobAt", { job, company: co });
+    if (job) return job;
+    if (a.artifact_type === "resume") return t("baseResume");
+    return fmt(a.updated_at);
+  };
   const [items, setItems] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -194,9 +205,9 @@ export default function VaultPage() {
         setItems((prev) => (append ? [...prev, ...rows] : rows));
         setTotal(typeof d.total === "number" ? d.total : rows.length);
       })
-      .catch(() => { if (current()) setLoadError("Your saved work could not be loaded. Please try again."); })
+      .catch(() => { if (current()) setLoadError(t("loadError")); })
       .finally(() => { if (current()) setLoading(false); });
-  }, [laneFilter, showRelated]);
+  }, [laneFilter, showRelated, t]);
 
   const loadExamples = useCallback(() => {
     fetch("/api/artifacts?examples=only&limit=100")
@@ -232,8 +243,8 @@ export default function VaultPage() {
       });
       if (res.ok) {
         window.dispatchEvent(new Event("resume-saved"));
-        const name = laneId ? lanes.lanes.find((l) => l.id === laneId)?.name : MAIN_LANE_LABEL;
-        setStatusMsg(`Moved to ${name}.`);
+        const name = laneId ? lanes.lanes.find((l) => l.id === laneId)?.name : t("main");
+        setStatusMsg(t("movedTo", { name: name ?? "" }));
         setMoveChoice((m) => {
           const n = { ...m };
           delete n[a.id];
@@ -244,10 +255,10 @@ export default function VaultPage() {
           laneFilter === "all" ? prev.map((x) => (x.id === a.id ? { ...x, lane_id: laneId } : x)) : prev.filter((x) => x.id !== a.id)
         );
       } else {
-        setStatusMsg("Could not move that. Try again.");
+        setStatusMsg(t("moveFailed"));
       }
     } catch {
-      setStatusMsg("Could not move that. Try again.");
+      setStatusMsg(t("moveFailed"));
     } finally {
       setMoving(null);
     }
@@ -263,7 +274,7 @@ export default function VaultPage() {
       });
       if (res.ok) {
         window.dispatchEvent(new Event("resume-saved"));
-        setStatusMsg(isDemo ? "Moved to examples." : "Back in My resumes.");
+        setStatusMsg(isDemo ? t("movedExamples") : t("backInResumes"));
         if (isDemo) {
           setItems((prev) => prev.filter((x) => x.id !== a.id));
           setTotal((t) => Math.max(0, t - 1));
@@ -273,18 +284,18 @@ export default function VaultPage() {
           load(q);
         }
       } else {
-        setStatusMsg("Could not change that. Try again.");
+        setStatusMsg(t("changeFailed"));
       }
     } catch {
-      setStatusMsg("Could not change that. Try again.");
+      setStatusMsg(t("changeFailed"));
     } finally {
       setMoving(null);
     }
   }
 
   function laneName(id: string | null | undefined): string {
-    if (!id) return MAIN_LANE_LABEL;
-    return lanes.lanes.find((l) => l.id === id)?.name ?? lanes.archived.find((l) => l.id === id)?.name ?? MAIN_LANE_LABEL;
+    if (!id) return t("main");
+    return lanes.lanes.find((l) => l.id === id)?.name ?? lanes.archived.find((l) => l.id === id)?.name ?? t("main");
   }
 
   // Only text changes need a debounce. Lane/filter changes already load above;
@@ -329,8 +340,8 @@ export default function VaultPage() {
           )
         );
       }
-      else setStatusMsg("Your current resume choice did not save. Try again.");
-    } catch { setStatusMsg("Your current resume choice did not save. Try again."); } finally {
+      else setStatusMsg(t("currentFailed"));
+    } catch { setStatusMsg(t("currentFailed")); } finally {
       setPinning(null);
     }
   }
@@ -517,13 +528,13 @@ ${body}
         window.dispatchEvent(new Event("resume-saved"));
         setItems((prev) => prev.filter((x) => x.id !== id));
         setTotal((t) => Math.max(0, t - 1));
-        setStatusMsg("Item deleted.");
+        setStatusMsg(t("deleted"));
       } else {
         const err = await res.json().catch(() => ({}));
-        setStatusMsg(err?.message || err?.error || "Could not delete that item.");
+        setStatusMsg(err?.message || err?.error || t("deleteFailed"));
       }
     } catch {
-      setStatusMsg("Could not delete that item. Please try again.");
+      setStatusMsg(t("deleteFailedRetry"));
     } finally {
       setRemoving(null);
       setConfirmDelete(null);
@@ -543,59 +554,59 @@ ${body}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-medium text-t-white truncate">{title(a)}</h3>
+              <h3 className="font-medium text-t-white truncate">{displayTitle(a)}</h3>
               {a.is_current && (
                 <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-t-amber text-white">
-                  Current
+                  {t("current")}
                 </span>
               )}
               {a.is_locked && (
                 <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border border-t-steel text-t-steel">
-                  Baseline{a.lane ? ` · ${a.lane}` : ""}
+                  {t("baseline")}{a.lane ? ` · ${a.lane}` : ""}
                 </span>
               )}
               {a.is_demo && (
                 <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border border-t-line text-t-phos-dim">
-                  Example
+                  {t("example")}
                 </span>
               )}
             </div>
             {laneFilter === "all" && !a.is_demo && (
-              <p className="text-xs text-t-phos-dim mt-0.5" data-testid="item-lane">Lane: {laneName(a.lane_id)}</p>
+              <p className="text-xs text-t-phos-dim mt-0.5" data-testid="item-lane">{t("lane", { name: laneName(a.lane_id) })}</p>
             )}
-            <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
+            <p className="text-xs text-t-phos-dim mt-0.5">{t("updated", { date: fmt(a.updated_at) })}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setExpanded(open ? null : a.id)}
               className="t-focus px-3 py-1.5 text-xs font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
             >
-              {open ? "Hide" : "View"}
+              {open ? t("hide") : t("view")}
             </button>
             {isResume && (
               <Link
                 href={`/dashboard/application-tailor?id=${a.id}`}
                 className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright"
               >
-                {isBaseResume(a) ? "Tailor to a job" : "Open in builder"}
+                {isBaseResume(a) ? t("tailorToJob") : t("openBuilder")}
               </Link>
             )}
             {confirmDelete === a.id ? (
               <>
                 <button onClick={() => remove(a.id)} className="t-focus px-2 py-1.5 text-xs font-medium bg-t-red text-white hover:opacity-90">
-                  Delete
+                  {t("delete")}
                 </button>
                 <button onClick={() => setConfirmDelete(null)} className="text-xs text-t-phos-dim hover:text-t-white">
-                  Cancel
+                  {t("cancel")}
                 </button>
               </>
             ) : (
               <button
                 onClick={() => setConfirmDelete(a.id)}
                 className="text-xs text-t-phos-dim hover:text-t-red"
-                title="Delete"
+                title={t("delete")}
               >
-                Delete
+                {t("delete")}
               </button>
             )}
           </div>
@@ -608,7 +619,7 @@ ${body}
               disabled={pinning === a.id}
               className="text-xs font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-50"
             >
-              {a.is_current ? "Unpin as current" : "Set as my current resume"}
+              {a.is_current ? t("unpin") : t("setCurrent")}
             </button>
             {a.is_locked ? (
               <button
@@ -616,14 +627,14 @@ ${body}
                 disabled={locking === a.id}
                 className="text-xs font-medium text-t-steel hover:text-t-white disabled:opacity-50"
               >
-                {locking === a.id ? "..." : "Unlock baseline"}
+                {locking === a.id ? "..." : t("unlock")}
               </button>
             ) : lockingFor === a.id ? (
               <span className="inline-flex items-center gap-2">
                 <input
                   value={laneInput[a.id] || ""}
                   onChange={(e) => setLaneInput((m) => ({ ...m, [a.id]: e.target.value }))}
-                  placeholder="Lane, e.g. Manufacturing"
+                  placeholder={t("lanePlaceholder")}
                   maxLength={60}
                   className="px-2 py-1 text-xs bg-t-panel border border-t-line text-t-white focus:border-t-steel focus:outline-none"
                 />
@@ -632,22 +643,22 @@ ${body}
                   disabled={locking === a.id}
                   className="t-focus text-xs font-bold text-white bg-t-steel px-2.5 py-1 hover:opacity-90 disabled:opacity-50"
                 >
-                  {locking === a.id ? "..." : "Lock"}
+                  {locking === a.id ? "..." : t("lock")}
                 </button>
                 <button
                   onClick={() => setLockingFor(null)}
                   className="text-xs text-t-phos-dim hover:text-t-white"
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
               </span>
             ) : (
               <button
                 onClick={() => setLockingFor(a.id)}
                 className="text-xs font-medium text-t-steel hover:text-t-white"
-                title="Lock this as an approved baseline for a career lane"
+                title={t("lockTitle")}
               >
-                Lock as a baseline
+                {t("lockAsBaseline")}
               </button>
             )}
           </div>
@@ -662,9 +673,9 @@ ${body}
               return (
                 <span className="inline-flex flex-wrap items-center gap-2 text-xs text-t-phos-dim">
                   <label className="inline-flex items-center gap-2">
-                    Move to
+                    {t("moveTo")}
                     <select
-                      aria-label={`Lane for ${title(a)}`}
+                      aria-label={t("laneFor", { title: displayTitle(a) })}
                       data-testid="move-select"
                       value={chosen}
                       disabled={moving === a.id}
@@ -673,13 +684,13 @@ ${body}
                     >
                       {archivedHere && (
                         <option value={a.lane_id!} disabled>
-                          {laneName(a.lane_id)} (archived)
+                          {t("archivedSuffix", { name: laneName(a.lane_id) })}
                         </option>
                       )}
                       {lanes.lanes.map((l) => (
                         <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
-                      <option value={MAIN_LANE_KEY}>{MAIN_LANE_LABEL}</option>
+                      <option value={MAIN_LANE_KEY}>{t("main")}</option>
                     </select>
                   </label>
                   <button
@@ -689,7 +700,7 @@ ${body}
                     onClick={() => moveToLane(a, chosen)}
                     className="t-focus min-h-touch px-2 font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-40"
                   >
-                    Move
+                    {t("move")}
                   </button>
                 </span>
               );
@@ -699,10 +710,10 @@ ${body}
               data-testid={a.is_demo ? "not-example" : "to-examples"}
               onClick={() => setExample(a, !a.is_demo)}
               disabled={moving === a.id || !!a.is_locked}
-              title={a.is_locked ? "Unlock the baseline first" : undefined}
+              title={a.is_locked ? t("unlockFirst") : undefined}
               className="text-xs font-medium text-t-phos-dim hover:text-t-white disabled:opacity-50"
             >
-              {a.is_demo ? "Not an example" : "Move to examples"}
+              {a.is_demo ? t("notExample") : t("moveToExamples")}
             </button>
           </div>
         )}
@@ -719,20 +730,20 @@ ${body}
                 }
                 className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
               >
-                Save PDF
+                {t("savePdf")}
               </button>
               {canDocx && (
                 <button
                   onClick={() => downloadDocx(a)}
                   className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-t-phos text-xs font-bold hover:border-t-phos-dim"
                 >
-                  Download .docx
+                  {t("downloadDocx")}
                 </button>
               )}
             </div>
             {canDocx && (
               <p className="text-xs text-t-phos-dim mt-2">
-                .docx opens in Word to edit. PDF keeps the formatting exactly.
+                {t("docxNote")}
               </p>
             )}
             {/* Phase 5 R2: a resume never finished in the Forge downloads as a draft; this is the way out. */}
@@ -774,7 +785,7 @@ ${body}
             {label} ({count})
           </span>
           <span className="text-xs" aria-hidden="true">
-            {isCollapsed ? "Show" : "Hide"}
+            {isCollapsed ? t("show") : t("hide")}
           </span>
         </button>
         {!isCollapsed && <div className="space-y-3">{children}</div>}
@@ -783,7 +794,7 @@ ${body}
   }
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">Loading your library...</div>;
+    return <div className="max-w-3xl mx-auto px-4 py-12 text-t-phos-dim">{t("loading")}</div>;
   }
 
   // Server already filtered by ?q=; this is a harmless client-side refinement on
@@ -798,11 +809,9 @@ ${body}
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">My resumes</h1>
+      <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
-        Start with your first resume, then follow the versions you create for each job.
-        Your currently selected resume is labeled on its card. Change lanes to see work for another goal.
-        Uploaded evidence and certificates stay in <Link href="/dashboard/documents" className="text-t-amber-bright underline">Private documents</Link>.
+        {t.rich("intro", { link: (chunks) => <Link href="/dashboard/documents" className="text-t-amber-bright underline">{chunks}</Link> })}
       </p>
 
       {/* Career lanes (074): which lane's work is shown. */}
@@ -811,7 +820,7 @@ ${body}
           lanes={lanes}
           value={laneFilter}
           includeAll
-          label="Showing"
+          label={t("showing")}
           onChange={async (c) => {
             if (c === "all" || await lanes.setActive(c)) setLaneFilter(c);
           }}
@@ -820,16 +829,16 @@ ${body}
       </div>
 
       <button type="button" aria-pressed={showRelated} onClick={() => setShowRelated((v) => !v)} className="t-focus mb-4 min-h-touch text-sm text-t-amber-bright underline">
-        {showRelated ? "Show resumes only" : "Show related letters, plans and practice"}
+        {showRelated ? t("resumesOnly") : t("showRelated")}
       </button>
-      {loadError && <div role="alert" className="mb-4 border border-t-amber p-4 text-t-phos"><p>{loadError}</p><button type="button" onClick={() => load(q)} className="t-focus min-h-touch underline">Try again</button></div>}
+      {loadError && <div role="alert" className="mb-4 border border-t-amber p-4 text-t-phos"><p>{loadError}</p><button type="button" onClick={() => load(q)} className="t-focus min-h-touch underline">{t("tryAgain")}</button></div>}
       <p aria-live="polite" role="status" className="mb-2 min-h-[1rem] text-xs text-t-phos-dim" data-testid="library-status">{statusMsg}</p>
 
       {items.length === 0 && !query ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12" data-testid="library-empty">
           {laneFilter === "all"
-            ? "Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it will show up here."
-            : "Nothing in this lane yet. Tailor a resume while you're working in this lane and it shows up here."}
+            ? t("emptyAll")
+            : t("emptyLane")}
         </div>
       ) : (
         <>
@@ -837,16 +846,16 @@ ${body}
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search your library by job or company"
+              placeholder={t("searchPlaceholder")}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
 
           {filtered.length === 0 && (
             <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-10">
-              Nothing matches &ldquo;{q.trim()}&rdquo;.{" "}
+              {t("noMatch", { query: q.trim() })}{" "}
               <button onClick={() => setQ("")} className="text-t-amber-bright font-medium hover:text-t-amber">
-                Clear search
+                {t("clearSearch")}
               </button>
             </div>
           )}
@@ -855,7 +864,7 @@ ${body}
           {currentResume && (
             <section className="mb-8">
               <h2 className="text-sm font-semibold uppercase text-t-amber-bright mb-3">
-                {query ? "First matching resume" : "Starting resume"}
+                {query ? t("firstMatching") : t("startingResume")}
               </h2>
               {renderCard(currentResume)}
             </section>
@@ -863,7 +872,7 @@ ${body}
 
           <div className="space-y-8">
             {/* Later resumes retain creation order. */}
-            {resumes.length > 0 && <CollapsibleSection sectionKey="later-resumes" label="Later resumes, in the order you made them" count={resumes.length}>
+            {resumes.length > 0 && <CollapsibleSection sectionKey="later-resumes" label={t("laterResumes")} count={resumes.length}>
               {resumes.map((a) => renderCard(a))}
             </CollapsibleSection>}
 
@@ -875,7 +884,7 @@ ${body}
                 <CollapsibleSection
                   key={g.type}
                   sectionKey={g.type}
-                  label={g.label}
+                  label={t(`group.${g.type}`)}
                   count={group.length}
                 >
                   {group.map((a) => renderCard(a))}
@@ -891,7 +900,7 @@ ${body}
                 onClick={() => load("", items.length, true)}
                 className="t-focus px-4 py-2 text-sm font-medium bg-t-panel-2 border border-t-line text-t-phos hover:border-t-phos-dim"
               >
-                Load more ({total - items.length} more)
+                {t("loadMore", { count: total - items.length })}
               </button>
             </div>
           )}
@@ -908,12 +917,12 @@ ${body}
             aria-expanded={showExamples}
             className="t-focus text-sm font-medium text-t-phos-dim hover:text-t-white"
           >
-            {showExamples ? "Hide examples" : `Show examples (${examples.length})`}
+            {showExamples ? t("hideExamples") : t("showExamples", { count: examples.length })}
           </button>
           {showExamples && (
             <div className="mt-3 space-y-3">
               <p className="text-xs text-t-phos-dim">
-                Sample and test resumes, kept out of your way. Tap Not an example to bring one back.
+                {t("examplesNote")}
               </p>
               {examples.map((a) => renderCard(a))}
             </div>

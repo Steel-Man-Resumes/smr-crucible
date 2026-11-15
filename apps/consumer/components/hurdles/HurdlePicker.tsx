@@ -2,19 +2,20 @@
 
 /** Step one of the hurdle planner: pick every hurdle in the way (several allowed). */
 
-import { HURDLES, HURDLE_ORDER, type HurdleId } from "@/lib/hurdles/graph";
+import { useTranslations } from "next-intl";
+import { HURDLE_ORDER, type HurdleId } from "@/lib/hurdles/graph";
 
 export function HurdlePicker({ selected, onToggle }: { selected: HurdleId[]; onToggle: (h: HurdleId) => void }) {
+  const t = useTranslations("refineryInterview.picker");
+  const th = useTranslations("refineryInterview.hurdles");
   return (
     <fieldset className="mb-8">
-      <legend className="font-medium text-t-white mb-1">What is in your way right now?</legend>
+      <legend className="font-medium text-t-white mb-1">{t("legend")}</legend>
       <p className="text-xs text-t-phos-dim mb-3">
-        Pick all that fit. We go through them one at a time, and each answer picks the next question.
-        You decide what, if anything, an employer ever hears.
+        {t("note")}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {HURDLE_ORDER.map((h) => {
-          const def = HURDLES[h];
           const on = selected.includes(h);
           return (
             <button
@@ -29,9 +30,9 @@ export function HurdlePicker({ selected, onToggle }: { selected: HurdleId[]; onT
             >
               <span className="flex items-center gap-2 text-sm font-medium text-t-white">
                 <span aria-hidden="true" className={`inline-block w-3.5 h-3.5 border ${on ? "bg-t-amber border-t-amber" : "border-t-line"}`} />
-                {def.label}
+                {th(`h.${h}.label`)}
               </span>
-              <span className="block text-xs text-t-phos-dim mt-0.5 pl-5">{def.blurb}</span>
+              <span className="block text-xs text-t-phos-dim mt-0.5 pl-5">{th(`h.${h}.blurb`)}</span>
             </button>
           );
         })}

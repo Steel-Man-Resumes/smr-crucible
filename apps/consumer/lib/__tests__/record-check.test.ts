@@ -16,6 +16,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MESSAGES } from "./helpers/intl";
 
 import {
   handleBuild,
@@ -753,8 +754,12 @@ test("copy: the consent says what is sent, to whom, how long (provider terms), a
 
 test("copy: the 'only if' lines say the record check is the only screen that asks (F9)", () => {
   const sec = readFileSync(join(APP, "components/SecurityContent.tsx"), "utf8").replace(/\s+/g, " ");
-  assert.match(sec, /only screen that asks for your offense/);
-  assert.match(sec, /If you type your record somewhere else, like the chat or the disclosure planner, the AI sees it there too/);
+  // The record-check bullet moved to the catalog (refineryAccount.security.ai.recordStep); the page shows it only when the record check is on.
+  const ai = MESSAGES.en.refineryAccount.security.ai;
+  assert.match(sec, /recordStep \? \( <BulletItem>\{t\("ai\.recordStep"\)\}<\/BulletItem> \) : \( <BulletItem>\{t\("ai\.recordPlain"\)\}<\/BulletItem>/);
+  assert.match(ai.recordStep, /only screen that asks for your offense/);
+  assert.match(ai.recordStep, /If you type your record somewhere else, like the chat or the disclosure planner, the AI sees it there too/);
+  assert.ok(!/goes to the AI only if you choose the record check/.test(ai.recordStep));
   assert.match(sec, /up to 2 years for flagged content/);
   assert.match(sec, /every line the person sees is ours, apart from the job and any link the person typed/);
   const log = readFileSync(join(APP, "../../CHANGELOG.md"), "utf8").replace(/\s+/g, " ");

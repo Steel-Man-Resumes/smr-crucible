@@ -26,11 +26,11 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { classifyApplyUrl } from "@/lib/apply-destination";
-import { NO_LINK_SAVED_LINE } from "@/lib/tailor-readiness";
 import Link from "next/link";
 import { usePremium } from "@/components/premium/PremiumGate";
-import { PREMIUM_TOOL_LABELS, toolIsOpen } from "@/lib/premium";
+import { toolIsOpen } from "@/lib/premium";
 
 interface ApplyActionsProps {
   applicationId: string;
@@ -69,20 +69,16 @@ interface FitResult {
   jdTruncated: boolean;
 }
 
-const REC_COPY: Record<FitResult["recommendation"], string> = {
-  as_is: "Your resume already covers this job well. You can send it as-is.",
-  fine_tune: "Your resume mostly fits. A light fine-tune moves the best parts to the top.",
-  full_tailor: "This job asks for a lot your resume does not show yet. A full tailor is worth it.",
-};
+type Translate = (key: string, values?: Record<string, string | number>) => string;
 
-function snapshotAge(iso: string | null): string {
+function snapshotAge(iso: string | null, t: Translate): string {
   if (!iso) return "";
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
   const days = Math.floor((Date.now() - then) / 86_400_000);
-  if (days <= 0) return "saved today";
-  if (days === 1) return "saved yesterday";
-  return `saved ${days} days ago`;
+  if (days <= 0) return t("ageToday");
+  if (days === 1) return t("ageYesterday");
+  return t("ageDays", { days });
 }
 
 export function ApplyActions({
@@ -96,6 +92,8 @@ export function ApplyActions({
   candidateName,
   resumeArtifactId,
 }: ApplyActionsProps) {
+  const t = useTranslations("refineryResume.apply");
+  const tp = useTranslations("refineryResume.premium");
   const [marking, setMarking] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draft, setDraft] = useState<EmailDraft | null>(null);
@@ -174,10 +172,10 @@ export function ApplyActions({
         setDraft(await res.json());
       } else {
         const e = await res.json().catch(() => ({}));
-        setDraftErr(e.error || "Could not draft the email. Try again in a moment.");
+        setDraftErr(e.error || t("draftEmailError"));
       }
     } catch {
-      setDraftErr("Could not draft the email. Try again in a moment.");
+      setDraftErr(t("draftEmailError"));
     }
     setDrafting(false);
   }
@@ -203,12 +201,12 @@ export function ApplyActions({
           jdTruncated: !!data.jdTruncated,
         });
       } else if (res.status === 404 && (data.error === "no_jd_snapshot" || data.error === "application_not_found")) {
-        setFitErr("We do not have the job posting saved for this job, so we cannot check the fit yet.");
+        setFitErr(t("noPosting"));
       } else {
-        setFitErr(data.error === "resume_not_found" ? "We could not find that resume." : "Could not check the fit. Try again in a moment.");
+        setFitErr(data.error === "resume_not_found" ? t("resumeNotFound") : t("fitError"));
       }
     } catch {
-      setFitErr("Could not check the fit. Try again in a moment.");
+      setFitErr(t("fitError"));
     }
     setChecking(false);
   }
@@ -229,20 +227,20 @@ export function ApplyActions({
         setAsIsDraftAsk(null);
         if (data?.revision) setAsIsResult({ number: data.revision.number, status: data.revision.status });
       } else if (res.status === 409 && data.error === "draft") {
-        setAsIsDraftAsk(data.message || "This resume is still a draft.");
+        setAsIsDraftAsk(data.message || t("draftStill"));
       } else {
         // A locked or unavailable sponsored tool says why in plain words (lib/premium.ts).
         const premiumWords = data.code === "premium_locked" || data.code === "premium_unavailable";
         setAsIsErr(
           data.error === "resume_not_found"
-            ? "We could not find that resume."
+            ? t("resumeNotFound")
             : premiumWords && typeof data.error === "string"
               ? data.error
-              : "Could not attach your resume. Try again in a moment."
+              : t("attachError")
         );
       }
     } catch {
-      setAsIsErr("Could not attach your resume. Try again in a moment.");
+      setAsIsErr(t("attachError"));
     }
     setApplyingAsIs(false);
   }
@@ -251,12 +249,12 @@ export function ApplyActions({
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      const t = document.createElement("textarea");
-      t.value = text;
-      document.body.appendChild(t);
-      t.select();
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
       document.execCommand("copy");
-      t.remove();
+      ta.remove();
     }
     setCopied(which);
     setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
@@ -268,7 +266,7 @@ export function ApplyActions({
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path d="M2 6.5l2.5 2.5L10 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Applied
+        {t("applied")}
       </span>
     );
   }
@@ -283,7 +281,11 @@ export function ApplyActions({
             rel="noopener noreferrer"
             className="t-focus inline-flex items-center gap-1.5 px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
           >
-            {chosen.label}
+            {chosen.kind === "employer_ats"
+              ? `${t("dest.employer_ats.label")}${chosen.host ? ` (${chosen.host})` : ""}`
+              : chosen.kind === "job_board" || chosen.kind === "aggregator" || chosen.kind === "employer_site"
+                ? t(`dest.${chosen.kind}.label`, { host: chosen.host || t(`dest.${chosen.kind}.default`) })
+                : t(`dest.${chosen.kind}.label`)}
             <span aria-hidden="true">&#8599;</span>
           </a>
         ) : (
@@ -292,7 +294,7 @@ export function ApplyActions({
             disabled={drafting}
             className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors disabled:opacity-50"
           >
-            {drafting ? "Drafting with t.ROY..." : "Draft an application email"}
+            {drafting ? t("drafting") : t("draftEmail")}
           </button>
         )}
 
@@ -301,14 +303,14 @@ export function ApplyActions({
           disabled={marking}
           className="t-focus px-3 py-2 bg-t-panel-2 border border-t-line text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors disabled:opacity-50"
         >
-          {marking ? "..." : "I applied"}
+          {marking ? "..." : t("iApplied")}
         </button>
       </div>
 
       {/* Honest expectation for the chosen apply link. */}
       {chosenUrl && (
         <div className="text-[11px] text-t-phos-dim">
-          <p>{chosen.expectation}</p>
+          <p>{t(`dest.${chosen.kind}.expectation`)}</p>
           {chosen.prep.length > 0 && (
             <>
               <button
@@ -316,12 +318,12 @@ export function ApplyActions({
                 className="t-focus mt-1 text-t-steel hover:text-t-white transition-colors"
                 aria-expanded={showPrep}
               >
-                {showPrep ? "Hide what to have ready" : "What to have ready"}
+                {showPrep ? t("hidePrep") : t("showPrep")}
               </button>
               {showPrep && (
                 <ul className="mt-1 ml-4 list-disc space-y-0.5">
                   {chosen.prep.map((p, i) => (
-                    <li key={i}>{p}</li>
+                    <li key={i}>{t(`dest.${chosen.kind}.prep.${i}`)}</li>
                   ))}
                 </ul>
               )}
@@ -334,14 +336,14 @@ export function ApplyActions({
           next rung above, so this is context, not a dead end. */}
       {applyLinkUnreadable && (
         <p className="text-[11px] text-t-amber-bright">
-          We could not read this job&apos;s direct application link, so we did not open it.
-          {chosenUrl ? " Use the employer's site above instead." : " Use the email option below instead."}
+          {t("unreadable")}{" "}
+          {chosenUrl ? t("useSite") : t("useEmail")}
         </p>
       )}
 
       {!chosenUrl && !applyLinkUnreadable && !draft && (
         <p className="text-[11px] text-t-phos-dim">
-          {NO_LINK_SAVED_LINE}
+          {t("noLinkSaved")}
         </p>
       )}
 
@@ -355,15 +357,15 @@ export function ApplyActions({
             disabled={checking}
             className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors disabled:opacity-50"
           >
-            {checking ? "Checking fit..." : "Check fit"}
+            {checking ? t("checkingFit") : t("checkFit")}
           </button>
           {asIsDone ? (
             <span className="text-[11px] text-t-amber-bright" data-testid="quick-apply-done">
               {asIsResult
                 ? asIsResult.status === "finished"
-                  ? `Your finished resume (version ${asIsResult.number}) is attached to this job.`
-                  : `Your draft resume (version ${asIsResult.number}) is attached to this job, marked as a draft.`
-                : "Your current resume is attached to this job."}
+                  ? t("attachedFinished", { number: asIsResult.number })
+                  : t("attachedDraft", { number: asIsResult.number })
+                : t("attachedCurrent")}
             </span>
           ) : asIsDraftAsk ? (
             <span className="text-[11px] text-t-phos" data-testid="quick-apply-draft">
@@ -373,20 +375,23 @@ export function ApplyActions({
                 disabled={applyingAsIs}
                 className="t-focus underline underline-offset-2 hover:text-t-white disabled:opacity-50"
               >
-                Attach it marked as a draft
+                {t("attachDraft")}
               </button>
             </span>
           ) : !oneClickOpen ? (
             <span className="text-[11px] text-t-phos-dim" data-testid="one-click-locked">
-              {PREMIUM_TOOL_LABELS.one_click_apply} opens through your organization or SMR.{" "}
+              {t("oneClickLocked", { tool: tp("tool.one_click_apply") })}{" "}
               <Link href="/dashboard/settings#premium" className="underline underline-offset-2 hover:text-t-white">
-                How to get it
+                {t("howToGet")}
               </Link>
-              {". "}You can still{" "}
-              <Link href={`/dashboard/application-tailor?job=${applicationId}`} className="underline underline-offset-2 hover:text-t-white">
-                tailor your resume for this job
-              </Link>
-              .
+              {". "}
+              {t.rich("youCanStill", {
+                link: (chunks) => (
+                  <Link href={`/dashboard/application-tailor?job=${applicationId}`} className="underline underline-offset-2 hover:text-t-white">
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </span>
           ) : (
             <button
@@ -394,7 +399,7 @@ export function ApplyActions({
               disabled={applyingAsIs}
               className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors disabled:opacity-50"
             >
-              {applyingAsIs ? "Attaching..." : "Apply with my current resume as-is"}
+              {applyingAsIs ? t("attaching") : t("applyAsIs")}
             </button>
           )}
         </div>
@@ -405,12 +410,12 @@ export function ApplyActions({
       {/* Fit Check result. */}
       {fit && (
         <div className="mt-1 bg-t-panel-2 border border-t-line p-3 text-xs">
-          <p className="font-semibold text-t-white mb-1">{REC_COPY[fit.recommendation]}</p>
+          <p className="font-semibold text-t-white mb-1">{t(`rec.${fit.recommendation}`)}</p>
           {fit.rationale && <p className="text-t-phos mb-2">{fit.rationale}</p>}
 
           {fit.matches.length > 0 && (
             <div className="mb-2">
-              <p className="text-[11px] font-semibold text-t-phos-dim mb-0.5">What lines up</p>
+              <p className="text-[11px] font-semibold text-t-phos-dim mb-0.5">{t("linesUp")}</p>
               <ul className="ml-4 list-disc space-y-0.5 text-t-phos">
                 {fit.matches.map((m, i) => (
                   <li key={i}>{m}</li>
@@ -421,13 +426,13 @@ export function ApplyActions({
 
           {fit.gaps.length > 0 && (
             <div className="mb-2">
-              <p className="text-[11px] font-semibold text-t-phos-dim mb-0.5">What the job asks for that your resume does not clearly show</p>
+              <p className="text-[11px] font-semibold text-t-phos-dim mb-0.5">{t("gaps")}</p>
               <ul className="ml-4 list-disc space-y-0.5 text-t-phos">
                 {fit.gaps.map((g, i) => (
                   <li key={i}>
                     {g.requirement}
                     {g.evidenceInResume && (
-                      <span className="text-t-phos-dim"> (partly there: &ldquo;{g.evidenceInResume}&rdquo;)</span>
+                      <span className="text-t-phos-dim"> {t("partlyThere", { evidence: g.evidenceInResume })}</span>
                     )}
                   </li>
                 ))}
@@ -444,7 +449,7 @@ export function ApplyActions({
                   disabled={applyingAsIs}
                   className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                 >
-                  {applyingAsIs ? "Attaching..." : "Use this resume as-is"}
+                  {applyingAsIs ? t("attaching") : t("useAsIs")}
                 </button>
               )
             ) : (
@@ -452,15 +457,15 @@ export function ApplyActions({
                 href={`/dashboard/application-tailor?job=${applicationId}`}
                 className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors"
               >
-                {fit.recommendation === "fine_tune" ? "Fine-tune my resume" : "Tailor my resume"}
+                {fit.recommendation === "fine_tune" ? t("fineTune") : t("tailor")}
               </a>
             )}
           </div>
 
           {(fit.jdFetchedAt || fit.jdTruncated) && (
             <p className="text-[11px] text-t-phos-dim mt-2">
-              {fit.jdFetchedAt && `Based on the job posting we ${snapshotAge(fit.jdFetchedAt)}.`}
-              {fit.jdTruncated && " The saved posting was trimmed, so a long job may have more than we checked."}
+              {fit.jdFetchedAt && t("basedOn", { age: snapshotAge(fit.jdFetchedAt, t) })}
+              {fit.jdTruncated && ` ${t("trimmed")}`}
             </p>
           )}
         </div>
@@ -469,12 +474,12 @@ export function ApplyActions({
       {draft && (
         <div className="mt-1 bg-t-panel-2 border border-t-line p-3">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <p className="text-xs font-semibold text-t-white">Subject: {draft.subject}</p>
+            <p className="text-xs font-semibold text-t-white">{t("subject", { subject: draft.subject })}</p>
             <button
               onClick={() => copy("subject", draft.subject)}
               className="t-focus text-[11px] text-t-phos-dim hover:text-t-white flex-shrink-0"
             >
-              {copied === "subject" ? "Copied" : "Copy"}
+              {copied === "subject" ? t("copied") : t("copy")}
             </button>
           </div>
           <p className="text-xs text-t-phos whitespace-pre-line leading-relaxed">{draft.body}</p>
@@ -483,21 +488,21 @@ export function ApplyActions({
               onClick={() => copy("body", draft.body)}
               className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors"
             >
-              {copied === "body" ? "Copied" : "Copy email"}
+              {copied === "body" ? t("copied") : t("copyEmail")}
             </button>
             <button
               onClick={draftEmail}
               disabled={drafting}
               className="text-xs text-t-phos-dim hover:text-t-white disabled:opacity-50"
             >
-              {drafting ? "..." : "Redraft"}
+              {drafting ? "..." : t("redraft")}
             </button>
           </div>
           <p className="text-[11px] text-t-phos-dim bg-t-panel border border-t-line px-3 py-2 mt-3 leading-relaxed">
-            <span className="font-semibold text-t-white">Where to send it:</span> {draft.whereToFind}
+            <span className="font-semibold text-t-white">{t("whereToSend")}</span> {draft.whereToFind}
           </p>
           <p className="text-[11px] text-t-phos-dim mt-2">
-            Attach your resume (PDF) and cover letter (DOCX), send it yourself, then mark it applied here.
+            {t("attachNote")}
           </p>
         </div>
       )}

@@ -15,6 +15,7 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { type ResumeDocument, scoreResume } from "./resumeModel";
 import { ResumePage } from "./ResumePage";
 import { formatResumeDownload } from "./resumeModel";
@@ -61,6 +62,7 @@ export function ResumeEditor({
   onUseSummarySuggestion,
   readinessStage,
 }: ResumeEditorProps) {
+  const t = useTranslations("refineryResume.resume.editor");
   const [mobileView, setMobileView] = useState<"edit" | "preview">(guided ? "preview" : "edit");
   const { overall, sections } = scoreResume(doc);
 
@@ -77,7 +79,7 @@ export function ResumeEditor({
               : "text-t-phos-dim"
           }`}
         >
-          {guided ? "Fine-tune it yourself" : "Edit"}
+          {guided ? t("fineTune") : t("edit")}
         </button>
         <button
           onClick={() => setMobileView("preview")}
@@ -87,7 +89,7 @@ export function ResumeEditor({
               : "text-t-phos-dim"
           }`}
         >
-          {guided ? "Review printable pages" : `Preview (${overall}%)`}
+          {guided ? t("reviewPages") : t("preview", { score: overall })}
         </button>
       </div>
 
@@ -118,13 +120,13 @@ export function ResumeEditor({
               <div className="mt-3 bg-t-panel p-3 border border-t-line">
                 <p className="text-sm text-t-phos mb-2">{summarySuggestion}</p>
                 <p className="text-xs text-t-phos-dim mb-2">
-                  Starting point. Edit it to sound like you.
+                  {t("startingPoint")}
                 </p>
                 <button
                   onClick={onUseSummarySuggestion}
                   className="text-sm text-t-amber-bright font-medium"
                 >
-                  Use this
+                  {t("useThis")}
                 </button>
               </div>
             )}
@@ -169,9 +171,9 @@ export function ResumeEditor({
         <div className={`${mobileView === "edit" ? guided ? "hidden" : "hidden lg:block" : ""}`}>
           <div className="lg:sticky lg:top-20">
             <div className="mb-2">
-              <p className="text-sm font-semibold text-t-white">Print layout preview</p>
+              <p className="text-sm font-semibold text-t-white">{t("printPreview")}</p>
               <p className="text-xs text-t-phos-dim">
-                Uses the PDF page layout. Save the package to review the exact downloadable file. Word may paginate differently.
+                {t("printPreviewNote")}
               </p>
             </div>
             <ResumePage text={formatResumeDownload(doc)} draft={draft} />

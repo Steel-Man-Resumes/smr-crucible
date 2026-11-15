@@ -97,5 +97,18 @@
       "notYet": "Not yet",
       "start": "Done, clear this computer"
     }
+  },
+  "betaNotice": {
+    "pill": "Spanish beta",
+    "openAria": "Spanish beta: read this and tell us what sounds wrong",
+    "intro": "This Spanish version is new. A computer helped write it and a person has not reviewed it yet, so some lines may sound odd or be wrong. Your resume stays in English for US employers.",
+    "label": "What sounded wrong or was hard to understand?",
+    "placeholder": "Write the line and where you saw it.",
+    "send": "Send",
+    "sending": "Sending...",
+    "close": "Close",
+    "sent": "Thank you. We received it.",
+    "signIn": "Sign in to send this.",
+    "error": "That did not go through. Try again in a moment."
   }
 }

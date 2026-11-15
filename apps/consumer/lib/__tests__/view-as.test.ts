@@ -27,6 +27,7 @@ import {
 } from "../view-as";
 import { accessLogAction, accessLogLine } from "../access-log-words";
 import { hubRedeemReason } from "../access-code-guard";
+import { MESSAGES } from "./helpers/intl";
 
 const CONSUMER = join(__dirname, "..", "..");
 const read = (...p: string[]) => readFileSync(join(CONSUMER, ...p), "utf8");
@@ -237,7 +238,9 @@ describe("an admin's look is recorded as the admin, never as the staff member", 
     assert.equal(accessLogAction("queue", "applications", label, null), "had your interview and follow-up dates on their daily work list");
   });
   it("Settings and the data export both use the one line", () => {
-    assert.match(code(read("components", "SharingControls.tsx")), /\{accessLogLine\(e, label\)\} on \{when\(e\.at\)\}/);
+    // The sentence frame moved to the catalog ("{line} on {when}"); the line itself must still come from accessLogLine.
+    assert.match(code(read("components", "SharingControls.tsx")), /tr\("logLine", \{ line: ts\(accessLogLine\(e, labelText\)\), when: when\(e\.at, locale\) \}\)/);
+    assert.equal(MESSAGES.en.refineryAccount.sharing.logLine, "{line} on {when}");
     const exp = code(read("app", "api", "user", "export-data", "route.ts"));
     assert.match(exp, /what: accessLogLine\(e, scopeLabel\)/);
     assert.doesNotMatch(exp, /at \$\{e\.orgName\}/);

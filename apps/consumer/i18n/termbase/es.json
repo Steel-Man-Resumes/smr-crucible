@@ -7,15 +7,20 @@
       "id": "criminal-record",
       "en": "record (criminal record)",
       "es": "antecedentes penales",
-      "avoid": ["antecedentes(?!\\s+penales)"],
-      "note": "\"antecedentes\" alone can read as work background. Found in 16 back-translation flags on 2026-11-13. Work history is \"historial laboral\".",
+      "avoid": [
+        "(?<!verificaci[oó]n de )(?<!verificaciones de )antecedentes(?!\\s+penales)"
+      ],
+      "note": "\"antecedentes\" alone can read as work background. Found in 16 back-translation flags on 2026-11-13. Work history is \"historial laboral\". Exception (2026-11-14): \"verificación(es) de antecedentes\" is the ordinary Spanish for a background check and is allowed as that exact phrase; do NOT write \"verificación de antecedentes penales\" for a plain background check, which narrows it to a criminal-record check (a job-title mismatch is caught by an employment check).",
       "status": "locked"
     },
     {
       "id": "clear-this-computer",
       "en": "clear this computer",
       "es": "borrar los datos de esta computadora",
-      "avoid": ["\\b(?:limpiar|limpia|limpies|limpie)\\b[^.]{0,30}\\bcomputadora", "\\bborr(?:ar|a|es|e)\\s+esta\\s+computadora"],
+      "avoid": [
+        "\\b(?:limpiar|limpia|limpies|limpie)\\b[^.]{0,30}\\bcomputadora",
+        "\\bborr(?:ar|a|es|e)\\s+esta\\s+computadora"
+      ],
       "note": "The button erases saved work and signs the person out. \"Limpiar\" reads like cleaning the machine and \"borrar esta computadora\" like erasing the machine. Say what is erased: the data on it.",
       "status": "locked"
     },
@@ -30,9 +35,9 @@
     {
       "id": "refinery-seat",
       "en": "seat (a Refinery seat)",
-      "es": "cupo",
+      "es": "lugar",
       "avoid": [],
-      "note": "Strings use \"lugar\", which reads as a physical place. Needs a native reader to confirm \"cupo\".",
+      "note": "Troy 2026-11-14: \"lugar\" for a Refinery seat (tentative, \"idk i guess lugar\"); a bilingual reader should confirm. \"cupo\" stays only where Spanish means an allowance or quota (AI allowance: \"tu cupo de IA\"). Not enforced by a test because the word is ordinary.",
       "status": "proposed"
     },
     {
@@ -65,6 +70,22 @@
       "es": "(unchosen)",
       "avoid": [],
       "note": "\"gestor de casos\" versus \"administrador de casos\". Reader should choose what reentry programs actually say.",
+      "status": "proposed"
+    },
+    {
+      "id": "background-check",
+      "en": "background check",
+      "es": "verificación de antecedentes",
+      "avoid": [],
+      "note": "Not \"verificación de antecedentes penales\" unless the English says criminal background check.",
+      "status": "proposed"
+    },
+    {
+      "id": "record-relief",
+      "en": "expunge / seal / clear a record",
+      "es": "anular (expungement) / sellar / limpiar",
+      "avoid": [],
+      "note": "Never \"eliminar\" or \"borrar\" for record relief: it reads as a guaranteed erasure, and sealed or expunged records can still be seen by some agencies. Keep the English legal term in parentheses so a person can look it up. \"Eliminar/borrar\" stays correct for deleting a person's own data in the product.",
       "status": "proposed"
     }
   ]

@@ -20,6 +20,7 @@ import { ensureExportRevision, revisionIsCurrent, withRevisionMarker, artifactTe
 import { formatResumeDownload } from "../../components/resume/resumeModel";
 import type { ArtifactRevision, NewRevision, InsertRevisionResult } from "@crucible/core/src/artifactRevision";
 import { revisionContentHash } from "@crucible/core/src/artifactRevision";
+import { MESSAGES } from "./helpers/intl";
 import { BAD_LETTER, FIXTURE_COOKIE, FIXTURE_CTX, GROUNDING, LETTER, OWN_WORDS, RESUME, RUN, SOURCE, allAnswered, finishState, longResume } from "./fixtures/revision-run";
 
 const UID = "00000000-0000-4000-8000-0000000000a1";
@@ -618,12 +619,16 @@ test("L6 and L8: a sensible daily save cap and a plain, non-retry message for a 
 });
 
 test("M4: a draft reads 'Draft: check it before you send it.' in the Refinery and on quick-apply", () => {
-  assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /"Draft: check it before you send it\."/);
+  // The Refinery line reads from the catalog now; the English must stay the sentence the person sees on quick-apply too.
+  assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /: t\("draftNote"\)\}/);
+  assert.equal(MESSAGES.en.refineryResume.resume.workspace.draftNote, "Draft: check it before you send it.");
   assert.match(src("app", "api", "quick-apply", "route.ts"), /message: "Draft: check it before you send it\."/);
 });
 
 test("I5: the in-app security page says checked versions and answers are saved, and can be downloaded or deleted", () => {
-  assert.match(src("components", "SecurityContent.tsx"), /each checked version of your resume is\s+saved to your account, with the answers you gave about its lines\.\s+You can download or delete them in Settings\./);
+  // The bullet reads from the catalog now (t("ai.versions")); same sentence, same promise.
+  assert.match(src("components", "SecurityContent.tsx"), /<BulletItem>\{t\("ai\.versions"\)\}<\/BulletItem>/);
+  assert.match(MESSAGES.en.refineryAccount.security.ai.versions, /each checked version of your resume is\s+saved to your account, with the answers you gave about its lines\.\s+You can download or delete them in Settings\./);
 });
 
 test("M3: a Tailor output names its parent, and the server links it only when it is the person's own", () => {

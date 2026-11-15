@@ -1,0 +1,1675 @@
+{
+  "applications": {
+    "stage": {
+      "saved": "Guardadas",
+      "applied": "Postuladas",
+      "heard_back": "Con respuesta",
+      "interviewing": "En entrevista",
+      "offered": "Con oferta"
+    },
+    "suggestion": {
+      "saved": "Arma un currículum dirigido a esta vacante",
+      "applied": "Prepara tu plan de divulgación",
+      "heard_back": "Practica la entrevista para este puesto",
+      "interviewing": "Repasa tu guion de divulgación"
+    },
+    "readiness": {
+      "finished": "Tu currículum adaptado está terminado. Postula cuando estés listo:",
+      "unknown": "Postula cuando estés listo:",
+      "draft": "Tu currículum adaptado sigue siendo un borrador. Revísalo y termínalo antes de enviarlo."
+    },
+    "interviewReady": "Te llamaron a entrevista. Preparémonos con la vacante y los documentos que guardaste.",
+    "updated": "Postulación actualizada.",
+    "updateFailed": "Ese cambio no se guardó. Tu postulación no cambió. Inténtalo de nuevo.",
+    "failure": {
+      "401": "Inicia sesión de nuevo y vuelve a intentar el borrador.",
+      "allowance": "Ya usaste tu cupo de IA de hoy. Tu trabajo guardado sigue disponible.",
+      "404": "No se encontró esta postulación. Recarga la página.",
+      "other": "No se pudo redactar el seguimiento. Tu postulación no cambió. Inténtalo de nuevo en un momento."
+    },
+    "cost": {
+      "base": "Redactar usa 1 acción de IA.",
+      "paused": "Esta herramienta está en pausa. Tu trabajo guardado sigue disponible.",
+      "none": "Hoy no te queda ninguna. Pídele más a t.ROY desde la barra de progreso, o vuelve después de la medianoche UTC.",
+      "left": "Hoy te quedan {left}."
+    },
+    "followUpSubject": "Asunto: {subject}",
+    "loading": "Cargando postulaciones...",
+    "title": "Seguimiento de postulaciones",
+    "intro": "Sigue tus postulaciones desde que las guardas hasta que te ofrecen el trabajo. Cada paso tiene herramientas para ayudarte a prepararte.",
+    "prepInterview": "Prepárate para esta entrevista con t.ROY",
+    "practiceAnytime": "Puedes <link>practicar una entrevista cuando quieras</link>. Si te invitan a una entrevista, esa vacante pasa directo a la preparación.",
+    "empty": "Todavía no hay postulaciones. Guarda vacantes del Tablero de empleos para empezar a seguirlas.",
+    "findJobs": "Buscar empleos →",
+    "gotInterview": "Me llamaron a entrevista",
+    "moveTo": "Mover a {stage}",
+    "remove": "Quitar",
+    "suggestionFor": "{text} para {company}",
+    "drafting": "Redactando tu seguimiento...",
+    "draftFollowUp": "Redactar un mensaje de seguimiento",
+    "copied": "Copiado",
+    "copy": "Copiar",
+    "redraft": "Redactar de nuevo",
+    "savedMaterials": "Guardado en tus materiales. Revísalo antes de enviarlo.",
+    "offer": {
+      "title": "Tienes una oferta. Confirma las condiciones y tu siguiente paso.",
+      "1": "Pregunta a tu contacto qué condiciones faltan y qué documentos llevar.",
+      "2": "Confirma tu fecha de inicio, la hora, el lugar y el transporte.",
+      "3": "Cuando de verdad empieces, avisa a tu contacto del programa si decides compartirlo.",
+      "4": "Programa tu propio chequeo para tu primera semana. Una oferta sola no es un inicio confirmado.",
+      "help": "Pide ayuda con el siguiente paso"
+    },
+    "archived": "Archivadas ({count})",
+    "archivedStatus": {
+      "declined": "la rechazaste",
+      "rejected": "rechazada por el empleador"
+    },
+    "ago": {
+      "now": "justo ahora",
+      "mins": "hace {n} min",
+      "hours": "hace {n} h",
+      "days": "hace {n} d"
+    }
+  },
+  "apply": {
+    "rec": {
+      "as_is": "Tu currículum ya cubre bien esta vacante. Puedes enviarlo tal como está.",
+      "fine_tune": "Tu currículum encaja en su mayoría. Un ajuste ligero sube lo mejor al principio.",
+      "full_tailor": "Esta vacante pide mucho que tu currículum todavía no muestra. Vale la pena una adaptación completa."
+    },
+    "ageToday": "guardamos hoy",
+    "ageYesterday": "guardamos ayer",
+    "ageDays": "guardamos hace {days} días",
+    "basedOn": "Con base en la oferta de trabajo que {age}.",
+    "trimmed": "La oferta guardada se recortó, así que una vacante larga puede tener más de lo que revisamos.",
+    "draftEmailError": "No se pudo redactar el correo. Inténtalo de nuevo en un momento.",
+    "noPosting": "No tenemos guardada la oferta de esta vacante, así que todavía no podemos revisar qué tanto encaja.",
+    "resumeNotFound": "No pudimos encontrar ese currículum.",
+    "fitError": "No se pudo revisar qué tanto encaja. Inténtalo de nuevo en un momento.",
+    "draftStill": "Este currículum todavía es un borrador.",
+    "attachError": "No se pudo adjuntar tu currículum. Inténtalo de nuevo en un momento.",
+    "applied": "Postulado",
+    "drafting": "Redactando con t.ROY...",
+    "draftEmail": "Redactar un correo de postulación",
+    "iApplied": "Ya postulé",
+    "hidePrep": "Ocultar lo que debes tener listo",
+    "showPrep": "Lo que debes tener listo",
+    "unreadable": "No pudimos leer el enlace directo de postulación de esta vacante, así que no lo abrimos.",
+    "useSite": "Usa mejor el sitio del empleador de arriba.",
+    "useEmail": "Usa mejor la opción de correo de abajo.",
+    "noLinkSaved": "No se guardó ningún enlace de postulación para esta vacante. t.ROY puede redactar un correo que puedes enviar con tu currículum y tu carta de presentación, y mostrarte cómo encontrar la dirección del empleador.",
+    "checkingFit": "Revisando el ajuste...",
+    "checkFit": "Revisar el ajuste",
+    "attachedFinished": "Tu currículum terminado (versión {number}) está adjunto a esta vacante.",
+    "attachedDraft": "Tu currículum en borrador (versión {number}) está adjunto a esta vacante, marcado como borrador.",
+    "attachedCurrent": "Tu currículum actual está adjunto a esta vacante.",
+    "attachDraft": "Adjuntarlo marcado como borrador",
+    "oneClickLocked": "{tool} se abre a través de tu organización o de SMR.",
+    "howToGet": "Cómo conseguirla",
+    "youCanStill": "Aun así puedes <link>adaptar tu currículum para esta vacante</link>.",
+    "attaching": "Adjuntando...",
+    "applyAsIs": "Postular con mi currículum actual tal como está",
+    "linesUp": "Lo que coincide",
+    "gaps": "Lo que pide la vacante y tu currículum no muestra con claridad",
+    "partlyThere": "(está en parte: “{evidence}”)",
+    "useAsIs": "Usar este currículum tal como está",
+    "fineTune": "Ajustar mi currículum",
+    "tailor": "Adaptar mi currículum",
+    "subject": "Asunto: {subject}",
+    "copied": "Copiado",
+    "copy": "Copiar",
+    "copyEmail": "Copiar correo",
+    "redraft": "Redactar de nuevo",
+    "whereToSend": "Dónde enviarlo:",
+    "attachNote": "Adjunta tu currículum (PDF) y tu carta de presentación (DOCX), envíalo tú mismo y luego márcalo como postulado aquí.",
+    "dest": {
+      "employer_ats": {
+        "label": "Abre el sistema de postulación del empleador",
+        "expectation": "Este es un formulario de postulación real. El currículum que subas suele ir directo al empleador.",
+        "prep": {
+          "0": "Ten listo el archivo de tu currículum para subirlo",
+          "1": "Reserva de 10 a 20 minutos para llenarlo",
+          "2": "Guarda en un lugar seguro los datos de acceso de cualquier cuenta"
+        }
+      },
+      "job_board": {
+        "label": "Abre en {host} (puede requerir una cuenta)",
+        "default": "el tablero de empleos",
+        "expectation": "Puede que tengas que iniciar sesión o crear una cuenta. Calcula de 20 a 40 minutos para volver a escribir tu historial laboral.",
+        "prep": {
+          "0": "Ten listo el archivo de tu currículum para subirlo",
+          "1": "Prepárate para volver a escribir tu historial laboral",
+          "2": "Guarda tus datos de acceso en un lugar seguro"
+        }
+      },
+      "aggregator": {
+        "label": "Abre en {host}, a un clic de la oferta real",
+        "default": "un sitio de búsqueda",
+        "expectation": "Este enlace puede llevarte primero por una página de búsqueda. La oferta real del empleador está un clic más adentro.",
+        "prep": {
+          "0": "Busca el nombre del empleador y entra a su oferta",
+          "1": "Confirma que la oferta siga abierta antes de postular"
+        }
+      },
+      "google_jobs": {
+        "label": "Abre una búsqueda de empleos de Google, a un clic de la oferta real",
+        "expectation": "Este enlace puede llevarte primero por una página de búsqueda. La oferta real del empleador está un clic más adentro.",
+        "prep": {
+          "0": "Busca el nombre del empleador y entra a su oferta",
+          "1": "Confirma que la oferta siga abierta antes de postular"
+        }
+      },
+      "employer_site": {
+        "label": "Abre {host}",
+        "default": "el sitio del empleador",
+        "expectation": "Esto abre el sitio propio del empleador. Busca una página de Empleos o Carreras y luego encuentra esta oferta.",
+        "prep": {
+          "0": "Busca una página de Empleos o Carreras",
+          "1": "Confirma que la oferta siga abierta antes de postular"
+        }
+      },
+      "unknown": {
+        "label": "Abre un enlace externo",
+        "expectation": "No pudimos saber a dónde lleva este enlace. Ábrelo con cuidado y confirma que sea el empleador real.",
+        "prep": {
+          "0": "Confirma que el sitio sea el del empleador real antes de escribir cualquier dato",
+          "1": "No escribas datos de pago. Los empleos de verdad nunca los piden"
+        }
+      }
+    }
+  },
+  "creative": {
+    "openItems": {
+      "facilityYes": "Sí, quítalo",
+      "facilityNo": "No, es otra cosa",
+      "yes": "Sí",
+      "no": "No",
+      "nothingOpen": "Nada pendiente. Cada línea sale de tu registro.",
+      "ariaLabel": "Pendientes por responder",
+      "draftHeading": "{count, plural, =1 {Borrador: 1 por responder antes de terminar} other {Borrador: # por responder antes de terminar}}",
+      "lookAt": "Algunas cosas para revisar"
+    },
+    "facility": {
+      "heading": "En esta ruta",
+      "footer": "Una elección por entrada. Todas las páginas de esta ruta la siguen."
+    },
+    "startLane": {
+      "first": "Empieza tu ruta creativa",
+      "another": "Otra ruta creativa",
+      "blurb": "Arte, música, escritura, cine, tatuaje, diseño, artesanía. Lo que sea que hagas.",
+      "whatLabel": "¿Qué haces?",
+      "whatPlaceholder": "Murales y grabados",
+      "nameLabel": "Nombre de la ruta",
+      "optional": "(opcional)",
+      "namePlaceholder": "Pintura",
+      "dreamOrNow": "¿Es tu sueño, o el trabajo que haces ahora?",
+      "path": {
+        "dream": {
+          "label": "Mi sueño",
+          "body": "Hacia donde voy."
+        },
+        "realistic": {
+          "label": "Lo que hago ahora",
+          "body": "Trabajo que puedo conseguir hoy."
+        },
+        "none": {
+          "label": "Aún no estoy seguro",
+          "body": "Sáltalo por ahora."
+        }
+      },
+      "startThis": "Empezar esta ruta"
+    },
+    "page": {
+      "laying": "Armando tu página..."
+    },
+    "plainText": {
+      "artistResume": "Currículum de artista",
+      "bioShort": "Biografía corta",
+      "bioMedium": "Biografía mediana",
+      "bioLong": "Biografía larga",
+      "statement": "Declaración",
+      "workSamples": "Muestras de trabajo",
+      "boxLimit": "Límite del cuadro",
+      "limitAria": "Límite de caracteres para {label}",
+      "showDraft": "Mostrar el texto del borrador",
+      "draftMark": "BORRADOR",
+      "count": "{chars} caracteres con espacios, {words} palabras",
+      "over": "{over} por encima del límite.",
+      "empty": "Todavía no hay nada guardado."
+    },
+    "bio": {
+      "addName": "Primero agrega tu nombre en la pestaña Currículum de artista. Tu biografía lo usa.",
+      "refer": "¿Cómo quieres que tu biografía se refiera a ti?",
+      "lengthAria": "Extensión de la biografía",
+      "length": {
+        "short": "Corta",
+        "medium": "Mediana",
+        "long": "Larga"
+      },
+      "counts": "{words} de {max} palabras",
+      "countsChars": ", {chars} de {max} caracteres",
+      "countsCharsOnly": ", {chars} caracteres",
+      "built": "{count} frases armadas a partir de tu registro. Conserva o quita cada una.",
+      "notEnough": "Todavía no hay suficiente en tu registro para armar algo. Agrega primero unas cuantas entradas.",
+      "didntWork": "No funcionó. Inténtalo de nuevo en un momento.",
+      "building": "Armando...",
+      "buildDraft": "Armar un borrador con mi registro",
+      "sentenceAria": "Tu frase",
+      "useMine": "Usar mis palabras",
+      "originPerson": "Tus palabras.",
+      "originKept": "Armada a partir de tu registro. La conservaste.",
+      "originNot": "Armada a partir de tu registro. Todavía no está en tu biografía.",
+      "keep": "Conservar",
+      "cut": "Quitar",
+      "sayMyWay": "Decirlo a mi manera",
+      "addOwn": "Agrega una frase con tus propias palabras",
+      "add": "Agregarla",
+      "saved": "Biografía guardada.",
+      "save": "Guardar biografía"
+    },
+    "artist": {
+      "top": {
+        "displayName": {
+          "label": "Tu nombre, como quieres que se imprima",
+          "ph": "Ray Ejemplo"
+        },
+        "discipline": {
+          "label": "Lo que haces",
+          "ph": "Pintor y grabador"
+        },
+        "basedIn": {
+          "label": "Dónde vives",
+          "ph": "Toledo, Ohio"
+        },
+        "email": {
+          "label": "Correo electrónico",
+          "ph": "tu@ejemplo.com"
+        },
+        "phone": {
+          "label": "Teléfono (opcional)"
+        },
+        "website": {
+          "label": "Sitio web (opcional)"
+        }
+      },
+      "saved": "Guardado.",
+      "topTitle": "Parte superior de la página",
+      "save": "Guardar",
+      "rightNow": "Por ahora: hasta {cap} páginas.",
+      "donePicking": "Listo",
+      "pick": "Elige qué incluir (para una convocatoria que pide tu mejor trabajo)",
+      "useEverything": "Usar todo"
+    },
+    "laneView": {
+      "ariaLane": "Ruta creativa {name}",
+      "pathDream": "Sueño",
+      "pathRealistic": "Realista",
+      "toolsAria": "Herramientas de la ruta creativa"
+    },
+    "cvView": {
+      "ariaLane": "Ruta de CV {name}",
+      "troyLine": "Cada línea sale de tu registro, con fecha, de la más reciente a la más antigua. No se agrega nada.",
+      "toolsAria": "Herramientas de CV",
+      "kindLegend": "Tipo de CV",
+      "saved": "Guardado.",
+      "topTitle": "Parte superior de la página",
+      "topNote": "Sin foto, fecha de nacimiento, edad, estado civil ni nacionalidad. Un CV aquí nunca los pide.",
+      "top": {
+        "displayName": {
+          "label": "Tu nombre, como quieres que se imprima",
+          "ph": "Ray Ejemplo"
+        },
+        "discipline": {
+          "label": "Tu campo (opcional)",
+          "ph": "Educación de adultos"
+        },
+        "basedIn": {
+          "label": "Dónde vives",
+          "ph": "Toledo, Ohio"
+        },
+        "email": {
+          "label": "Correo electrónico",
+          "ph": "tu@ejemplo.com"
+        },
+        "phone": {
+          "label": "Teléfono (opcional)"
+        },
+        "website": {
+          "label": "Sitio web (opcional)"
+        }
+      },
+      "interests": "Intereses, con tus palabras (opcional)",
+      "languages": "Idiomas y habilidades, con tus palabras (opcional)",
+      "save": "Guardar",
+      "leadReference": "Tu primera referencia",
+      "leadNote": "Tú eliges quién va primero. Un maestro, supervisor o colega que conozca tu trabajo es el mejor comienzo.",
+      "lengthCap": "Hasta {cap} páginas, como un currículum. Sin relleno.",
+      "lengthFree": "Tan largo como tu registro real. Sin relleno.",
+      "rightNow": "Por ahora: {count, plural, =1 {1 página} other {# páginas}}."
+    },
+    "practice": {
+      "kind": {
+        "solo": "Muestra individual",
+        "two_person": "Muestra de dos personas",
+        "group": "Muestra colectiva",
+        "performance": "Presentación",
+        "screening": "Proyección",
+        "reading": "Lectura",
+        "published": "Publicado",
+        "in_press": "En prensa",
+        "accepted": "Aceptado",
+        "submitted": "Enviado",
+        "award": "Premio",
+        "grant": "Subvención",
+        "fellowship": "Beca",
+        "conferred": "Título otorgado",
+        "completed": "Completado",
+        "in_progress": "En curso",
+        "talk": "Charla",
+        "poster": "Póster",
+        "panel": "Mesa de discusión",
+        "workshop": "Taller",
+        "license": "Licencia",
+        "certification": "Certificación",
+        "certificate": "Certificado",
+        "card": "Tarjeta",
+        "training": "Capacitación",
+        "active": "Vigente",
+        "inactive": "Inactivo",
+        "expired": "Vencido",
+        "eligible": "Puedes presentar el examen",
+        "toward_degree": "Clases para un título",
+        "coursework": "Clases de una materia",
+        "other_study": "Un certificado o capacitación"
+      },
+      "medium": {
+        "theater": "Teatro",
+        "film": "Cine",
+        "tv": "Televisión",
+        "voice": "Voz",
+        "music": "Música",
+        "other": "Otro"
+      },
+      "billing": {
+        "lead": "Protagonista",
+        "supporting": "De reparto",
+        "series_regular": "Fijo de la serie",
+        "recurring": "Recurrente",
+        "guest_star": "Estrella invitada",
+        "co_star": "Coprotagonista",
+        "featured": "Destacado",
+        "ensemble": "Elenco",
+        "understudy": "Suplente",
+        "swing": "Reemplazo",
+        "background": "Extra"
+      },
+      "union": {
+        "member": "Miembro",
+        "eligible": "Puedes afiliarte",
+        "candidate": "Candidato a miembro"
+      },
+      "holder": {
+        "public": "pública",
+        "private": "privada"
+      },
+      "section": {
+        "exhibition": {
+          "label": "Exposición",
+          "title": "Título de la muestra",
+          "venue": "Galería o lugar",
+          "example": "Turno de noche"
+        },
+        "performance": {
+          "label": "Presentación, proyección o lectura",
+          "title": "Nombre del espectáculo, la película o la lectura",
+          "venue": "Lugar",
+          "example": "Serie de micrófono abierto"
+        },
+        "residency": {
+          "label": "Residencia",
+          "title": "Nombre de la residencia",
+          "venue": "Organización anfitriona",
+          "example": "Residencia de grabado de verano"
+        },
+        "commission": {
+          "label": "Encargo",
+          "title": "Nombre de la obra",
+          "venue": "Quién lo encargó",
+          "example": "Mural de la tienda de la esquina"
+        },
+        "publication": {
+          "label": "Publicación (tu trabajo)",
+          "title": "Título de tu pieza",
+          "venue": "Dónde salió (revista, libro, sitio)",
+          "example": "Dos poemas"
+        },
+        "press": {
+          "label": "Prensa sobre ti",
+          "title": "Titular",
+          "venue": "Medio",
+          "example": "Artista local abre su estudio"
+        },
+        "collection": {
+          "label": "Colección",
+          "title": "Nombre de la obra",
+          "venue": "Quién la tiene",
+          "example": "Sin título (Azul)"
+        },
+        "teaching": {
+          "label": "Docencia",
+          "title": "Tu cargo, exactamente como fue",
+          "venue": "Organización",
+          "example": "Artista docente"
+        },
+        "arts_program": {
+          "label": "Programa de arte",
+          "title": "Nombre del programa",
+          "venue": "Quién lo dirigió (patrocinador)",
+          "example": "Taller comunitario de grabado"
+        },
+        "award": {
+          "label": "Premio, subvención o beca",
+          "title": "Nombre del premio",
+          "venue": "Quién lo otorgó",
+          "example": "Subvención para artistas emergentes"
+        },
+        "education": {
+          "label": "Estudios o capacitación",
+          "title": "Título o estudio, exactamente como aparece en el documento",
+          "venue": "Escuela (la que lo otorgó)",
+          "example": "Certificado en grabado"
+        },
+        "work": {
+          "label": "Una obra (para tu lista de muestras)",
+          "title": "Título de la obra",
+          "example": "Cambio de turno"
+        },
+        "appointment": {
+          "label": "Empleo o cargo (para un CV)",
+          "title": "Tu cargo, exactamente como fue",
+          "venue": "Dónde (escuela, clínica, empleador)",
+          "example": "Asistente de investigación"
+        },
+        "research": {
+          "label": "Experiencia en investigación",
+          "title": "Proyecto o puesto",
+          "venue": "Laboratorio, equipo u organización",
+          "example": "Estudio sobre vivienda y reinserción social"
+        },
+        "presentation": {
+          "label": "Presentación o charla",
+          "title": "Título de la charla o del póster",
+          "venue": "Congreso o evento",
+          "example": "Aprender tras el muro"
+        },
+        "clinical": {
+          "label": "Rotación o práctica clínica",
+          "title": "Tu puesto, exactamente como fue",
+          "venue": "Sede",
+          "example": "Rotación de estudiante de enfermería"
+        },
+        "license": {
+          "label": "Licencia o certificación",
+          "title": "Nombre, exactamente como aparece en la tarjeta o licencia",
+          "venue": "Quién la emitió",
+          "example": "Especialista certificado en apoyo de recuperación entre pares"
+        },
+        "service": {
+          "label": "Servicio",
+          "title": "Tu puesto",
+          "venue": "Organización o comité",
+          "example": "Miembro del consejo asesor estudiantil"
+        },
+        "membership": {
+          "label": "Membresía",
+          "title": "Organización",
+          "example": "Asociación estatal de educadores de arte"
+        },
+        "reference": {
+          "label": "Referencia",
+          "title": "Su nombre",
+          "venue": "Dónde trabaja",
+          "example": "J. Ejemplo"
+        },
+        "credit": {
+          "label": "Crédito de actuación o interpretación",
+          "title": "Producción (la obra, película, show o grabación)",
+          "venue": "Compañía, teatro o estudio",
+          "example": "Nuestro pueblo"
+        },
+        "training": {
+          "label": "Formación (actuación, voz, danza, música)",
+          "title": "Lo que estudiaste",
+          "venue": "Dónde (escuela, estudio o programa)",
+          "example": "Estudio de escenas"
+        },
+        "union": {
+          "label": "Sindicato",
+          "title": "Nombre del sindicato, exacto",
+          "example": "SAG-AFTRA (sindicato de actores)"
+        }
+      },
+      "sectionPick": "¿Qué vas a agregar?",
+      "exKind": "¿Fue una muestra individual, de dos personas o colectiva?",
+      "pfKind": "¿Fue una presentación, una proyección o una lectura?",
+      "pubStatus": "¿En qué estado está?",
+      "awKind": "¿Premio, subvención o beca?",
+      "crMedium": "¿Teatro, cine, TV, voz, música u otra cosa?",
+      "unStatus": "¿En qué situación estás, exactamente?",
+      "prKind": "¿Fue una charla, un póster, un panel o un taller?",
+      "degreeTitle": "¿Para qué título eran las clases? (exactamente como lo nombra la escuela)",
+      "courseTitle": "¿De qué materia eran las clases?",
+      "city": "Ciudad",
+      "state": "Estado",
+      "yearReference": "¿Desde qué año te conocen?",
+      "yearUnion": "¿En qué año te afiliaste o pudiste afiliarte?",
+      "year": "¿Qué año?",
+      "until": "Hasta (opcional)",
+      "juried": "Fue con jurado",
+      "invitational": "Fue por invitación",
+      "curator": "Curador (solo si hubo uno)",
+      "roleOptional": "Tu papel (opcional)",
+      "toured": "Salió de gira",
+      "paid": "Me pagaron por esto",
+      "consentCommission": "Se puede nombrar a quien lo encargó",
+      "submittedWhen": "¿Cuándo lo enviaste?",
+      "submittedWhenPh": "Marzo de 2026",
+      "pressAuthor": "Quién lo escribió (opcional)",
+      "pressDate": "Fecha en que salió",
+      "pressDatePh": "4 de mayo de 2024",
+      "pressQuote": "Una cita (opcional, palabra por palabra)",
+      "holderLegend": "¿Quién la tiene?",
+      "holderConsent": "Dijeron que se les puede nombrar",
+      "levelLabel": "Edades o nivel (opcional)",
+      "levelPh": "Adultos, de 12 a 16 años",
+      "instructor": "Fui el instructor titular",
+      "programRole": "Lo que hiciste ahí (opcional)",
+      "programRolePh": "Grabador, facilitador entre pares",
+      "degreeCheck": "Es un título que me dio la escuela (no un certificado ni clases)",
+      "notDegree": "¿No es un título? Entonces, ¿qué fue? Las clases se imprimen como cursos, nunca como un título.",
+      "edStatus": "¿En qué estado está?",
+      "expected": "¿En qué año esperas terminar?",
+      "authors": "Autores, como los enumera la pieza (opcional)",
+      "authorsPh": "R. Ejemplo y J. Muestra",
+      "invited": "Me invitaron a darla",
+      "researchRolePh": "Asistente de investigación",
+      "hours": "Horas (opcional, tu propio conteo)",
+      "credKind": "¿De qué tipo es? (Tú eliges; no se adivina nada.)",
+      "credStatus": "¿En qué estado está ahora?",
+      "noLicenseNumber": "Nunca pongas aquí un número de licencia.",
+      "creditRole": "Tu papel, exactamente como aparece en los créditos (opcional)",
+      "creditRolePh": "Emilia Webb",
+      "billingLegend": "Orden de crédito, como aparece (solo si lo sabes)",
+      "director": "Director (solo si quieres nombrarlo)",
+      "creditYearNote": "El año se queda en tu registro. Tu página de intérprete oculta los años de los créditos, a menos que los actives.",
+      "teacher": "Quién lo enseñó (opcional)",
+      "duration": "Cuánto duró (opcional)",
+      "durationPh": "2 años",
+      "refRole": "Cómo te conocen (su puesto)",
+      "refRolePh": "Instructor del curso",
+      "refContact": "Cómo contactarlos (como ellos aceptaron)",
+      "refConsent": "Dijeron que se les puede incluir",
+      "madeOf": "¿De qué está hecha?",
+      "madeOfPh": "Acrílico sobre tabla",
+      "size": "Tamaño",
+      "sizePh": "60 x 90 cm",
+      "length": "O duración",
+      "lengthPh": "4 minutos",
+      "oneLine": "Una línea sobre esto, con tus palabras (opcional)",
+      "fileName": "Nombre del archivo (opcional)",
+      "backUp": "¿Puedes respaldarlo?",
+      "namesFacility": "El título o el lugar nombra una prisión, cárcel u otra institución",
+      "namesFacilityNote": "Tú elegirás cómo se muestra en cada ruta: el título real, solo el lugar, o nada.",
+      "otherNames": "Otros nombres que la gente usa para esto (opcional)",
+      "otherNamesHint": "Nombres cortos o apodos, separados por comas. Donde dejes fuera el lugar, estos también quedan fuera.",
+      "save": "Guardar",
+      "add": "Agregarlo",
+      "intro": "Espectáculos, presentaciones, programas, premios, clases que diste y el trabajo mismo. Tus palabras, tus años.",
+      "addToRecord": "+ Agregar a tu registro",
+      "namesFacilityTag": " Nombra una institución.",
+      "edit": "Editar",
+      "remove": "Quitar",
+      "removeAria": "Quitar {title}",
+      "confirmRemove": "¿Quitar \"{title}\" de tu registro?",
+      "removed": "Quitado.",
+      "didntWork": "No funcionó. Inténtalo de nuevo."
+    },
+    "shared": {
+      "tab": {
+        "record": "Tu registro",
+        "resume": "Currículum de artista",
+        "bio": "Biografía",
+        "statement": "Texto del artista",
+        "samples": "Muestras de trabajo",
+        "text": "Texto sin formato",
+        "plan": "Dos caminos",
+        "cv": "Tu CV",
+        "page": "Página de intérprete"
+      },
+      "intro": {
+        "creative": "Tus espectáculos, presentaciones, programas y trabajos, en un solo registro. De ahí se arman tu currículum de artista, tu biografía y tu lista de muestras. Tu declaración sigue siendo tuya.",
+        "cv": "Tus estudios, docencia, investigación, charlas, trabajo clínico y licencias, en un solo registro. De ahí se arma tu CV, con fecha en cada línea.",
+        "performer": "Tus obras, películas, lecturas, formación y habilidades, en un solo registro. De ahí se arma tu currículum de intérprete de una página, listo para pegar detrás de tu foto."
+      },
+      "troyLine": "Pon lo que has hecho, como lo dirías tú. Yo armo las páginas con eso y nada más.",
+      "proof": {
+        "checked": {
+          "label": "Comprobado",
+          "body": "Tengo algo que lo muestra: un volante, un programa, una carta, un enlace."
+        },
+        "remembered": {
+          "label": "Recordado",
+          "body": "Lo recuerdo bien. No tengo papeles a la mano."
+        },
+        "need_to_find": {
+          "label": "Buscando la prueba",
+          "body": "Sí pasó. Estoy buscando el documento."
+        }
+      },
+      "titleMode": {
+        "true_title": {
+          "label": "Mostrar el título real",
+          "body": "Tal como fue. Hay quienes quieren que se vea."
+        },
+        "venue_only": {
+          "label": "Solo el lugar",
+          "body": "Solo el tipo de entrada y el lugar, como \"Docencia, el lugar\". El título no aparece en ninguna página de esta ruta."
+        },
+        "leave_out": {
+          "label": "Dejarlo fuera",
+          "body": "No aparece en ninguna página de esta ruta. Se queda en tu registro."
+        }
+      },
+      "titleWhy": "Este nombra una institución. Tú eliges cómo se muestra en esta ruta. Nunca lo cambiamos de nombre ni lo suavizamos.",
+      "pronoun": {
+        "name": "Usar mi nombre",
+        "they": "Elle",
+        "she": "Ella",
+        "he": "Él"
+      },
+      "bioHow": "t.ROY arma frases a partir de tu registro, una entrada a la vez. Nada entra hasta que tú lo conservas. Reescribe cualquiera, o escribe la tuya.",
+      "statementHow": "Esta es tuya. t.ROY hace preguntas y señala la ortografía. Nunca escribe ni una palabra, y nada de lo que escribes aquí va a una IA.",
+      "spellingHow": "Toca Corregir para cambiar solo esa palabra. Nada más se mueve.",
+      "spellingCapped": "Son muchas palabras para revisar de una vez. Solo se revisó la ortografía de la primera parte. Corrige esas y vuelve a revisar.",
+      "samplesHow": "Pon primero tu mejor trabajo. Cada línea es lo que escribiste en tu registro.",
+      "plainTextHow": "Para los cuadros de las postulaciones. El conteo incluye los espacios, como lo cuentan la mayoría de los formularios.",
+      "plainTextDraft": "Sigue siendo un borrador. Falta tu respuesta en algo. Puedes ver el texto, pero responde los pendientes antes de pegarlo en cualquier lado.",
+      "pageCap": {
+        "label": "Esta convocatoria permite hasta 4 páginas",
+        "body": "Déjalo apagado a menos que la convocatoria lo diga. La mayoría pide de 1 a 2 páginas."
+      },
+      "pairOffer": "¿Quieres una ruta realista junto a tu sueño? Un trabajo que puedas conseguir ahora, mientras avanzas hacia esto. Los mismos datos por debajo.",
+      "planHow": "Solo para ti. Esta tarjeta nunca va en ninguna página.",
+      "didntSave": "No se guardó. Inténtalo de nuevo.",
+      "loadFailed": "No se pudo cargar tu ruta creativa. Actualiza la página.",
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "cvType": {
+        "academic": {
+          "label": "Académico o de investigación",
+          "body": "Para universidades, grupos de investigación y becas. Tan largo como tu registro real."
+        },
+        "teaching": {
+          "label": "Docencia",
+          "body": "Primero la docencia. Tan largo como tu registro real."
+        },
+        "clinical": {
+          "label": "Clínico",
+          "body": "Licencias y prácticas clínicas al frente. Tan largo como tu registro real."
+        },
+        "international": {
+          "label": "Internacional",
+          "body": "Para trabajos fuera de EE. UU. Dos páginas como máximo, igual que un currículum."
+        }
+      },
+      "needsProof": "Algunas entradas todavía necesitan comprobación. Puedes descargar ahora; ten a la mano las pruebas.",
+      "draftPrefix": "Borrador ",
+      "word": "Word",
+      "plainTextLink": "Texto sin formato"
+    },
+    "statement": {
+      "fixed": "Se corrigió \"{word}\".",
+      "saved": "Guardado. Es tuyo.",
+      "label": "Tu declaración de artista",
+      "placeholder": "Empieza por donde quieras. Lo que haces, cómo lo haces, por qué.",
+      "counts": "{chars} caracteres con espacios, {words} palabras",
+      "over": "{over} por encima del límite.",
+      "boxLimit": "Límite del cuadro",
+      "limitAria": "Límite de caracteres del cuadro de la postulación",
+      "saveWords": "Guardar mis palabras",
+      "noSpelling": "No hay ortografía que corregir.",
+      "didntWork": "No funcionó. Inténtalo de nuevo en un momento.",
+      "checkSpelling": "Revisar ortografía y leérmelo",
+      "plainText": "Texto sin formato",
+      "asideAria": "Preguntas de t.ROY",
+      "questionsTitle": "Preguntas para escribir",
+      "coach": {
+        "0": "¿Qué haces y de qué está hecho?",
+        "1": "¿De dónde vienen tus ideas?",
+        "2": "¿A qué sigues volviendo en tu trabajo?",
+        "3": "¿Cómo lo haces, paso a paso?",
+        "4": "¿Quién o qué ha moldeado tu forma de trabajar?",
+        "5": "¿Qué de tu propia vida aparece en el trabajo, si es que algo aparece?",
+        "6": "¿Qué quieres que alguien note primero?"
+      },
+      "spelling": "Ortografía",
+      "saveFirst": "Primero guarda tus palabras y luego corrige la ortografía.",
+      "to": "a",
+      "fix": "Corregir",
+      "ignore": "Ignorar",
+      "versions": "Versiones guardadas ({count})",
+      "versionFixed": "se corrigió \"{word}\"",
+      "versionWords": "{count} palabras"
+    },
+    "samples": {
+      "empty": "Todavía no hay obras en esta lista. En Tu registro, agrega una con \"Una obra (para tu lista de muestras)\".",
+      "file": "Archivo: {name}",
+      "moveUp": "Subir {title}",
+      "moveDown": "Bajar {title}",
+      "up": "Subir",
+      "down": "Bajar",
+      "orderSaved": "Orden guardado.",
+      "saveOrder": "Guardar este orden",
+      "plainText": "Texto sin formato",
+      "csv": "Hoja de cálculo (CSV)"
+    },
+    "twoPaths": {
+      "cantPair": "No se pueden emparejar esas dos rutas.",
+      "startRealistic": "Empieza una ruta realista",
+      "startDream": "Empieza una ruta de sueño",
+      "askRealistic": "¿Qué trabajo podrías buscar ahora?",
+      "askDream": "¿Cuál es el sueño?",
+      "fillLater": "(puedes llenarlo después)",
+      "nameLabel": "Nombre de la ruta",
+      "optional": "(opcional)",
+      "startPair": "Empezarla y emparejarlas",
+      "pairExisting": "O empareja con una ruta que ya tienes",
+      "kindCreative": "creativa",
+      "kindPerformer": "de intérprete",
+      "kindCv": "de CV",
+      "pairAsRealistic": "Emparejar como mi ruta realista",
+      "pairAsDream": "Emparejar como mi ruta de sueño",
+      "realistic": "Realista",
+      "dream": "Sueño",
+      "planSaved": "Plan guardado.",
+      "goal": "La meta, con tus palabras",
+      "nextSteps": "Próximos pasos en la ruta realista",
+      "remove": "Quitar",
+      "stepPlaceholder": "Postular en dos tiendas de letreros esta semana",
+      "stepAria": "Un próximo paso",
+      "add": "Agregar",
+      "hurdlesAria": "Obstáculos",
+      "hurdles": "Obstáculos que conviene conocer",
+      "helpAria": "Dónde conseguir ayuda",
+      "helpTitle": "Dónde conseguir ayuda",
+      "helpNotes": "Personas o programas que te ayudan (opcional)",
+      "savePlan": "Guardar plan",
+      "unpaired": "Desemparejadas. Tu plan se queda con la ruta de sueño.",
+      "didntWork": "No funcionó.",
+      "unpair": "Desemparejar"
+    },
+    "performerLane": {
+      "badge": "Intérprete",
+      "pathDream": "Sueño",
+      "pathNow": "Ahora",
+      "ariaLane": "Ruta de intérprete {name}",
+      "troyLine": "Una página, armada con tu registro. Roles y orden de crédito exactamente como aparecen. No se agrega nada.",
+      "toolsAria": "Herramientas de intérprete",
+      "top": {
+        "displayName": {
+          "label": "Tu nombre, como trabajas con él",
+          "ph": "Ray Ejemplo"
+        },
+        "discipline": {
+          "label": "A qué te dedicas",
+          "ph": "Actor / Cantante"
+        },
+        "agent": {
+          "label": "Agente o representante (opcional, como quieren que aparezca)"
+        },
+        "basedIn": {
+          "label": "Ciudad base (opcional)",
+          "ph": "Chicago, Illinois"
+        },
+        "email": {
+          "label": "Correo electrónico",
+          "ph": "tu@ejemplo.com"
+        },
+        "phone": {
+          "label": "Teléfono (opcional)"
+        },
+        "website": {
+          "label": "Sitio web o reel (opcional)"
+        }
+      },
+      "look": {
+        "height": {
+          "label": "Estatura",
+          "ph": "1,78 m"
+        },
+        "hair": {
+          "label": "Cabello",
+          "ph": "Castaño"
+        },
+        "eyes": {
+          "label": "Ojos",
+          "ph": "Verdes"
+        },
+        "voice": {
+          "label": "Voz o registro vocal (opcional)",
+          "ph": "Barítono"
+        },
+        "ageRange": {
+          "label": "Rango de edad que interpretas (como 25-35). Nunca tu edad.",
+          "ph": "25-35"
+        }
+      },
+      "saved": "Guardado.",
+      "topTitle": "Parte superior de la página",
+      "lookTitle": "Cómo te ves y cómo suenas",
+      "lookNote": "Solo lo que quieres que vea el casting. Sin peso, sin fecha de nacimiento, sin edad: un rango que interpretas, si quieres poner uno.",
+      "save": "Guardar",
+      "skillsTitle": "Habilidades especiales",
+      "skillsNote": "El casting puede pedirte que muestres cualquiera de estas al momento. Solo las que marques van en la página.",
+      "skillOk": "Puedo hacer esto si me lo piden hoy",
+      "removeAria": "Quitar {text}",
+      "remove": "Quitar",
+      "skillPlaceholder": "Combate escénico",
+      "addSkill": "Agregar habilidad",
+      "showYears": "Mostrar el año en cada crédito. Tu formación siempre muestra sus años.",
+      "selectionTitle": "Qué va en esta página",
+      "selectionNote": "Una página, siempre. Si se pasa, desmarca lo que puedas dejar fuera. Todo se queda en tu registro.",
+      "pageSizeAria": "Tamaño de página",
+      "preview": "Vista previa:",
+      "size8x10": "8x10 (reverso de la foto)",
+      "sizeLetter": "Carta (EE. UU.)",
+      "dl": {
+        "pdf810": "PDF de 8x10",
+        "pdfLetter": "PDF Carta",
+        "docx810": "Word de 8x10",
+        "docxLetter": "Word Carta",
+        "html": "Página web",
+        "txt": "Texto sin formato"
+      }
+    },
+    "cvPage": {
+      "startFirst": "Empieza tu CV",
+      "startAnother": "Otro CV",
+      "whatKind": "¿Qué tipo de CV?",
+      "aimLabel": "¿Para qué es?",
+      "optional": "(opcional)",
+      "aimPlaceholder": "Programas de educadores pares",
+      "nameLabel": "Nombre de la ruta",
+      "namePlaceholder": "CV de docencia",
+      "startThis": "Empezar este CV",
+      "title": "CV (currículum vitae)",
+      "laneLabel": "Ruta de CV",
+      "newCv": "Nuevo CV",
+      "loading": "Cargando..."
+    },
+    "performerPage": {
+      "startFirst": "Empieza tu página de intérprete",
+      "startAnother": "Otra ruta de intérprete",
+      "blurb": "Teatro, cine, televisión, voz, música. Una página, como la lee quien hace el casting.",
+      "whatLabel": "¿Qué interpretas?",
+      "whatPlaceholder": "Actuación en teatro y pantalla",
+      "nameLabel": "Nombre de la ruta",
+      "optional": "(opcional)",
+      "namePlaceholder": "Actuación",
+      "dreamOrNow": "¿Es tu sueño, o el trabajo que haces ahora?",
+      "path": {
+        "dream": {
+          "label": "Mi sueño",
+          "body": "Hacia donde voy. Puedes combinarlo con un trabajo que puedas conseguir ahora."
+        },
+        "realistic": {
+          "label": "Lo que hago ahora",
+          "body": "Trabajo que puedo conseguir hoy."
+        },
+        "none": {
+          "label": "Aún no estoy seguro",
+          "body": "Sáltalo por ahora."
+        }
+      },
+      "startThis": "Empezar esta ruta",
+      "title": "Intérprete",
+      "laneLabel": "Ruta de intérprete",
+      "newLane": "Nueva ruta de intérprete",
+      "loading": "Cargando..."
+    }
+  },
+  "documents": {
+    "cat": {
+      "id": {
+        "label": "Identificación oficial o personal",
+        "help": "Una foto de tu identificación estatal o de tu acta de nacimiento que guardas para tus propios registros. No tu tarjeta del Seguro Social."
+      },
+      "certificate": {
+        "label": "Certificados y credenciales",
+        "help": "Certificados de oficios, tarjetas OSHA, licencia de conducir comercial (CDL), montacargas, manejo de alimentos, diplomas, finalización de programas."
+      },
+      "reference_letter": {
+        "label": "Cartas de recomendación",
+        "help": "Cartas de empleadores, gestores de casos, mentores o personal de programas que responderán por ti."
+      },
+      "record": {
+        "label": "Registros y documentos legales",
+        "help": "Documentos judiciales, documentos de puesta en libertad, cartas de libertad condicional o de libertad a prueba (probation), constancias de cancelación de antecedentes penales."
+      },
+      "note": {
+        "label": "Notas para ti",
+        "help": "Una nota escrita que quieres guardar, como un número de teléfono, un plan o un recordatorio."
+      },
+      "other": {
+        "label": "Cualquier otra cosa",
+        "help": "Cualquier documento que te importe y no encaje en las categorías de arriba."
+      }
+    },
+    "jobAt": "{job} en {company}",
+    "chooseFile": "Elige un archivo para agregar.",
+    "tooBig": "Ese archivo pasa el límite de 25 MB. Prueba con una foto o un PDF más pequeño.",
+    "pickCategory": "Elige una categoría para poder encontrar esto después.",
+    "needName": "Ponle a este documento un nombre corto.",
+    "added": "Se agregó \"{label}\" a tu bóveda.",
+    "addFailed": "No se pudo agregar ese documento. Inténtalo de nuevo.",
+    "saved": "Se guardaron tus cambios.",
+    "saveFailed": "No se pudo guardar. Inténtalo de nuevo.",
+    "deleted": "Documento borrado.",
+    "deleteFailed": "No se pudo borrar ese documento.",
+    "deleteFailedRetry": "No se pudo borrar ese documento. Inténtalo de nuevo.",
+    "loading": "Cargando tu bóveda...",
+    "title": "Documentos privados",
+    "intro": "Un lugar seguro para los documentos que prueban quién eres y lo que has logrado: tu identificación, certificados, cartas de recomendación, registros y notas. Está cifrado y se queda en tu cuenta hasta que lo borres. Solo tú puedes abrirlo aquí. Los programas y los empleadores no pueden, aunque compartas otras cosas con ellos.",
+    "lanesNote": "Una sola bóveda para todas las rutas. Tus pruebas son las mismas sin importar a qué trabajo apuntes.",
+    "notPassword": "Esto no es un guardador de contraseñas.",
+    "notPasswordBody": "No pongas aquí contraseñas, tu tarjeta del Seguro Social ni accesos del banco. Guárdalos en un lugar hecho para secretos. Esta bóveda es para documentos.",
+    "addTitle": "Agrega un documento",
+    "fileLabel": "Elige un archivo (PDF, foto, documento de Word o texto, hasta 25 MB)",
+    "kindLabel": "¿Qué tipo de documento es?",
+    "pickCat": "Elige una categoría",
+    "nameLabel": "Nombre corto (para encontrarlo después)",
+    "namePlaceholder": "por ejemplo: Identificación estatal, tarjeta OSHA-10, Carta del Sr. Reyes",
+    "noteLabel": "Nota para ti (opcional)",
+    "jobLabel": "Vincula esto a una vacante guardada (opcional)",
+    "noJob": "Sin vincular a una vacante",
+    "adding": "Agregando...",
+    "addToVault": "Agregar a la bóveda",
+    "empty": "Tu bóveda está vacía. Agrega arriba tu identificación, un certificado o una carta de recomendación, y estará aquí cuando la necesites para un trabajo, un arrendador o un programa.",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "notePlaceholder": "Nota para ti (opcional)",
+    "saving": "Guardando...",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "added2": "{size} · Agregado el {date}",
+    "tiedTo": "Vinculado a: {job}",
+    "download": "Descargar",
+    "edit": "Editar",
+    "delete": "Borrar",
+    "footer": "Todo lo que hay aquí está cifrado y es privado de tu cuenta. Para descargar todos los archivos de una vez, o para borrar todos tus datos, ve a <link>Ajustes, Datos</link>."
+  },
+  "evidence": {
+    "titlePartner": "Panel de evidencia",
+    "titleClient": "La evidencia",
+    "subtitlePartner": "La investigación, los datos y la arquitectura detrás de Steel Man Resumes.",
+    "subtitleClient": "La investigación y los datos que respaldan tus resultados.",
+    "observer": "Estás viendo un resumen. El panel de evidencia completo, con citas, análisis de la competencia y decisiones de arquitectura, está disponible para las organizaciones aliadas.",
+    "tryForge": "probar The Forge",
+    "partnerCode": "ingresar código de organización aliada",
+    "numbers": "Los números",
+    "n1": "Estadounidenses con antecedentes penales",
+    "n2": "Con empleo en el primer año después de salir",
+    "n3": "Ingreso mediano, primer año",
+    "citations": "Citas de investigación",
+    "moreResearch": "Más investigación",
+    "moreCitations": "{count} citas más",
+    "gapPartner": "La brecha: lo que ninguna otra herramienta hace",
+    "gapClient": "Por qué esta herramienta es diferente",
+    "finding": {
+      "0": "Estudio de resonancia magnética funcional que muestra que poner las emociones en palabras reduce hasta un 50% la reactividad de la amígdala.",
+      "1": "Nombrar lo que sientes funciona mejor que reinterpretar la situación o distraerse para reducir la reactividad emocional.",
+      "2": "La confianza en uno mismo se construye con experiencias de dominio (logros reales), no con ánimo ni con persuasión verbal.",
+      "3": "El modelo transteórico describe cinco etapas de cambio. Que una intervención funcione depende de ajustarla a la etapa en la que está la persona.",
+      "4": "Las secuencias de redención (relatos que pasan de lo malo a lo bueno) predicen mayor bienestar y mayor deseo de aportar a otros.",
+      "5": "Dejar el delito se relaciona con construir una “identidad generativa”: verse como alguien que puede aportar de forma positiva.",
+      "6": "La autonomía, la competencia y el vínculo con otros son necesidades psicológicas básicas. Los entornos que apoyan la autonomía dan mejores resultados.",
+      "7": "Andamiaje: ofrecer una estructura que se retira a medida que crece la competencia. Más apoyo al principio, menos después.",
+      "8": "Elogiar el proceso (“Te esforzaste mucho”) fortalece la mentalidad de crecimiento. Elogiar a la persona (“Eres inteligente”) fortalece la mentalidad fija."
+    },
+    "gap": {
+      "0": "No hay una herramienta que integre IA y orientación legal para personas con antecedentes penales",
+      "1": "No hay un marco de conducta basado en investigación para la IA de carrera",
+      "2": "Las herramientas de carrera no permiten ver cómo se toman las decisiones",
+      "3": "No hay exploración de carrera guiada paso a paso para quienes manejan poco lo digital"
+    }
+  },
+  "lanes": {
+    "earlier": {
+      "didntWork": "No funcionó. Inténtalo de nuevo.",
+      "back": "La versión {number} volvió. Ahora es la versión más reciente.",
+      "summary": "Versiones anteriores",
+      "loading": "Cargando...",
+      "none": "Todavía no hay versiones anteriores.",
+      "versionFinished": "Versión {number}, terminada",
+      "versionDraft": "Versión {number}, borrador",
+      "bringing": "Trayéndola de vuelta...",
+      "bringBack": "Traer esta de vuelta"
+    },
+    "switcher": {
+      "failed": "No se guardó. Inténtalo de nuevo.",
+      "ariaLanes": "Rutas profesionales",
+      "reload": "Recargar",
+      "created": "Se creó la ruta.",
+      "tryAgain": "Intenta abrirla de nuevo",
+      "opening": "Abriendo tu ruta...",
+      "workingIn": "Trabajando en",
+      "allLanes": "Todas las rutas",
+      "main": "Principal",
+      "newLane": "Nueva ruta",
+      "settings": "Ajustes de la ruta",
+      "aiming": "Buscando: {role}.",
+      "formatSummary": "Formato: {format}. {length}.",
+      "hybridSaved": "Híbrido guardado para cuando esté listo",
+      "laneSummary": "Ruta: {kind}.",
+      "documents": "Documentos",
+      "archived": "Rutas archivadas ({count})",
+      "bringBackAria": "Traer de vuelta {name}",
+      "bringBack": "Traer de vuelta"
+    },
+    "goal": {
+      "employment": {
+        "label": "Empleo",
+        "name": "Empleo",
+        "example": "Supervisor de producción",
+        "description": "Dirige un currículum y versiones por vacante hacia el trabajo que quieres."
+      },
+      "self-employment": {
+        "label": "Trabajo por cuenta propia o un negocio",
+        "name": "Cuenta propia",
+        "example": "Negocio de limpieza de casas",
+        "description": "Reúne tu experiencia de trabajo y las pruebas para trabajar por tu cuenta. Empieza con lo que sabes, lo que necesitas averiguar y el apoyo local. Esta ruta usa las herramientas de currículum que ya existen."
+      },
+      "freelance": {
+        "label": "Freelance, por contrato o consultoría",
+        "name": "Freelance y consultoría",
+        "example": "Contabilidad freelance",
+        "description": "Muestra los proyectos, servicios y trabajos que puedes respaldar. Esta ruta usa las herramientas de currículum y de cartas que ya existen."
+      },
+      "apprenticeship": {
+        "label": "Oficio o aprendizaje",
+        "name": "Oficio y aprendizaje",
+        "example": "Aprendizaje de electricista",
+        "description": "Reúne trabajo real, capacitación y credenciales para una solicitud de oficio o aprendizaje."
+      },
+      "creative": {
+        "label": "Trabajo creativo",
+        "name": "Trabajo creativo",
+        "example": "Artes visuales",
+        "description": "Lleva un registro de tu práctica para un currículum de artista, una biografía y muestras de trabajo. Tu declaración de artista sigue siendo tuya."
+      },
+      "cv": {
+        "label": "CV académico o profesional",
+        "name": "CV profesional",
+        "example": "Docencia o trabajo clínico",
+        "description": "Arma un CV con fechas a partir de tus estudios, docencia, investigación o trabajo clínico."
+      },
+      "performer": {
+        "label": "Intérprete",
+        "name": "Intérprete",
+        "example": "Actuación o música",
+        "description": "Lleva créditos, formación y habilidades para una página de intérprete."
+      }
+    },
+    "newForm": {
+      "title": "¿Hacia qué estás trabajando?",
+      "intro": "Tus datos pasan de una ruta a otra: los mismos trabajos, las mismas fechas. Solo cambia el objetivo. Una ruta tiene una meta y sus documentos. El formato se queda dentro de la ruta.",
+      "goal": "Tu meta",
+      "cvType": "Tipo de CV",
+      "aiming": "¿A qué trabajo apuntas?",
+      "optional": "(opcional)",
+      "laneName": "Nombre de la ruta",
+      "leaveBlank": "Déjalo en blanco para usar “{name}”.",
+      "caregiving": "El cuidado de otras personas, el regreso al trabajo y los vacíos laborales pueden ser parte de una conversación con t.ROY. Usa la meta que elijas como nombre de tu ruta.",
+      "saving": "Guardando...",
+      "create": "Crear ruta",
+      "cancel": "Cancelar"
+    },
+    "editForm": {
+      "laneName": "Nombre de la ruta",
+      "aiming": "¿A qué trabajo apuntas?",
+      "formatTitle": "Formato del currículum",
+      "formatChrono": {
+        "label": "Primero las fechas",
+        "body": "Tus trabajos en orden, del más reciente al más antiguo, con los años en cada uno. Los empleadores y las verificaciones de antecedentes buscan fechas, así que esto le sirve a casi todos."
+      },
+      "hybridComing": "El formato híbrido viene en camino: una lista corta de habilidades arriba y luego cada trabajo con sus años. Cuando esté listo, lo elegirás aquí.",
+      "noFunctional": "¿Por qué no una página solo de habilidades y sin fechas? Una verificación de antecedentes muestra tus fechas de todos modos, y una página que las esconde parece que escondes algo. Esa no la armamos.",
+      "length": "Extensión",
+      "docsIn": "Las opciones de documentos de esta ruta están en <link>su propio espacio de trabajo</link>.",
+      "saving": "Guardando...",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "archiveAsk": "¿Archivar esta ruta? Sus currículums se quedan en Mis currículums. Puedes traerla de vuelta.",
+      "archiveIt": "Archivarla",
+      "keepIt": "Conservarla",
+      "archive": "Archivar esta ruta"
+    },
+    "length": {
+      "auto": {
+        "label": "Que mi historial decida",
+        "body": "Una página, o dos cuando tu historial real las llena. Nunca relleno, nunca más de dos."
+      },
+      "one_page": {
+        "label": "Una página",
+        "body": "Tus mejores líneas van primero. No se rellena nada y no se inventa nada para llenar espacio."
+      },
+      "two_pages": {
+        "label": "Hasta dos páginas",
+        "body": "Dos páginas solo cuando tu historial las llena. Si cabe en una, se queda en una."
+      }
+    },
+    "cvType": {
+      "academic": "Académico o de investigación",
+      "teaching": "Docencia",
+      "clinical": "Clínico",
+      "international": "Internacional"
+    }
+  },
+  "library": {
+    "group": {
+      "resume": "Currículums",
+      "cover_letter": "Cartas de presentación",
+      "follow_up": "Mensajes de seguimiento",
+      "disclosure_plan": "Planes de divulgación",
+      "hurdle_plan": "Planes para superar obstáculos",
+      "interview_prep": "Práctica de entrevista"
+    },
+    "jobAt": "{job} en {company}",
+    "baseResume": "Currículum base",
+    "loadError": "No se pudo cargar tu trabajo guardado. Inténtalo de nuevo.",
+    "movedTo": "Movido a {name}.",
+    "main": "Principal",
+    "moveFailed": "No se pudo mover. Inténtalo de nuevo.",
+    "movedExamples": "Movido a ejemplos.",
+    "backInResumes": "De vuelta en Mis currículums.",
+    "changeFailed": "No se pudo cambiar. Inténtalo de nuevo.",
+    "currentFailed": "No se guardó tu elección de currículum actual. Inténtalo de nuevo.",
+    "deleted": "Elemento borrado.",
+    "deleteFailed": "No se pudo borrar ese elemento.",
+    "deleteFailedRetry": "No se pudo borrar ese elemento. Inténtalo de nuevo.",
+    "current": "Actual",
+    "baseline": "Base",
+    "example": "Ejemplo",
+    "lane": "Ruta: {name}",
+    "updated": "Actualizado {date}",
+    "hide": "Ocultar",
+    "view": "Ver",
+    "show": "Mostrar",
+    "tailorToJob": "Adaptar a una vacante",
+    "openBuilder": "Abrir en el constructor",
+    "delete": "Borrar",
+    "cancel": "Cancelar",
+    "unpin": "Dejar de fijar como actual",
+    "setCurrent": "Fijar como mi currículum actual",
+    "unlock": "Desbloquear la base",
+    "lanePlaceholder": "Ruta, por ejemplo: Manufactura",
+    "lock": "Bloquear",
+    "lockAsBaseline": "Bloquear como base",
+    "lockTitle": "Bloquea esto como una base aprobada para una ruta profesional",
+    "moveTo": "Mover a",
+    "laneFor": "Ruta de {title}",
+    "archivedSuffix": "{name} (archivada)",
+    "move": "Mover",
+    "unlockFirst": "Primero desbloquea la base",
+    "notExample": "No es un ejemplo",
+    "moveToExamples": "Mover a ejemplos",
+    "savePdf": "Guardar PDF",
+    "downloadDocx": "Descargar .docx",
+    "docxNote": "El .docx se abre en Word para editarlo. El PDF conserva el formato tal cual.",
+    "loading": "Cargando tu biblioteca...",
+    "title": "Mis currículums",
+    "intro": "Empieza con tu primer currículum y luego sigue las versiones que creas para cada vacante. Tu currículum seleccionado en este momento tiene una etiqueta en su tarjeta. Cambia de ruta para ver el trabajo de otra meta. Las pruebas y certificados que subas se quedan en <link>Documentos privados</link>.",
+    "showing": "Mostrando",
+    "resumesOnly": "Mostrar solo currículums",
+    "showRelated": "Mostrar cartas, planes y práctica relacionados",
+    "tryAgain": "Intentar de nuevo",
+    "emptyAll": "Todavía no hay nada aquí. Arma un currículum, planea una divulgación o practica una entrevista y aparecerá aquí.",
+    "emptyLane": "Todavía no hay nada en esta ruta. Adapta un currículum mientras trabajas en esta ruta y aparecerá aquí.",
+    "searchPlaceholder": "Busca en tu biblioteca por vacante o empresa",
+    "noMatch": "Nada coincide con “{query}”.",
+    "clearSearch": "Borrar la búsqueda",
+    "firstMatching": "Primer currículum que coincide",
+    "startingResume": "Currículum inicial",
+    "laterResumes": "Currículums posteriores, en el orden en que los hiciste",
+    "loadMore": "Cargar más ({count} más)",
+    "hideExamples": "Ocultar ejemplos",
+    "showExamples": "Mostrar ejemplos ({count})",
+    "examplesNote": "Currículums de muestra y de prueba, guardados aparte para que no estorben. Toca No es un ejemplo para traer uno de vuelta."
+  },
+  "master": {
+    "loadFailed": "No se pudo cargar tu Borrador maestro. Actualiza la página para intentar de nuevo.",
+    "saved": "Se guardó en tu Borrador maestro. Las próximas adaptaciones pueden usar los detalles que confirmaste. Los archivos de postulaciones que ya tienes no cambian.",
+    "couldNotSave": "No se pudo guardar.",
+    "kicker": "t.ROY // tu registro de trabajo",
+    "title": "Borrador maestro",
+    "intro": "Tu historial laboral sigue creciendo. Guarda los datos aquí para que cada ruta parta de lo que de verdad hiciste, y no de una cadena de currículums reescritos.",
+    "foundationTitle": "Tu base",
+    "foundationBody": "Tu currículum original es la base. Agrega herramientas, tareas, proyectos y ejemplos a medida que los recuerdes. Confirma un detalle antes de que t.ROY lo use en una adaptación futura. Un currículum hecho para una vacante se queda con esa postulación.",
+    "reviewFoundation": "Revisa tu currículum base",
+    "buildFoundation": "Arma tu currículum base",
+    "steelTitle": "Arma la versión Steel Man con t.ROY",
+    "steelBody1": "Te recomendamos revisar cada línea juntos. Explícala con tus propias palabras, agrega un ejemplo real y pídele a t.ROY que te ayude a aclararla. Ese trabajo le da mejor material y te ayuda a respaldar lo que envías.",
+    "steelBody2": "Los detalles que salgan en la práctica de entrevista pueden venir aquí después de que los confirmes. Los datos privados de tus antecedentes penales van en tu Planificador de divulgación, no en este historial laboral que ve el empleador.",
+    "openDisclosure": "Abre tu Planificador de divulgación privado",
+    "addTitle": "Agrega un detalle de trabajo",
+    "addLabel": "¿Qué hiciste, dónde y cuándo? Incluye el ejemplo o la fuente que recuerdes.",
+    "confirmBox": "Confirmo que esto describe mi trabajo real y que se puede usar en borradores futuros.",
+    "saving": "Guardando…",
+    "saveConfirmed": "Guardar detalle confirmado",
+    "saveToCheck": "Guardar como detalle por revisar",
+    "count": "{count} de 40 detalles guardados.",
+    "countFull": "Quita un detalle que ya no necesites antes de agregar otro.",
+    "countRoom": "Conserva los ejemplos que le aporten algo útil a tu currículum base.",
+    "growingTitle": "Tu registro de trabajo en crecimiento",
+    "empty": "Empieza con un detalle útil. Puedes volver cuando recuerdes algo más.",
+    "confirmedBy": "Confirmado por ti",
+    "needsConfirm": "Necesita tu confirmación",
+    "confirmAccurate": "Confirmo que esto es correcto",
+    "remove": "Quitar detalle",
+    "findJob": "Busca un trabajo para usar todo esto"
+  },
+  "premium": {
+    "tool": {
+      "resources": "Búsqueda de apoyo",
+      "interview_coaching": "Orientación de entrevista por voz",
+      "one_click_apply": "Postulación con un clic"
+    },
+    "included": "Con tu cuenta puedes usar tu currículum, la búsqueda de apoyo y la práctica de entrevista por texto ({count} al día). La orientación de entrevista por voz y la postulación con un clic se abren a través de una organización que trabaja con Steel Man Resumes, o SMR puede abrírtelas.",
+    "lockedLine": "{tool} se abre a través de una organización que trabaja con Steel Man Resumes, o SMR puede abrírtela.",
+    "neverPay": "Nunca pagas por esto.",
+    "askOrgHeading": "Pregunta en tu organización",
+    "askOrgLine": "Si un programa, un centro de reinserción o un gestor de casos trabaja contigo, pídeles su código de SMR. Luego escríbelo en Ajustes.",
+    "askSmrHeading": "Pide acceso a SMR",
+    "askSmrLine": "Cuéntanos un poco de tu búsqueda si quieres. Es opcional.",
+    "askSent": "Tu solicitud ya llegó. Cuando la aprueben, esta herramienta se abre aquí.",
+    "askedOn": "Lo pediste el {date}. Cuando lo aprueben, esta herramienta se abre aquí.",
+    "lockedAria": "{tool} está bloqueada",
+    "notOpen": "{tool} todavía no está abierta para ti",
+    "enterCode": "Escribe un código en Ajustes",
+    "sending": "Enviando...",
+    "send": "Enviar mi solicitud",
+    "errorGeneric": "No se pudo enviar. Inténtalo de nuevo en un minuto.",
+    "errorNetwork": "No pudimos comunicarnos con el servidor. Inténtalo de nuevo en un minuto.",
+    "unavailable": "{tool} no está disponible en este momento. El problema es de nuestra parte y tu cuenta está bien. Inténtalo más tarde.",
+    "loading": "Cargando..."
+  },
+  "resume": {
+    "batch": {
+      "notFound": "No se encontraron las vacantes que elegiste. Elígelas de nuevo en el tablero de empleos.",
+      "unreadable": "No se pudieron leer las vacantes que elegiste. Elígelas de nuevo en el tablero de empleos.",
+      "gone": "Este grupo ya no está en este dispositivo. Tus currículums guardados están en tu Biblioteca y en Postulaciones.",
+      "allowanceError": "No se pudo revisar tu cupo. Inténtalo de nuevo antes de ejecutar.",
+      "answerUnreadable": "No se pudo leer la respuesta de esta vacante. Reintenta esta.",
+      "stopped": "El grupo se detuvo antes de terminar. Las vacantes guardadas siguen guardadas. Reintenta las demás.",
+      "ariaJobs": "Vacantes para adaptar",
+      "title": "Adaptar para {count, plural, =1 {1 vacante} other {# vacantes}}",
+      "intro": "Tu currículum base y tus datos se leen una sola vez para todas. Cada vacante tiene su propia lectura de la oferta y su propio currículum adaptado, así que cada una es una acción de IA aparte.",
+      "jobAt": "{title} en {company}",
+      "phase": {
+        "queued": "En espera",
+        "reading": "Leyendo la oferta",
+        "tailoring": "Adaptando y comparando cada línea con tus datos",
+        "checking": "Confirmando que se guardó",
+        "saved": "Guardado",
+        "failed": "No terminó",
+        "skipped": "No se ejecutó"
+      },
+      "openNow": ". Abrir ahora",
+      "truthOne": "La revisión de veracidad no pudo relacionar esta línea con lo que nos dijiste. Asegúrate de que sea cierta, o quítala, antes de enviar esto:",
+      "truthMany": "La revisión de veracidad no pudo relacionar estas líneas con lo que nos dijiste. Asegúrate de que cada una sea cierta, o quítala, antes de enviar esto:",
+      "needsCheck": "Algunas líneas necesitan tu revisión antes de terminar.",
+      "notLinked": "Esta vacante ya está marcada como {status} en Postulaciones, así que conserva el currículum que tiene. El nuevo está en tu Biblioteca.",
+      "statusHeardBack": "respondida",
+      "statusPast": "más avanzada que guardada",
+      "letterNotSaved": "La carta de presentación no se guardó. El currículum sí. Puedes escribir una carta a partir del currículum.",
+      "reviewThis": "Revisar esta",
+      "retrySave": "Reintentar el guardado",
+      "retryJob": "Reintentar esta vacante",
+      "used": "{count, plural, =1 {1 acción de IA usada} other {# acciones de IA usadas}} en este grupo hasta ahora.",
+      "checkAgain": "Revisar de nuevo",
+      "checkingAllowance": "Revisando tu cupo...",
+      "cost": "{count, plural, =1 {1 vacante = 1 acción de IA} other {# vacantes = # acciones de IA}} de tu cupo.",
+      "costUnlimited": "{count, plural, =1 {1 vacante = 1 acción de IA} other {# vacantes = # acciones de IA}}. Cada vacante recibe su propio currículum. Si un límite diario detiene una, esa no gasta nada y las demás quedan guardadas.",
+      "costNone": "Hoy no te quedan acciones de IA. Pídele más a t.ROY desde la barra de progreso, o vuelve después de la medianoche UTC. Tu selección se queda aquí.",
+      "costSome": "Hoy te quedan {left}, así que {left, plural, =1 {una vacante puede ejecutarse} other {# vacantes pueden ejecutarse}} ahora. Elige {left, plural, =1 {cuál} other {cuáles}} ejecutar primero. Las demás se quedan aquí para después.",
+      "costAll": "Hoy te quedan {left}.",
+      "runLeft": "Ejecutar {count, plural, =1 {la 1 vacante que queda} other {las # vacantes que quedan}}",
+      "tailorFor": "{count, plural, =1 {Adaptar para esta vacante} other {Adaptar para estas # vacantes}}",
+      "runOne": "Ejecutar una ahora",
+      "runMany": "Ejecutar {count} ahora",
+      "working": "Trabajando una vacante a la vez. Puedes quedarte en esta página.",
+      "encrypted": "Si se arma un currículum pero no se guarda, lo conservamos cifrado hasta por 7 días para que un reintento pueda guardarlo. Después se borra.",
+      "linked": "Cada currículum guardado se vincula con su vacante en Postulaciones, a menos que esa vacante ya esté marcada como postulada o más adelantada. Márcala como postulada después de enviarla.",
+      "draftNote": "Un currículum adaptado empieza como borrador. Usa Revisar y terminar en cada uno. Al terminarlo, su paquete se pone en cola para tu correo, una vez que tu correo esté confirmado. No se envía nada por correo antes de que lo termines.",
+      "nextJob": "Siguiente vacante: {title}"
+    },
+    "bullet": {
+      "oftenChip": {
+        "0": "en cada turno",
+        "1": "a diario",
+        "2": "varias veces por semana",
+        "3": "cada semana",
+        "4": "en temporada alta"
+      },
+      "improvedChip": {
+        "0": "menos errores",
+        "1": "más rápido",
+        "2": "más seguro",
+        "3": "se cumplió el horario",
+        "4": "capacité a otros",
+        "5": "menos desperdicio",
+        "6": "ahorré dinero"
+      },
+      "why": {
+        "did": "Los empleadores buscan lo que tú manejabas, no lo que decía la descripción del puesto. Tus propias palabras sencillas son la materia prima. No necesitan estar pulidas.",
+        "tools": "Nombrar el equipo o el sistema es la prueba más rápida de que de verdad hiciste el trabajo, y las herramientas son justo lo que busca el software de los empleadores.",
+        "often": "La frecuencia convierte una tarea en una medida. \"Operé la trituradora\" y \"operé la trituradora en cada turno\" son dos afirmaciones distintas, y solo una es específica.",
+        "quantity": "Un solo número real dice más que una página de descripción, y es lo que casi ningún currículum tiene. No necesita impresionar. Necesita ser cierto y tuyo.",
+        "improved": "Esta es la línea entre lo que te asignaron y lo que cambiaste. Es la pregunta más difícil de aquí y casi siempre la respuesta más valiosa."
+      },
+      "stage": {
+        "precontemplation": "Sin presión. Responde lo que te salga fácil y salta el resto. Con una sola respuesta ya hay con qué trabajar.",
+        "contemplation": "Responde lo que puedas, con tus propias palabras. Una sola respuesta basta para empezar, y puedes volver a las demás.",
+        "preparation": "Responde con tus propias palabras. Solo usamos lo que tú nos dices, y no se inventa nada.",
+        "action": "Mientras más específico seas aquí, más fuerte le llega esto a un empleador. Sobre todo los números."
+      },
+      "ph": {
+        "did": "p. ej., cargué camiones y llevé el control del inventario",
+        "tools": "p. ej., montacargas, escáner de radiofrecuencia, Excel",
+        "often": "p. ej., en cada turno, a diario, en temporada alta",
+        "quantity": "¿Cuántas personas, pedidos o cargas? Solo si lo sabes.",
+        "improved": "p. ej., menos errores, carga más rápida, el equipo cumplió el horario"
+      },
+      "noWrite": "Todavía no se pudo escribir eso. Agrega un poco más e inténtalo de nuevo.",
+      "wrong": "Algo salió mal. Inténtalo de nuevo.",
+      "dialogAria": "Hazlo más fuerte",
+      "title": "Hazlo más fuerte",
+      "close": "Cerrar",
+      "forRole": "Para tu puesto de {job}.",
+      "progress0": "Toca una respuesta de abajo o escribe la tuya.",
+      "progress1": "Con eso alcanza para escribir algo. Agrega más si lo quieres más afilado.",
+      "progress4": "Eso es mucho material. Esta línea va a quedar fuerte.",
+      "progressN": "{answered} de 5 respondidas. Es más de lo que da la mayoría.",
+      "q": {
+        "did": "¿Qué hacías realmente?",
+        "tools": "¿Qué herramientas, equipos o sistemas usabas?",
+        "often": "¿Con qué frecuencia?",
+        "quantity": "¿Cuántos?",
+        "improved": "¿Qué mejoró gracias a ti?"
+      },
+      "commonTools": "Comunes en este puesto. Toca si te aplica:",
+      "proofTitle": "Dos preguntas rápidas que fortalecen esta línea",
+      "proofNote": "Opcional. Toca una respuesta o escribe una. Di solo lo que sabes que es cierto. Salta lo que no sepas con seguridad.",
+      "countGroup": "¿Qué podrías contar aquí?",
+      "countNote": "¿Qué podrías contar aquí? Escribe un número solo si lo sabes.",
+      "countAria": "Cantidad de {prompt}",
+      "notSure": "No estoy seguro",
+      "leaveOut": "Está bien. Dejaremos el número fuera. Una línea verdadera sin número igual sirve.",
+      "attention": "Elige algo que contaste y escribe el número que sabes que es cierto.",
+      "yourBullet": "Tu línea más fuerte",
+      "stale": "Tus respuestas cambiaron después de escribir esto. Toca Reescribir, o corrige la línea tú mismo.",
+      "editNote": "Edítala para que suene como tú. Revisa cada número. Si alguno no es correcto, corrígelo.",
+      "writing": "Escribiendo...",
+      "rewrite": "Reescribir",
+      "write": "Escribir una línea fuerte",
+      "use": "Usar esta línea",
+      "saved": "Tus respuestas se guardan. Cierra cuando quieras y retoma donde te quedaste.",
+      "optional": "(opcional)",
+      "hide": "ocultar",
+      "whyThis": "¿por qué esto?"
+    },
+    "sections": {
+      "contact": {
+        "name": "Nombre completo",
+        "namePh": "Marcos D. Tillman",
+        "phone": "Teléfono",
+        "email": "Correo electrónico",
+        "emailPh": "tu@correo.com",
+        "city": "Ciudad",
+        "cityPh": "p. ej., Milwaukee",
+        "state": "Estado"
+      },
+      "summary": {
+        "placeholder": "De 2 a 3 frases sobre lo que aportas a este puesto. Enfócate en tu experiencia más fuerte y más relevante.",
+        "thinking": "Pensando...",
+        "help": "Ayúdame a escribir esto"
+      },
+      "exp": {
+        "addPosition": "+ Agregar puesto",
+        "position": "Puesto {number}",
+        "remove": "Quitar",
+        "jobTitle": "Cargo",
+        "jobTitlePh": "Operador de montacargas",
+        "company": "Empresa",
+        "companyPh": "Distribuidora Medio Oeste",
+        "start": "Fecha de inicio",
+        "end": "Fecha de fin",
+        "endPh": "Actualidad",
+        "whatYouDid": "Lo que hiciste (empieza con verbos de acción)",
+        "firstBullet": "Lo que hiciste y lo que resultó. Agrega un número solo si sabes que es cierto.",
+        "otherBullet": "Describe lo que lograste...",
+        "strengthen": "Fortalecer con ayuda",
+        "removeBullet": "Quitar línea",
+        "addBullet": "+ Agregar línea"
+      },
+      "edu": {
+        "credentialPh": "GED, certificado de soldadura, título técnico...",
+        "schoolPh": "Escuela o programa (opcional)",
+        "yearPh": "Año (opcional)",
+        "add": "+ Agregar estudios o certificación"
+      },
+      "tray": {
+        "title": "Líneas que no pudimos ordenar automáticamente",
+        "note": "Muévelas adonde pertenecen o bórralas. Estas se quedan fuera de tu currículum terminado hasta que las ordenes.",
+        "placeholder": "Edita o borra esta línea...",
+        "delete": "Borrar línea"
+      },
+      "skills": {
+        "placeholder": "Escribe una habilidad y presiona Enter (o sepáralas con comas)",
+        "add": "Agregar"
+      }
+    },
+    "pageFit": {
+      "error": "No se pudo revisar el ajuste de la página en este momento. Inténtalo de nuevo.",
+      "checking": "Revisando...",
+      "check": "Revisar el ajuste de la página",
+      "decide": "Tú decides qué quitar o acortar. No se quita nada por ti, y no se debe agregar nada solo para llenar espacio.",
+      "counted": "Se cuenta con el mismo diseño de página con el que se hacen tu PDF y tu archivo de Word."
+    },
+    "editor": {
+      "fineTune": "Ajústalo tú mismo",
+      "edit": "Editar",
+      "reviewPages": "Revisar las páginas para imprimir",
+      "preview": "Vista previa ({score}%)",
+      "startingPoint": "Punto de partida. Edítalo para que suene como tú.",
+      "useThis": "Usar esto",
+      "printPreview": "Vista previa del diseño de impresión",
+      "printPreviewNote": "Usa el diseño de página del PDF. Guarda el paquete para revisar el archivo exacto que se descarga. Word puede paginar distinto."
+    },
+    "page": {
+      "fallback": "No se pudo volver a dibujar la página. Este es tu texto actual.",
+      "laying": "Armando tu página..."
+    },
+    "workspace": {
+      "main": "Principal",
+      "factsCarry": "Tus datos pasan de una ruta a otra: los mismos trabajos, las mismas fechas. Solo cambia el objetivo.",
+      "recheckLine": "Necesitamos volver a revisar esta versión antes de poder terminarla.",
+      "postingRead": "Se leyó la oferta. Revísala abajo y edítala si falta algo, y luego adapta.",
+      "postingFail": "No se pudo leer ese enlace automáticamente. Mejor pega abajo la descripción del trabajo.",
+      "openFail": "No se pudo abrir este currículum. Tu trabajo guardado no ha cambiado. Intenta abrirlo de nuevo.",
+      "jobFail": "No se pudo leer la vacante elegida. Intenta importar desde The Forge.",
+      "generationFailed": "La generación falló",
+      "generateFail": "No se pudo generar el currículum. Intenta importar desde The Forge.",
+      "saveFirst": "Primero guarda tu currículum y luego descárgalo.",
+      "versionFail": "No se pudo preparar esta versión. Guarda tu trabajo e inténtalo de nuevo.",
+      "didntWork": "No funcionó. Inténtalo de nuevo en un momento.",
+      "thisJob": "esta vacante",
+      "tailorFor": "Adaptar para {title}",
+      "tailorForAt": "Adaptar para {title} en {company}",
+      "nothingRuns": "No se ejecuta nada hasta que presiones el botón.",
+      "tailorNow": "Adaptar ahora",
+      "notNow": "Ahora no",
+      "opening": "Abriendo tu trabajo guardado…",
+      "packageTitle": "Armando tu paquete de carrera",
+      "packageLabel": "Preparando tu currículum y tu carta de presentación",
+      "buildingFor": "Armando tu paquete para {job}...",
+      "buildingForAt": "Armando tu paquete para {job} en {company}...",
+      "packageBody": "Preparando tu currículum y tu carta de presentación para esta vacante, y luego comparando las palabras con tus datos de origen. Esto puede tardar un poco.",
+      "tailorTitle": "Adaptador de postulaciones",
+      "startManually": "Empezar a mano",
+      "notice": {
+        "errorHeading": "No se adaptó tu currículum.",
+        "lockedHeading": "La adaptación todavía no está abierta en tu cuenta.",
+        "errorBody": "No pudimos adaptar tu currículum en este momento. Inténtalo de nuevo."
+      },
+      "fromPath": "{action} desde el camino de la izquierda. {hint}",
+      "noResumeInLane": "Todavía no hay currículum en tu ruta {lane}.",
+      "starting": "Empezando...",
+      "startFromBase": "Empezarlo desde mi currículum base",
+      "aim": "Dirige tu currículum base a una vacante en particular. Usamos tu perfil de The Forge para adaptar tu currículum, tu carta de presentación y tu plan de divulgación a esa oferta exacta.",
+      "aim2": "Adapta una vacante aquí, o elige hasta 3 en el Tablero de empleos y adáptalas juntas. Cada vacante sigue teniendo su propio currículum y su propia acción de IA. Las vacantes guardadas te esperan en tus vacantes guardadas.",
+      "openingTitle": "Empieza con una vacante real",
+      "openingBody": "Busca una vacante en esta ruta y tráela aquí. Usaremos la oferta para preparar juntos tu currículum y tu carta de presentación. Para otra dirección profesional, cambia de ruta primero.",
+      "findJobLane": "Buscar una vacante en esta ruta",
+      "alreadyFound": "¿Ya encontraste la vacante? Escribe abajo sus datos. Abre abajo un currículum guardado cuando quieras seguir con un paquete que ya tienes.",
+      "myResumes": "Mis currículums",
+      "newResume": "+ Nuevo currículum",
+      "baseResume": "Currículum base",
+      "untitled": "Currículum sin título",
+      "deleteAsk": "¿Borrar este currículum?",
+      "deleting": "Borrando...",
+      "delete": "Borrar",
+      "cancel": "Cancelar",
+      "startingPoint": "tu punto de partida de The Forge",
+      "atCompany": "en {company}",
+      "deleteResume": "Borrar currículum",
+      "haveJob": "¿Ya tienes una oferta de trabajo?",
+      "jobPh": "p. ej., auxiliar de almacén, asistente de enfermería (CNA), operador de montacargas",
+      "whichCompany": "¿Qué empresa?",
+      "companyRequired": "(obligatorio para poder adaptar a un empleador en particular)",
+      "companyPh": "p. ej., Amazon, el hospital local, una empresa en particular",
+      "listingLink": "Enlace de la oferta de trabajo",
+      "optional": "(opcional)",
+      "linkPh": "Pega la dirección de Indeed, LinkedIn o cualquier tablero de empleos",
+      "reading": "Leyendo la oferta...",
+      "readPosting": "Leer la oferta desde este enlace",
+      "readNote": "Intentamos traer la descripción para poder adaptar a ella. Algunos sitios bloquean la lectura automática. Si pasa eso, solo pega el texto abajo.",
+      "pasteJd": "Pega la descripción del trabajo",
+      "pasteJdOptional": "(opcional, pero hace la adaptación más precisa)",
+      "jdPh": "Pega aquí las tareas y los requisitos de la oferta. Adaptamos tu currículum a lo que este empleador realmente pide, usando solo lo que es cierto sobre ti.",
+      "tailorBtn": "Adaptar mi currículum para esta vacante",
+      "needTitle": "Agrega el cargo y la empresa para adaptar tu currículum a una oferta en particular.",
+      "usesWithJd": "Usa tu currículum base y la descripción del trabajo que pegaste. Solo lo que es cierto sobre ti, dirigido a esta oferta.",
+      "usesNoJd": "Usa tu currículum base. Pega arriba la descripción del trabajo para un ajuste más preciso. Solo lo que es cierto sobre ti, dirigido a esta oferta.",
+      "rebuildBase": "Rearmar mi currículum base en The Forge",
+      "buildBaseFirst": "Primero arma tu currículum base en The Forge",
+      "blank": "O empieza aquí un currículum en blanco",
+      "resume": "Currículum",
+      "at": "en {company}",
+      "lane": "Ruta:",
+      "switchLane": "Cambiar de ruta",
+      "saveFailed": "No se guardó",
+      "locked": "Base bloqueada. Los cambios no se guardan. Desbloquéala en Mis currículums para cambiarla.",
+      "new": "+ Nuevo",
+      "checkBefore": "Revisa esto antes de enviar",
+      "truthSome": "La revisión de veracidad encontró algunas cosas que no pudimos relacionar con lo que nos dijiste. Busca cada una y asegúrate de que sea cierta antes de enviar esto:",
+      "truthOne": "La revisión de veracidad encontró algo que no pudimos relacionar con lo que nos dijiste. Búscalo y asegúrate de que sea cierto antes de enviar esto:",
+      "truthNoWords": "La revisión de veracidad encontró algo en esta versión que no pudo relacionar con lo que nos dijiste, pero no pudo señalar las palabras exactas. Lee cada línea antes de enviarla.",
+      "tailoredTitle": "Lo que adaptamos para esta vacante",
+      "tailoredNote": "Usa estos puntos en tu divulgación y en la preparación de entrevista. Son donde tu perfil y esta vacante se conectan.",
+      "tabResume": "Currículum",
+      "tabCover": "Carta de presentación",
+      "tabDisclosure": "Divulgación",
+      "coverFor": "Carta de presentación para {name}",
+      "copied": "¡Copiado!",
+      "copy": "Copiar",
+      "downloadDocx": "Descargar .docx",
+      "makeYours": "Hazla tuya antes de enviarla.",
+      "makeYoursBody": "Descarga el .docx y personalízalo. Confirma el nombre de la persona que contrata, agrega detalles específicos de la empresa y ajusta el comienzo si quieres. Una carta de presentación suele ir en el cuerpo del correo, así que déjala editable. Guarda un PDF más tarde, cuando diga exactamente lo que quieres.",
+      "disclosurePlanner": "Planificador de divulgación",
+      "noRecord": "No se detectaron antecedentes penales en tu sesión de The Forge. Si necesitas ayuda para preparar una estrategia de divulgación, el Planificador de divulgación completo puede ayudarte.",
+      "openPlanner": "Abrir el Planificador de divulgación",
+      "readiness": "Preparación para la divulgación",
+      "startingScript": "Guion para empezar",
+      "coaching": "Esto es orientación profesional, no asesoría legal.",
+      "legalHelp": "Para orientación legal, comunícate con un abogado de reinserción o con asistencia legal gratuita en tu zona.",
+      "openPlannerFor": "Abrir el Planificador de divulgación para {company}",
+      "thisRole": "este puesto",
+      "saving": "Guardando...",
+      "saved": "Guardado",
+      "save": "Guardar",
+      "savePdf": "Guardar como PDF",
+      "versionFinished": "Versión {number}, terminada. Las descargas usan esta versión exacta.",
+      "checkAgain": "Revisarlo de nuevo",
+      "draftNote": "Borrador: revísalo antes de enviarlo.",
+      "actionsHint": ".docx = editable en Word. PDF = conserva el formato tal cual. Guarda los dos.",
+      "applied": "Postulado, buen trabajo",
+      "nextStep": "Tu siguiente paso: enviar esta postulación",
+      "youApplied": "Postulaste a {company}. Sigue con ese impulso.",
+      "thisJobShort": "esta vacante",
+      "reviewPages": "Revisa tus páginas guardadas y luego usa abajo el enlace del empleador. Te recomendamos repasar cada línea con t.ROY; puedes volver a pulir tu Borrador maestro a medida que aprendas más.",
+      "savingPackage": "Guardando tu paquete…",
+      "savePackage": "Guardar paquete y revisar PDF",
+      "emailNotPrepared": "No se pudo preparar el correo.",
+      "emailFilesRemain": "No se pudo preparar el correo. Tus archivos guardados siguen disponibles.",
+      "preparingEmail": "Preparando tu correo…",
+      "emailPackage": "Guardar y enviar por correo este paquete de la vacante",
+      "emailNote": "El correo incluye este currículum guardado y la carta de presentación, si la hay, con los nombres de archivo y los siguientes pasos para esta vacante. Las notas privadas de divulgación se quedan en The Refinery. Hasta tres correos de paquete al día; las descargas siguen disponibles.",
+      "similarRole": "Para un puesto muy parecido, reutiliza las palabras que sirvan y compáralas con la oferta nueva. Para un puesto distinto, primero busca la vacante y adapta desde la base de esta ruta. Una nueva dirección profesional merece su propia ruta.",
+      "findAnother": "Buscar otra vacante en esta ruta",
+      "buildMaster": "Armar mi Borrador maestro",
+      "nextTailor": "Siguiente: adapta tu currículum para {title} →",
+      "seeAll": "Ver todas tus vacantes guardadas →"
+    }
+  },
+  "lineReview": {
+    "kicker": "t.ROY // armémoslo juntos",
+    "title": "Haz tuya cada línea",
+    "intro": "Te recomendamos este paso. Recorre tu currículum con t.ROY, agrega los detalles que solo tú sabes y practica cómo explicar tu trabajo. Puedes volver cuando quieras.",
+    "start": "Empezar la revisión guiada de líneas",
+    "lineOf": "Línea {current} de {total}",
+    "label": "¿Qué significa esto con tus propias palabras? ¿Qué ejemplo podrías dar?",
+    "workWith": "Trabaja esto con t.ROY",
+    "previous": "Anterior",
+    "next": "Línea siguiente",
+    "note": "Tu explicación pasa al chat cuando decides enviarla. Pasar a la línea siguiente no marca ningún dato como verificado ni cambia tu currículum.",
+    "saveMaster": "Guarda un nuevo detalle de trabajo en tu Borrador maestro"
+  },
+  "savedPreview": {
+    "title": "Tu PDF guardado",
+    "body": "Aquí ves las páginas guardadas de tu currículum y la marca de borrador. Las preguntas privadas de orientación se quedan en tu espacio de trabajo.",
+    "failed": "No se pudo cargar la vista previa del PDF. Guarda el paquete otra vez para intentarlo de nuevo.",
+    "open": "Abrir el PDF para imprimir o descargar",
+    "iframeTitle": "PDF exacto del currículum guardado",
+    "preparing": "Preparando el PDF guardado…"
+  },
+  "creativePage": {
+    "title": "Trabajo creativo",
+    "laneLabel": "Ruta creativa",
+    "newLane": "Nueva ruta creativa",
+    "loading": "Cargando..."
+  },
+  "preview": {
+    "kicker": "Vista previa",
+    "whatItDoes": "Qué hace",
+    "example": "Ejemplo de resultado",
+    "sample": "Muestra",
+    "taste": "Pruébalo un poco",
+    "unlocked": "Buenas noticias. Esta herramienta ya está desbloqueada para ti. Ábrela cuando estés listo.",
+    "open": "Abrir {title}",
+    "back": "Volver al panel",
+    "howTitle": "Cómo desbloquearla",
+    "fallbackReason": "Completa tu perfil y adapta un currículum a un trabajo que quieras. Eso desbloquea esta y las demás herramientas.",
+    "fallbackUnlock": "Adaptar mi currículum"
+  }
+}

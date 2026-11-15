@@ -11,6 +11,8 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import {
   BIO_LENGTHS,
   BIO_LIMITS,
@@ -23,7 +25,7 @@ import {
 import { BIO_PRONOUNS, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
 import type { TitleMode } from "@crucible/core/src/practiceRecordShared";
 import { getCreativeStatus } from "@crucible/core/src/creativeChecks";
-import { BIO_HOW, PRONOUN_COPY, sendJson } from "@/lib/creative";
+import { sendJson } from "@/lib/creative";
 import type { CreativeCtx } from "./CreativeLaneView";
 import { OpenItems } from "./OpenItems";
 import { CreativePage } from "./CreativePage";
@@ -47,6 +49,9 @@ export function BioPanel({
   onTitleMode: (entryId: string, mode: TitleMode) => Promise<boolean>;
   onSaved: () => void;
 }) {
+  const t = useTranslations("refineryResume.creative.bio");
+  const ts = useTranslations("refineryResume.creative.shared");
+  const sx = useServerText();
   const [bio, setBio] = useState<BioContent>(ctx.bio);
   const [len, setLen] = useState<BioLength>("short");
   const [busy, setBusy] = useState(false);
@@ -68,21 +73,21 @@ export function BioPanel({
 
   return (
     <div className="space-y-4" data-testid="bio-panel">
-      <p className="text-sm text-t-phos-dim">{BIO_HOW}</p>
+      <p className="text-sm text-t-phos-dim">{ts("bioHow")}</p>
 
       {!s.displayName && (
         <p className="border border-t-amber/60 bg-t-panel p-3 text-sm text-t-white">
-          Add your name on the Artist resume tab first. Your bio uses it.
+          {t("addName")}
         </p>
       )}
 
       <fieldset className="border border-t-line bg-t-panel p-3">
-        <legend className="px-1 text-sm text-t-white">How should your bio refer to you?</legend>
+        <legend className="px-1 text-sm text-t-white">{t("refer")}</legend>
         <div className="flex flex-wrap gap-2">
           {BIO_PRONOUNS.map((p) => (
             <label key={p} className={`min-h-touch flex items-center gap-2 border px-3 text-sm cursor-pointer ${(s.bioPronoun ?? "name") === p ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos-dim"}`}>
               <input type="radio" name="bio-pronoun" className="sr-only" checked={(s.bioPronoun ?? "name") === p} onChange={() => onSettings({ bioPronoun: p })} />
-              {PRONOUN_COPY[p]}
+              {ts(`pronoun.${p}`)}
             </label>
           ))}
         </div>
@@ -90,7 +95,7 @@ export function BioPanel({
 
       <FacilityChoices entries={ctx.entries} settings={s} onTitleMode={onTitleMode} only="pages" />
 
-      <div className="flex gap-1" role="tablist" aria-label="Bio length">
+      <div className="flex gap-1" role="tablist" aria-label={t("lengthAria")}>
         {BIO_LENGTHS.map((l) => (
           <button
             key={l}
@@ -101,7 +106,7 @@ export function BioPanel({
             onClick={() => setLen(l)}
             className={`t-focus min-h-touch flex-1 border px-2 text-sm ${len === l ? "border-t-amber text-t-amber-bright font-semibold" : "border-t-line text-t-phos-dim"}`}
           >
-            {BIO_LIMITS[l].label}
+            {t(`length.${l}`)}
           </button>
         ))}
       </div>
@@ -109,7 +114,7 @@ export function BioPanel({
       <div className="border border-t-line bg-t-panel p-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className={`text-sm ${counts.over ? "text-t-red" : "text-t-phos"}`} data-testid="bio-counts" aria-live="polite">
-            {counts.words} of {lim.maxWords} words{lim.maxChars ? `, ${counts.chars} of ${lim.maxChars} characters` : `, ${counts.chars} characters`}
+            {t("counts", { words: counts.words, max: lim.maxWords })}{lim.maxChars ? t("countsChars", { chars: counts.chars, max: lim.maxChars }) : t("countsCharsOnly", { chars: counts.chars })}
           </p>
           <button
             type="button"
@@ -126,14 +131,14 @@ export function BioPanel({
                 setList([...keep, ...r.data.sentences.filter((x) => !have.has(x.text))]);
                 setMsg(
                   r.data.sentences.length
-                    ? `${r.data.sentences.length} sentences built from your record. Keep or cut each one.`
-                    : "Not enough in your record to build from yet. Add a few entries first."
+                    ? t("built", { count: r.data.sentences.length })
+                    : t("notEnough")
                 );
-              } else setMsg(r.data.message || "That didn't work. Try again in a moment.");
+              } else setMsg(r.data.message || t("didntWork"));
             }}
             className="t-focus min-h-touch px-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright disabled:opacity-50"
           >
-            {busy ? "Building..." : "Build a draft from my record"}
+            {busy ? t("building") : t("buildDraft")}
           </button>
         </div>
         <p aria-live="polite" className="text-sm text-t-phos" data-testid="bio-msg">{msg}</p>
@@ -149,7 +154,7 @@ export function BioPanel({
             >
               {editing === x.id ? (
                 <div className="space-y-2">
-                  <textarea className={inputCls} rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} aria-label="Your sentence" data-testid="bio-edit-text" />
+                  <textarea className={inputCls} rows={2} value={editText} onChange={(e) => setEditText(e.target.value)} aria-label={t("sentenceAria")} data-testid="bio-edit-text" />
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -162,10 +167,10 @@ export function BioPanel({
                         setEditing(null);
                       }}
                     >
-                      Use my words
+                      {t("useMine")}
                     </button>
                     <button type="button" className="t-focus min-h-touch px-3 text-sm text-t-phos-dim" onClick={() => setEditing(null)}>
-                      Cancel
+                      {ts("cancel")}
                     </button>
                   </div>
                 </div>
@@ -173,24 +178,24 @@ export function BioPanel({
                 <>
                   <p className="text-sm text-t-white">{x.text}</p>
                   <p className="text-xs text-t-phos-dim">
-                    {x.origin === "person_written" ? "Your words." : x.approved ? "Built from your record. You kept it." : "Built from your record. Not in your bio yet."}
+                    {x.origin === "person_written" ? t("originPerson") : x.approved ? t("originKept") : t("originNot")}
                   </p>
                   {flagged.has(x.id) && (
                     <p className="text-xs text-t-amber-bright" data-testid="bio-sentence-issue">
-                      {flagged.get(x.id)}
+                      {sx(flagged.get(x.id) ?? "")}
                     </p>
                   )}
                   <div className="mt-1 flex flex-wrap gap-3 text-sm">
                     {!x.approved && (
                       <button type="button" data-testid="bio-keep" className="t-focus min-h-touch text-t-amber-bright underline" onClick={() => setList(list.map((y) => (y.id === x.id ? { ...y, approved: true } : y)))}>
-                        Keep
+                        {t("keep")}
                       </button>
                     )}
                     <button type="button" data-testid="bio-cut" className="t-focus min-h-touch text-t-phos-dim underline" onClick={() => setList(list.filter((y) => y.id !== x.id))}>
-                      Cut
+                      {t("cut")}
                     </button>
                     <button type="button" data-testid="bio-edit" className="t-focus min-h-touch text-t-steel underline" onClick={() => { setEditing(x.id); setEditText(x.text); }}>
-                      Say it my way
+                      {t("sayMyWay")}
                     </button>
                   </div>
                 </>
@@ -200,7 +205,7 @@ export function BioPanel({
         </ol>
 
         <label className="block text-sm text-t-white">
-          Add a sentence in your own words
+          {t("addOwn")}
           <textarea className={`${inputCls} mt-1`} rows={2} value={own} data-testid="bio-own" onChange={(e) => setOwn(e.target.value)} />
         </label>
         <button
@@ -213,7 +218,7 @@ export function BioPanel({
             setOwn("");
           }}
         >
-          Add it
+          {t("add")}
         </button>
       </div>
 
@@ -223,15 +228,15 @@ export function BioPanel({
           data-testid="bio-save"
           onClick={async () => {
             const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", { type: "artist_bio", bio, rev: ctx.bioRev });
-            setMsg(r.ok ? "Bio saved." : r.data.message || "That didn't save. Try again.");
+            setMsg(r.ok ? t("saved") : r.data.message || ts("didntSave"));
             if (r.ok) onSaved();
           }}
           className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright"
         >
-          Save bio
+          {t("save")}
         </button>
         <a href={`/api/creative/${laneId}/export?doc=bio&format=pdf`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">PDF</a>
-        <a href={`/api/creative/${laneId}/export?doc=bio&format=docx`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">Word</a>
+        <a href={`/api/creative/${laneId}/export?doc=bio&format=docx`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">{ts("word")}</a>
       </div>
 
       <OpenItems status={live} doc="bio" testId="bio-open-items" />

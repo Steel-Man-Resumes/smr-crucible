@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 const PAGE_PX = 816; // 8.5 in at 96 dpi
 
@@ -35,6 +36,7 @@ export function ResumePage({
   /** Cover letters only: the resume text, for the name and contact line on top. */
   headerText?: string;
 }) {
+  const t = useTranslations("refineryResume.resume.page");
   const [screen, setScreen] = useState<Screen | null>(null);
   // The key of the request that last failed. The page shows the plain text whenever
   // the latest request for the CURRENT text failed, so what is on screen always
@@ -108,7 +110,7 @@ export function ResumePage({
     // line saying so. Never leave an older page on screen.
     return (
       <div data-testid="resume-page-fallback">
-        <p className="mb-2 text-sm text-t-white/80">Couldn&apos;t redraw the page. This is your current text.</p>
+        <p className="mb-2 text-sm text-t-white/80">{t("fallback")}</p>
         <div className="border border-t-steel/30 bg-t-panel p-4 text-sm text-t-white whitespace-pre-wrap">{text}</div>
       </div>
     );
@@ -129,7 +131,7 @@ export function ResumePage({
           />
         </div>
       ) : (
-        <p className="text-sm text-t-white/70">Laying out your page...</p>
+        <p className="text-sm text-t-white/70">{t("laying")}</p>
       )}
     </div>
   );

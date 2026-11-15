@@ -1,0 +1,1242 @@
+{
+  "methodology": {
+    "title": "Cómo funciona The Forge",
+    "subtitle": "La idea detrás de las herramientas que estás usando.",
+    "observerNote": "Estás viendo una versión resumida. La guía completa de metodología es para organizaciones aliadas.",
+    "tryForge": "probar The Forge",
+    "enterPartnerCode": "poner código de organización aliada",
+    "useTitle": "Qué pasa cuando usas The Forge",
+    "gettingStarted": "Para empezar",
+    "noPrep": "No necesitas prepararte.",
+    "wallOpen": "The Forge no pide iniciar sesión, ni papeles, ni un currículum anterior.",
+    "wallUp": "The Forge pide iniciar sesión una vez, gratis. No pide papeles ni un currículum anterior.",
+    "justStart": "Solo empieza a contestar las preguntas con sinceridad. t.ROY te acompaña en cada paso.",
+    "process": "El proceso",
+    "processBody": "Compartes tu currículum (o armas uno), nos cuentas lo que te importa y describes lo que se te atraviesa. t.ROY está en cada página si necesitas ayuda.",
+    "whatYouGet": "Lo que recibes",
+    "whatYouGetBody": "Un texto personal sobre tus fortalezas, habilidades que encajan con trabajos reales y recursos para tu situación. Puedes descargarlo o seguir trabajando en The Refinery.",
+    "scienceTitle": "La ciencia que lo respalda",
+    "scienceNote": "Cada función se basa en investigación real. Abre cualquier sección para saber más.",
+    "ws1": {
+      "title": "Bases de las ciencias de la conducta",
+      "blurb": "Cómo poner nombre a lo que sientes y ganar confianza en ti mismo produce cambios reales",
+      "summary": "Poner nombre a una emoción reduce hasta un 50% la reacción de la amígdala (Lieberman et al., 2007). La confianza en uno mismo se construye con experiencias de logro, no con ánimo (Bandura, 1977). La disposición al cambio sigue etapas predecibles (Prochaska y DiClemente, 1983)."
+    },
+    "ws2": {
+      "title": "Identidad narrativa y salida del delito",
+      "blurb": "Por qué contar tu historia de otra manera cambia los resultados",
+      "summary": "Las personas que construyen una historia de redención (de lo malo a lo bueno) muestran más bienestar y más deseo de aportar a otros (McAdams, 2013). Dejar el delito se relaciona con construir una identidad que aporta (Maruna, 2001). La autonomía es una necesidad psicológica básica (Deci y Ryan, 2000)."
+    },
+    "rulesTitle": "Cómo t.ROY está hecho para ayudarte",
+    "rulesNote": "t.ROY sigue reglas estrictas para respetar tu tiempo, tu autonomía y tu privacidad.",
+    "rules": {
+      "r1": {
+        "name": "Invitar a poner nombre a lo vivido y a razonar las causas",
+        "clientFacing": "t.ROY te ayuda a encontrar las palabras para lo que estás viviendo."
+      },
+      "r2": {
+        "name": "Ofrecer opciones, nunca imponer",
+        "clientFacing": "Tú siempre decides. t.ROY te muestra opciones y nunca te dice qué hacer."
+      },
+      "r3": {
+        "name": "Reflejar y reconocer",
+        "clientFacing": "t.ROY escucha lo que dices y te lo devuelve con claridad."
+      },
+      "r4": {
+        "name": "Ir al ritmo de cada persona",
+        "clientFacing": "t.ROY te encuentra donde estás. Sin presión y sin prisa."
+      },
+      "r5": {
+        "name": "Explicarse",
+        "clientFacing": "t.ROY siempre te dice por qué te sugiere algo."
+      },
+      "r6": {
+        "name": "Dar apoyo y luego retirarlo poco a poco",
+        "clientFacing": "Más ayuda al empezar y menos a medida que te sientes cómodo."
+      },
+      "r7": {
+        "name": "Elogiar solo el proceso",
+        "clientFacing": "t.ROY reconoce lo que haces, no etiquetas sobre quién eres."
+      },
+      "r8": {
+        "name": "Respeto cultural",
+        "clientFacing": "Sin suposiciones sobre tu origen. Lenguaje sencillo. Siempre."
+      },
+      "r9": {
+        "name": "Saber cuándo conectar con personas",
+        "clientFacing": "Si necesitas más de lo que una herramienta puede dar, t.ROY te conecta con personas reales."
+      },
+      "r10": {
+        "name": "Nunca repetir datos personales en las respuestas",
+        "clientFacing": "t.ROY nunca te repite tus datos personales en el chat."
+      }
+    }
+  },
+  "disclosure": {
+    "title": "Planea qué decir",
+    "applicationLoadError": "No se pudo cargar este trabajo guardado. Revisa tus solicitudes antes de continuar.",
+    "accountLoading": "Tu cuenta todavía está cargando.",
+    "wording": {
+      "failedApi": "La redacción con IA no llegó. Tu plan está armado con tus respuestas y está completo sin ella.",
+      "failedConnection": "Se cortó la conexión antes de que llegara la redacción. Tu plan está armado con tus respuestas. Vuelve a intentar la redacción."
+    },
+    "jobFilter": {
+      "loadFailed": "No se pudieron cargar tus opciones de búsqueda de trabajo.",
+      "saveFailed": "Tus opciones de búsqueda de trabajo no se guardaron.",
+      "added": "Se agregó a tus filtros de búsqueda de trabajo. Puedes cambiarlos en la página Buscar trabajo.",
+      "failed": "{reason} Inténtalo de nuevo.",
+      "defaultReason": "No se guardó."
+    },
+    "copy": {
+      "done": "Copiado. Pégalo en un lugar privado.",
+      "failed": "No se pudo copiar aquí. Usa Descargar."
+    },
+    "consent": {
+      "yesNotSaved": "Tu sí no se guardó, así que tus respuestas sobre tus antecedentes penales siguen lejos de la IA. Inténtalo de nuevo.",
+      "notSaved": "No se guardó. Inténtalo de nuevo.",
+      "title": "Tus respuestas sobre antecedentes penales y la IA",
+      "p1": "Las preguntas sobre antecedentes penales piden saber en qué situaciones sale el tema, qué tipo de antecedentes penales tienes, hace cuánto tiempo, si estás bajo supervisión y tus propias palabras. Puedes saltarte cualquiera. Este plan nunca te pregunta qué pasó.",
+      "p2": "Con tu sí, esas respuestas pueden ir a un servicio de IA (el principal, o uno de respaldo si el principal no funciona) para que te vuelva a leer tu plan, y tus propias palabras sobre tus antecedentes penales se usan en la práctica con t.ROY. La IA nunca reescribe tus líneas sobre tus antecedentes penales. Sin tu sí, ninguna respuesta sobre tus antecedentes penales va a ninguna IA.",
+      "p3": "Tu sí se guarda en tu cuenta con la fecha, y puedes retirarlo aquí cuando quieras.",
+      "p4": "Tus respuestas y tus palabras sobre tus antecedentes penales nunca se guardan: ni en tu plan, ni en tu Biblioteca, ni con una solicitud de trabajo. Cópialas o descárgalas antes de salir de la página.",
+      "yes": "Sí, un servicio de IA puede usarlas",
+      "no": "No, mantén mis respuestas sobre antecedentes penales lejos de la IA"
+    },
+    "beforeRecord": {
+      "title": "Antes de las preguntas sobre antecedentes penales",
+      "body": "Tus respuestas agregaron a tu plan la conversación sobre tus antecedentes penales. Primero, una pregunta."
+    },
+    "done": {
+      "title": "Eso es todo lo que hay en tu camino",
+      "answered": "{count} contestadas",
+      "skipped": ", {count} saltadas",
+      "notSure": ", {count} con \"no estoy seguro\"",
+      "build": "Armar mi plan",
+      "changeHurdles": "Cambiar obstáculos"
+    },
+    "pick": {
+      "intro": "Ponle nombre a lo que se te atraviesa, trabájalo una pregunta a la vez y sal con un plan: lo que sabes, lo que sigue abierto, qué hacer ahora, quién puede ayudar y lo que tú decides contarle a un empleador.",
+      "savedPlan": "Tienes un plan guardado. ¿Quieres seguir desde sus respuestas? Las respuestas sobre antecedentes penales nunca se guardan, así que esas preguntas se harán otra vez.",
+      "resume": "Seguir donde lo dejé",
+      "consentYes": "Dijiste que sí: tus respuestas sobre antecedentes penales pueden ir a un servicio de IA.",
+      "consentNo": "Tus respuestas sobre antecedentes penales se quedan lejos de toda IA.",
+      "changeThis": "Cambiar esto",
+      "targetJob": "Trabajo que buscas",
+      "optional": "(opcional)",
+      "targetJobExample": "p. ej., {job}",
+      "targetJobDefault": "p. ej., Auxiliar de almacén",
+      "employer": "Empleador: {company}",
+      "startWith": "Empezar con {hurdle}",
+      "pickOne": "Elige al menos uno para empezar",
+      "answerAiFirst": "Primero contesta la pregunta sobre la IA de arriba. Cualquier respuesta está bien."
+    },
+    "strengths": {
+      "title": "Fortalezas con las que empezar",
+      "note": "De tu trabajo en The Forge, si tienes. Edítalas o pide sugerencias. No se agrega nada hasta que digas que sí.",
+      "itemAria": "Fortaleza {number}",
+      "removeAria": "Quitar esta fortaleza",
+      "lookAgain": "Buscar otra vez",
+      "suggest": "Sugerir fortalezas a partir de mi historial",
+      "looking": "Revisando tu historial...",
+      "none": "No salieron fortalezas nuevas. Agrega una tú: algo que hiciste y que te gustaría que supiera un jefe.",
+      "loadError": "Ahora no se pudieron cargar las sugerencias. Todavía puedes agregar fortalezas tú.",
+      "proposalQuestion": "¿Esto describe algo que hiciste?",
+      "fromSource": " (de tu {source})",
+      "yesMe": "Sí, soy yo",
+      "notThis": "Esta no",
+      "add": "+ Agregar una fortaleza"
+    },
+    "toast": {
+      "title": "Plan guardado",
+      "body": "Está en tu Biblioteca"
+    }
+  },
+  "coach": {
+    "title": "Entrenador de confianza",
+    "backToPlan": "Volver al plan",
+    "voiceUnsupported": "La entrada por voz necesita Chrome o Edge.",
+    "fallbackReply": "Cuéntame un poco más sobre eso.",
+    "errorReply": "Tuve problemas para responder. Intentemos de nuevo.",
+    "personas": {
+      "friend": {
+        "label": "Amigo que te apoya",
+        "blurb": "Un primer intento seguro con alguien que está de tu lado."
+      },
+      "family": {
+        "label": "Familiar",
+        "blurb": "Practica cómo contárselo a alguien cercano."
+      },
+      "mentor": {
+        "label": "Mentor",
+        "blurb": "Alguien que cree en ti y te orienta con honestidad."
+      },
+      "hiring_warm": {
+        "label": "Gerente de contratación (amable)",
+        "blurb": "Un gerente que contrata a personas con antecedentes penales y quiere que te vaya bien."
+      },
+      "hiring_skeptical": {
+        "label": "Gerente de contratación (escéptico)",
+        "blurb": "Un ambiente más difícil, para que el de verdad se sienta más fácil."
+      },
+      "coworker": {
+        "label": "Compañero de trabajo nuevo",
+        "blurb": "Una conversación informal del primer día."
+      },
+      "teacher": {
+        "label": "Maestro de tu hijo o cuidador infantil",
+        "blurb": "Hablar con alguien que cuida a tu hijo."
+      },
+      "landlord": {
+        "label": "Arrendador",
+        "blurb": "Practica para una conversación sobre alquilar."
+      }
+    },
+    "gentleness": {
+      "gentle": "Suave",
+      "balanced": "Equilibrado",
+      "direct": "Directo"
+    },
+    "setup": {
+      "whoTitle": "¿Con quién quieres practicar?",
+      "whoNote": "Elige a quien te parezca bien para empezar. Puedes cambiarlo y volver a practicar cuando quieras.",
+      "pushTitle": "¿Qué tanto debe presionar?",
+      "pushNote": "Empieza suave si quieres. Puedes subirlo cuando estés listo.",
+      "planTitle": "Estás practicando el plan que acabas de hacer",
+      "planNote": "Dilo a tu manera. No tiene que coincidir palabra por palabra.",
+      "askTitle": "¿Esta persona pregunta sobre eso?",
+      "askNote": "Practica las dos. Algunas personas preguntan, otras nunca, y tú igual decides.",
+      "theyAsk": "Preguntan",
+      "theyNeverAsk": "Nunca preguntan",
+      "start": "Empezar a practicar"
+    },
+    "practice": {
+      "with": "Practicando con: {persona}",
+      "saving": ". Se está guardando esta práctica.",
+      "notSaving": ". No se está guardando.",
+      "changeSetup": "Cambiar configuración",
+      "pivot": "Vuelve a tus fortalezas:",
+      "preparing": "Preparando una respuesta a lo que dijiste",
+      "stopRecording": "Dejar de grabar",
+      "speak": "Di tu respuesta en voz alta",
+      "listening": "Escuchando...",
+      "placeholder": "Dilo con tus propias palabras...",
+      "send": "Enviar",
+      "finishing": "Armando tus conclusiones...",
+      "done": "Terminé",
+      "savingNote": "Se guarda esta práctica, cifrada y privada en tu cuenta.",
+      "notSavingNote": "Esta práctica no se está guardando."
+    },
+    "safety": "Esto no es una entrevista de trabajo. Es un espacio privado de práctica para hablar de cosas difíciles.",
+    "save": {
+      "title": "¿Guardar esta práctica?",
+      "note": "Por defecto, aquí no se guarda nada. Si activas el guardado, las palabras de esta práctica se guardan cifradas y privadas en tu cuenta, para que puedas volver a leerlas. Puedes borrar las prácticas guardadas cuando quieras en Configuración. Solo se guarda el texto. El audio nunca se guarda.",
+      "thisLabel": "Guardar esta conversación de práctica",
+      "thisNote": "Se guarda solo esta vez. Después, el guardado automático sigue apagado.",
+      "alwaysLabel": "Guardar siempre mis conversaciones de práctica",
+      "alwaysNote": "El guardado sigue activo hasta que lo apagues aquí o en Configuración."
+    },
+    "takeaways": {
+      "title": "Tus conclusiones",
+      "wentWell": "Lo que salió bien",
+      "tryNext": "Algo para probar la próxima vez",
+      "saved": "Se guardaron con esta práctica, para que sigas donde lo dejaste.",
+      "notSaved": "Estas conclusiones se muestran solo para ti ahora. Activa el guardado la próxima vez para conservarlas.",
+      "again": "Practicar otra vez"
+    },
+    "history": {
+      "title": "Tus prácticas guardadas",
+      "note": "Aquí solo aparecen las prácticas que elegiste guardar. Cada una está cifrada y es privada en tu cuenta. Borra las prácticas guardadas cuando quieras en Configuración.",
+      "defaultPersona": "una persona de práctica",
+      "practiceWith": "Práctica con {persona}",
+      "hide": "Ocultar",
+      "read": "Leer",
+      "nextTime": "La próxima vez:"
+    },
+    "opener": {
+      "friend": "Hola, soy yo nada más. Tómate tu tiempo. ¿Qué tienes en mente?",
+      "family": "Me alegra que estemos hablando. Cuando estés listo, cuéntame lo que querías compartir.",
+      "mentor": "Qué bueno verte. Cuéntame qué quieres trabajar hoy.",
+      "hiringWarmJob": "Gracias por venir. Veo que te interesa el puesto de {job}. Cuéntame un poco de ti.",
+      "hiringWarm": "Gracias por venir. Cuéntame un poco de ti y por qué te interesa este puesto.",
+      "hiringSkepticalJob": "Siéntate. Entonces, el puesto de {job}. ¿Por qué debería considerarte?",
+      "hiringSkeptical": "Siéntate. Dime por qué debería considerarte para este puesto.",
+      "coworker": "¡Hola, bienvenido! Estoy en tu equipo. ¿Cómo va tu primer día?",
+      "teacher": "Gracias por venir. Siempre me gusta conocer a las familias. ¿De qué querías hablar?",
+      "landlord": "Gracias por tu interés en la unidad. Cuéntame un poco de ti y de tu situación.",
+      "default": "Cuando estés listo, empieza."
+    }
+  },
+  "gate": {
+    "title": "{tool} se desbloquea después de tu currículum",
+    "needsProfile": "Primero, termina tu perfil en The Forge. Luego adapta un currículum a un trabajo específico. Eso desbloquea esto y el resto de las herramientas.",
+    "needsResume": "{tool} se arma alrededor de un trabajo específico. Primero adapta un currículum al trabajo que buscas y esto se desbloquea de inmediato. Puedes pegar la oferta de trabajo. No necesitas hacer una búsqueda.",
+    "finishForge": "Terminar en The Forge",
+    "tailor": "Adaptar mi currículum",
+    "preview": "Ver una vista previa",
+    "backToDashboard": "Volver al panel"
+  },
+  "interview": {
+    "toolName": "Práctica de entrevistas",
+    "types": {
+      "general": {
+        "label": "Entrevista general",
+        "description": "Preguntas comunes para cualquier puesto. Un buen punto de partida."
+      },
+      "behavioral": {
+        "label": "Basada en tu experiencia (STAR)",
+        "description": "\"Cuéntame de una ocasión en la que...\" Practica con situaciones reales."
+      },
+      "industry": {
+        "label": "De tu sector",
+        "description": "Preguntas hechas para el campo al que apuntas."
+      },
+      "disclosure": {
+        "label": "Práctica sobre tus antecedentes penales",
+        "description": "Practica cómo hablar de tus antecedentes penales con un entrevistador."
+      }
+    },
+    "struggle": {
+      "owning_the_gap": "hacer tuya tu historia",
+      "specifics": "dar ejemplos concretos",
+      "staying_calm": "mantener la calma y la firmeza",
+      "closing": "cerrar bien la entrevista",
+      "confidence": "hablar con confianza"
+    },
+    "opening": {
+      "disclosure": "Gracias por venir hoy. Agradecemos tu interés en este puesto. ¿Por qué no empiezas contándome un poco de ti?",
+      "behavioral": "¡Bienvenido! Voy a hacerte unas preguntas sobre tu experiencia anterior. Tómate tu tiempo con cada respuesta. Empecemos. Cuéntame de ti y qué te trajo aquí hoy.",
+      "general": "Hola, gracias por tomarte el tiempo de entrevistarte con nosotros hoy. Empecemos. ¿Puedes contarme un poco de ti y por qué te interesa este puesto?"
+    },
+    "errors": {
+      "savedJobLoad": "No se pudo cargar este trabajo guardado. Elige un trabajo otra vez antes de empezar.",
+      "accountLoading": "Tu cuenta todavía está cargando. Inténtalo de nuevo en un momento.",
+      "voiceAccount": "Tu informe está aquí, pero no se pudo confirmar la cuenta para guardarlo.",
+      "feedbackFailed": "No se pudieron preparar tus comentarios. Tus respuestas siguen aquí. Vuelve a intentar con Terminar y recibir comentarios.",
+      "connectionDropped": "Se cortó la conexión. Tus respuestas siguen aquí. Vuelve a intentar con Terminar y recibir comentarios.",
+      "troubleReply": "Tuve problemas con esa respuesta. Intentemos de nuevo."
+    },
+    "setup": {
+      "intro": "La práctica da confianza. Elige el tipo de entrevista y simularemos una conversación real.",
+      "lastTime": "La última vez querías trabajar en <b>{areas}</b>. ¿Quieres enfocarte en eso esta vez?",
+      "targetYes": "Sí, dame oportunidades de practicar eso",
+      "savedJob": "¿Practicar para un trabajo guardado?",
+      "savedJobHint": "(llena automáticamente el puesto y la descripción del trabajo)",
+      "notNow": "Ahora no",
+      "savedJobFallback": "Trabajo guardado",
+      "usingJd": "Usando la oferta de trabajo que guardamos para este empleo{age}.",
+      "jdLong": " Era larga, así que guardamos la primera parte.",
+      "role": "¿Para qué puesto te vas a entrevistar?",
+      "rolePlaceholder": "p. ej., Auxiliar de almacén, Representante de servicio al cliente",
+      "resume": "¿Con qué currículum quieres entrevistarte?",
+      "resumeHint": "(para que las preguntas encajen con tu experiencia real)",
+      "resumeFrom": "Currículum de {when}",
+      "yourAccount": "tu cuenta",
+      "resumeGeneral": "General (sin un currículum específico)",
+      "resumeNote": "Las preguntas se basarán en los trabajos, herramientas y resultados reales de este currículum.",
+      "posting": "Pega la oferta de trabajo",
+      "postingHint": "(opcional, ayuda a que las preguntas encajen con el puesto real)",
+      "postingPlaceholder": "Pega la descripción del trabajo al que te estás postulando...",
+      "skills": "Tus habilidades (de The Forge)",
+      "kind": "¿Qué tipo de práctica necesitas?",
+      "includeDisclosure": "Incluir práctica sobre tus antecedentes penales",
+      "includeDisclosureNote": "En algún momento de la conversación, el entrevistador te preguntará por tus antecedentes penales.",
+      "start": "Empezar entrevista de práctica",
+      "allowance": "Práctica por texto: {limit} entrevistas al día con tu cuenta."
+    },
+    "feedback": {
+      "title": "Comentarios sobre tu entrevista",
+      "intro": "Así te fue. Recuerda, esto es práctica, no perfección.",
+      "savingRecord": "Guardando el registro de tu práctica...",
+      "recordFailed": "No se confirmó el guardado del registro de tu práctica. Tu informe sigue aquí. Revisa tu Biblioteca antes de intentarlo de nuevo, o descarga una copia.",
+      "retrySave": "Volver a guardar la práctica",
+      "didWell": "Lo que hiciste bien",
+      "workOn": "En qué puedes mejorar",
+      "overall": "En general",
+      "disclosureNotes": "Notas sobre hablar de tus antecedentes penales",
+      "frame": "La idea para llevar a la entrevista",
+      "stronger": "Respuestas más sólidas como modelo",
+      "notes": "Tus notas",
+      "notesNote": "Anota lo que quieras recordar. Estas notas se quedan en esta página y no se guardan. Copia o descarga el análisis para conservarlas.",
+      "notesPlaceholder": "¿Qué te funcionó? ¿Qué quieres hacer diferente la próxima vez?",
+      "savePdf": "Guardar análisis en PDF",
+      "copied": "¡Copiado!",
+      "copySummary": "Copiar un resumen de la práctica para cualquier IA",
+      "again": "Practicar otra vez",
+      "reviewChat": "Revisar el chat"
+    },
+    "practice": {
+      "initials": "GC",
+      "hiringManager": "Gerente de contratación",
+      "roleInterview": "Entrevista para {role}",
+      "inProgress": "Entrevista en curso",
+      "wrapping": "Cerrando...",
+      "end": "Terminar y recibir comentarios",
+      "preparing": "Preparando una respuesta a lo que dijiste",
+      "placeholder": "Escribe tu respuesta...",
+      "send": "Enviar",
+      "privacy": "Este es un lugar seguro para practicar. En la práctica por texto guardamos el puesto, el tipo de práctica y los comentarios de t.ROY, nunca una transcripción de tus respuestas, para que la aplicación pueda seguir tu avance. En la práctica por voz, lo que se dijo se guarda como texto solo si activas el guardado, y nunca guardamos el audio. Ningún programa ni empleador puede leer tu práctica. Si compartes tu avance con un programa, solo ve cuántas sesiones has hecho."
+    },
+    "voice": {
+      "title": "Práctica de voz en vivo",
+      "desc": "Habla en voz alta con un entrevistador de IA en tiempo real, con gpt-realtime-2.",
+      "privacy": "La práctica de voz funciona con OpenAI. Ellos pueden guardar el audio y las transcripciones hasta 30 días para vigilar el mal uso, y después los borran. Nosotros no guardamos tu audio.",
+      "captionsNote": "¿Prefieres leer? Los subtítulos en vivo aparecen abajo mientras hablas. También puedes usar la entrevista por texto.",
+      "connecting": "Conectando...",
+      "live": "En vivo. Habla con naturalidad; termina la sesión cuando acabes.",
+      "liveMinutes": " Tienes hasta {minutes} minutos en esta sesión.",
+      "building": "Armando tus comentarios con las respuestas que se captaron",
+      "finishing": "Terminando de captar tus respuestas...",
+      "start": "Empezar voz en vivo",
+      "upTo": "Hasta {minutes} minutos hoy.",
+      "retryFeedback": "Volver a intentar los comentarios",
+      "savingOn": "El guardado de texto está activado para esta práctica.",
+      "savingOff": "El guardado de texto está apagado. Aun así puedes recibir comentarios al terminar.",
+      "save": {
+        "title": "¿Guardar esta práctica de voz?",
+        "note": "El guardado viene activado para tu primera práctica, a menos que lo hayas apagado antes. Puedes apagarlo abajo. Las transcripciones guardadas son solo texto, cifradas y privadas en tu cuenta. Recibes comentarios de las dos maneras. Nunca guardamos el audio. Borra las prácticas guardadas en Configuración.",
+        "thisLabel": "Guardar esta práctica de voz",
+        "thisNote": "Si lo apagas, se recuerda tu decisión. Si lo activas aquí, se guarda solo esta vez.",
+        "alwaysLabel": "Guardar siempre mi práctica de voz",
+        "alwaysNote": "El guardado sigue activo hasta que lo apagues aquí o en Configuración.",
+        "offNote": "Con el guardado apagado, tu transcripción y tus comentarios se quedan en esta pestaña. Conservamos tu avance básico en la práctica. Al salir de la página, el informe se borra."
+      },
+      "captions": "Subtítulos en vivo",
+      "captionsEmpty": "Los subtítulos aparecerán aquí mientras tú y el entrevistador hablan.",
+      "you": "Tú",
+      "interviewer": "Entrevistador",
+      "warnPreference": "No se pudo guardar tu preferencia de guardado. Revisa esta opción otra vez antes de tu próxima práctica.",
+      "warnTranscript": "No se pudo guardar tu transcripción. Aun así puedes practicar y recibir comentarios en esta pestaña.",
+      "warnChunk": "No se pudo guardar parte del texto de la transcripción. Deja esta pestaña abierta para tus comentarios; el historial guardado puede quedar incompleto.",
+      "warnFinalize": "Tus comentarios están listos, pero no se pudo terminar de guardar el historial de la práctica. Deja este informe abierto o descárgalo.",
+      "reportError": "No se pudieron preparar tus comentarios. Tus respuestas captadas siguen aquí, en esta pestaña. Vuelve a intentar los comentarios antes de salir de esta página.",
+      "noAnswer": "No se captó ninguna respuesta completa. Empieza de nuevo y espera a que tu respuesta aparezca en los subtítulos antes de terminar.",
+      "errCancelled": "Se canceló la conexión de voz.",
+      "errNoMic": "Este navegador no permite usar el micrófono.",
+      "errStart": "No se pudo empezar la práctica de voz.",
+      "errReserve": "No se pudo reservar la sesión de voz.",
+      "errOffer": "No se pudo iniciar la conexión de voz.",
+      "errConnection": "Falló la conexión de voz en tiempo real.",
+      "errStartShort": "No se pudo empezar la práctica de voz."
+    },
+    "history": {
+      "openError": "No se pudo abrir esta práctica guardada. Inténtalo de nuevo.",
+      "title": "Tus prácticas de voz guardadas",
+      "note": "Abre una práctica guardada para leer sus comentarios y su transcripción en texto. Las sesiones más antiguas pueden tener solo una transcripción y un resumen corto. El texto de la transcripción está cifrado en tu cuenta. No guardamos audio.",
+      "defaultRole": "una entrevista",
+      "practiceFor": "Práctica de voz para {role}",
+      "opening": "Abriendo...",
+      "close": "Cerrar práctica",
+      "open": "Abrir práctica",
+      "workingOn": "Trabajando en:",
+      "reportUnavailable": "Se abrió tu transcripción, pero no se pudo cargar el informe guardado.",
+      "reportMissing": "Esta práctica no tiene un informe completo vinculado. Puede ser una sesión más antigua, o su informe no se guardó.",
+      "retryReport": "Volver a cargar el informe",
+      "savedSummary": "Resumen guardado: {summary}",
+      "transcriptAria": "Transcripción de la práctica",
+      "transcript": "Transcripción",
+      "noTranscript": "No se guardó texto de transcripción para esta práctica."
+    },
+    "report": {
+      "aria": "Informe de práctica guardado",
+      "title": "Tu informe de práctica",
+      "worked": "Lo que funcionó",
+      "next": "Qué practicar después",
+      "carry": "Qué llevar a tu entrevista",
+      "disclosure": "Práctica de hablar de tus antecedentes penales",
+      "answers": "Respuestas para practicar"
+    }
+  },
+  "plan": {
+    "title": "Tu plan",
+    "download": "Descargar",
+    "changeAnswers": "Cambiar respuestas",
+    "coaching": {
+      "lead": "Esto es orientación profesional, no asesoría legal.",
+      "body": "Se arma con tus respuestas. Lo que no contestaste queda abierto. Aquí no se llena nada con una suposición.",
+      "saved": "Lo que se guarda en tu Biblioteca: el trabajo que nombraste y tu plan para los otros obstáculos (y queda ligado a ese trabajo si llegaste aquí desde uno). Lo que no se guarda: la parte de tus antecedentes penales, cualquier otra cosa que escribiste y la lectura de t.ROY. La parte de tus antecedentes penales solo queda en esta pantalla hasta que la copies o la descargues."
+    },
+    "save": {
+      "saved": "Guardado en tu Biblioteca, sin la parte de tus antecedentes penales. Puedes volver a verlo ahí.",
+      "saving": "Guardando tu plan...",
+      "failed": "{error} Tu plan sigue aquí. Intenta guardarlo de nuevo, o descarga una copia.",
+      "idle": "Todavía no se guarda.",
+      "openLibrary": "Abrir Biblioteca",
+      "tryAgain": "Intentar guardar de nuevo",
+      "saveThis": "Guardar este plan"
+    },
+    "reading": {
+      "toggle": "Mostrar la lectura de t.ROY de tus respuestas",
+      "note": "Apagado, a menos que lo actives. Tus respuestas de cada obstáculo (las de antecedentes penales solo con tu sí) van a un servicio de IA, que te las lee de vuelta en frases sencillas. Nunca se guardan.",
+      "working": "Poniendo tus respuestas en frases sencillas...",
+      "retry": "Volver a intentar la redacción",
+      "done": "Un servicio de IA escribió la lectura de t.ROY bajo cada obstáculo, usando solo tus respuestas de ese obstáculo. Tus propias respuestas son el plan. La lectura no se guarda.",
+      "stripped": " Quitamos {count, plural, =1 {1 línea} other {# líneas}} que agregó y que tú no nos dijiste.",
+      "nothingAdded": " No se agregó nada.",
+      "nothing": "No hay nada que leer de vuelta para estos obstáculos."
+    },
+    "record": {
+      "title": "Planea qué decir sobre tus antecedentes penales",
+      "whenTitle": "Cuándo sale el tema",
+      "sayTitle": "Qué decir",
+      "nextTitle": "Qué decir después",
+      "fromYou": "Estas son tus propias palabras, tal como las escribiste. Ninguna IA las cambió. Dilo a tu manera.",
+      "fillBlank": "Llena el espacio con tus propias palabras. La práctica puede ayudarte a encontrarlas.",
+      "notSaved": "Esta parte sobre tus antecedentes penales no se guarda en ningún lado. Cópiala o descárgala ahora si quieres conservarla.",
+      "copy": "Copiar mi plan sobre mis antecedentes penales",
+      "downloadAll": "Descargar el plan completo",
+      "lawTitle": "La ley, en fuentes con fecha (al {asOf})",
+      "sourceLine": "{whatItIs} {label}, revisado {asOf}."
+    },
+    "section": {
+      "known": "Lo que nos contaste",
+      "reading": "Lectura de t.ROY:",
+      "open": "Sigue abierto",
+      "doNow": "Haz ahora",
+      "whoCanHelp": "Quién puede ayudar",
+      "findHelp": "Buscar ayuda: {label}",
+      "askEmployer": "Qué preguntarle a un empleador",
+      "tellEmployer": "Lo que le cuentas a un empleador:",
+      "notDecided": "Todavía no lo decides. Está bien."
+    },
+    "support": {
+      "transportation": "Llegar al trabajo",
+      "housing": "Un lugar donde quedarte",
+      "id_documents": "Identificación y documentos",
+      "legal": "Ayuda legal con antecedentes penales",
+      "financial": "Dinero y beneficios",
+      "employment": "Ayuda con el trabajo",
+      "education": "Estudios y capacitación",
+      "mental_health": "Salud mental (solo si la quieres)",
+      "substance": "Recuperación"
+    },
+    "constraints": {
+      "shiftConflict": "Sin filtro de turno: tus respuestas de turno en distintos obstáculos no comparten ningún turno",
+      "shifts": "Turnos: {shifts}",
+      "shift": {
+        "day": "días",
+        "evening": "tardes",
+        "night": "noches",
+        "weekend": "fines de semana",
+        "rotating": "un horario rotativo"
+      },
+      "remote": "Solo trabajo desde casa",
+      "radius": "A menos de {miles} millas",
+      "partTime": "Medio tiempo",
+      "fullTime": "Tiempo completo"
+    },
+    "filters": {
+      "title": "¿Usar esto en tu búsqueda de trabajo?",
+      "note": "Solo estos límites pasan a tus filtros de búsqueda de trabajo, y solo si presionas el botón. Nada más de este plan va allá.",
+      "saving": "Guardando...",
+      "added": "Agregado a la búsqueda de trabajo",
+      "add": "Agregar a mis filtros de búsqueda de trabajo"
+    },
+    "practice": "Practicar cómo decirlo"
+  },
+  "picker": {
+    "legend": "¿Qué se te atraviesa ahora mismo?",
+    "note": "Elige todo lo que aplique. Los vemos uno por uno, y cada respuesta decide la siguiente pregunta. Tú decides qué oye un empleador, si es que oye algo."
+  },
+  "question": {
+    "header": "{label} · Obstáculo {number} de {count} · Pregunta {step}",
+    "skip": "Saltar esta"
+  },
+  "hurdles": {
+    "h": {
+      "gaps": {
+        "label": "Vacíos en mi historial de trabajo",
+        "blurb": "Tiempo entre trabajos, o un periodo sin trabajo en el papel."
+      },
+      "record": {
+        "label": "Antecedentes penales o verificación de antecedentes",
+        "blurb": "Una pregunta en un formulario, una entrevista, o una verificación después de una oferta."
+      },
+      "schedule": {
+        "label": "Horario y cuidado de otros",
+        "blurb": "Hijos, familia, estudios, otro trabajo o citas."
+      },
+      "transport": {
+        "label": "Llegar al trabajo",
+        "blurb": "Sin carro, horarios del autobús, una licencia, o el costo del viaje."
+      },
+      "housing": {
+        "label": "Vivienda",
+        "blurb": "Quedarte con alguien, un refugio, o un lugar que puede cambiar."
+      },
+      "health": {
+        "label": "Salud y ajustes en el trabajo",
+        "blurb": "Límites, descansos, citas, o lo que te ayuda a trabajar bien."
+      },
+      "documents": {
+        "label": "Identificación, documentos y licencias",
+        "blurb": "Identificación estatal, tarjeta de Seguro Social, licencia de conducir o licencia profesional."
+      },
+      "skills": {
+        "label": "Habilidades, computadoras y acceso al teléfono",
+        "blurb": "Solicitudes en línea, un teléfono que se queda sin datos, o una habilidad por aprender."
+      },
+      "money": {
+        "label": "Dinero",
+        "blurb": "Necesitas que te paguen pronto, costos para empezar, multas o beneficios."
+      },
+      "other": {
+        "label": "Otra cosa",
+        "blurb": "Algo que no está en esta lista."
+      },
+      "not_sure": {
+        "label": "Todavía no estoy seguro",
+        "blurb": "Unas preguntas para ayudarte a encontrar qué se te atraviesa."
+      }
+    },
+    "n": {
+      "transport_what": {
+        "q": "¿Qué te dificulta llegar al trabajo?",
+        "help": "Elige todo lo que aplique.",
+        "c": {
+          "no_car": "Por ahora no tengo carro",
+          "bus_hours": "Horarios del autobús o del tren",
+          "license": "No tengo licencia, o está suspendida",
+          "cost": "El costo de la gasolina, los pasajes o las reparaciones",
+          "ride": "Un aventón con el que no puedo contar",
+          "access": "Subir y bajar es difícil (accesibilidad)",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_bus_when": {
+        "q": "¿Cuándo no te sirve el autobús o el tren?",
+        "c": {
+          "early": "Temprano en la mañana",
+          "late": "Tarde en la noche",
+          "weekends": "Fines de semana",
+          "route": "La ruta no llega al trabajo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_shift_fit": {
+        "q": "Con el autobús como funciona ahora, ¿a qué turnos puedes llegar?",
+        "help": "Esto puede pasar a tus filtros de búsqueda de trabajo después, solo si tú lo dices.",
+        "c": {
+          "day": "Días",
+          "evening": "Tardes",
+          "night": "Noches",
+          "weekend": "Fines de semana",
+          "rotating": "Un horario rotativo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_options": {
+        "q": "¿Cómo te mueves ahora?",
+        "c": {
+          "walk": "Camino",
+          "bike": "Bicicleta",
+          "bus": "Autobús o tren",
+          "rides": "Aventones de familia o amigos",
+          "rideshare": "A veces Uber o taxi",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_license": {
+        "q": "¿En qué situación está tu licencia?",
+        "c": {
+          "never": "Nunca tuve una",
+          "suspended": "Suspendida o revocada",
+          "expired": "Vencida",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_cost": {
+        "q": "¿Qué costos pesan más?",
+        "c": {
+          "gas": "Gasolina",
+          "fares": "Pasajes de autobús o tren",
+          "repairs": "Reparaciones del carro",
+          "insurance": "Seguro",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_backup": {
+        "q": "Si falla tu aventón, ¿tienes un plan de respaldo?",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_access": {
+        "q": "¿Qué haría que el viaje funcione?",
+        "c": {
+          "paratransit": "Un servicio de transporte de puerta a puerta",
+          "stop": "Una parada con rampa o elevador",
+          "short_walk": "Una caminata más corta desde la parada",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "transport_distance": {
+        "q": "¿Qué tan lejos puedes llegar al trabajo hoy?",
+        "c": {
+          "under5": "Menos de 5 millas",
+          "5to15": "De 5 a 15 millas",
+          "15to30": "De 15 a 30 millas",
+          "home": "Solo desde casa (remoto)",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "schedule_what": {
+        "q": "¿Qué determina las horas que puedes trabajar?",
+        "help": "Elige todo lo que aplique.",
+        "c": {
+          "care": "Hijos o familia que cuido",
+          "job": "Otro trabajo",
+          "school": "Estudios o clases",
+          "appointments": "Citas que tengo que cumplir",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "schedule_care_hours": {
+        "q": "¿Cuándo está cubierto el cuidado?",
+        "c": {
+          "school_hours": "Durante el horario escolar",
+          "daytime": "De día",
+          "evenings": "Tardes",
+          "no_backup": "No hay respaldo cuando se enferman",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "schedule_appointments": {
+        "q": "¿Qué tan seguido son las citas?",
+        "c": {
+          "weekly": "Cada semana",
+          "monthly": "Más o menos una vez al mes",
+          "changes": "Cambia",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "schedule_hours": {
+        "q": "¿Qué turnos puedes trabajar?",
+        "help": "Esto puede pasar a tus filtros de búsqueda de trabajo después, solo si tú lo dices.",
+        "c": {
+          "day": "Días",
+          "evening": "Tardes",
+          "night": "Noches",
+          "weekend": "Fines de semana",
+          "rotating": "Un horario rotativo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "schedule_total": {
+        "q": "¿Cuántas horas a la semana puedes trabajar?",
+        "c": {
+          "full": "Tiempo completo",
+          "part": "Medio tiempo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "gaps_length": {
+        "q": "¿Qué tan largo es el vacío más largo?",
+        "c": {
+          "under6": "Menos de 6 meses",
+          "6to12": "De 6 a 12 meses",
+          "1to3": "De 1 a 3 años",
+          "over3": "Más de 3 años",
+          "several": "Varios vacíos",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "gaps_filled": {
+        "q": "¿Qué llenó ese tiempo? Elige solo lo que te sientas cómodo nombrando.",
+        "help": "Tú decides lo que oye un empleador. Esto es solo para tu plan.",
+        "c": {
+          "family": "Cuidar a mi familia",
+          "health": "Salud",
+          "inside": "Tiempo en prisión o en la cárcel",
+          "searching": "Buscar trabajo",
+          "school": "Estudios o capacitación",
+          "informal": "Trabajo informal o por dinero en efectivo",
+          "moving": "Mudanzas o vivienda",
+          "rather_not": "Prefiero no decirlo"
+        }
+      },
+      "gaps_inside": {
+        "q": "¿Quieres planear también la conversación sobre tus antecedentes penales?",
+        "c": {
+          "yes": "Sí, agrégala",
+          "no": "Ahora no"
+        }
+      },
+      "gaps_informal": {
+        "q": "¿Ese trabajo podría ir en tu currículum como trabajo de verdad?",
+        "help": "El trabajo de verdad es trabajo de verdad. Solo va en la página si puedes explicar cada línea.",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "gaps_proof": {
+        "q": "¿Hay algo que muestre lo que hiciste en ese tiempo?",
+        "c": {
+          "certs": "Un certificado o registro de una clase",
+          "reference": "Alguien que respondería por mí",
+          "pay": "Comprobantes de pago",
+          "nothing": "Todavía nada",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "gaps_asked": {
+        "q": "¿Algún empleador ya te preguntó por ese vacío?",
+        "c": {
+          "yes": "Sí",
+          "no": "Todavía no"
+        }
+      },
+      "housing_now": {
+        "q": "¿Qué pasa con tu vivienda?",
+        "help": "Elige la opción más cercana. No hacen falta detalles.",
+        "c": {
+          "stable": "Estable por ahora",
+          "staying": "Me estoy quedando con alguien",
+          "shelter": "En un refugio",
+          "at_risk": "Puedo perder mi lugar",
+          "no_address": "No tengo una dirección que usar",
+          "rather_not": "Prefiero no decirlo"
+        }
+      },
+      "housing_address": {
+        "q": "¿Con qué cuentas para que un empleador pueda comunicarse contigo?",
+        "c": {
+          "mail": "Una dirección donde llega el correo",
+          "phone": "Un teléfono que funciona",
+          "neither": "Ninguna de las dos por ahora",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "housing_when": {
+        "q": "¿Cuándo podría cambiar?",
+        "c": {
+          "month": "Este mes",
+          "soon": "En 1 a 3 meses",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "housing_stay": {
+        "q": "¿Puedes quedarte ahí mientras empiezas un trabajo?",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "housing_impact": {
+        "q": "¿Cómo afecta al trabajo?",
+        "c": {
+          "rest": "Me cuesta descansar antes de los turnos",
+          "calls": "Me cuesta recibir llamadas o correo",
+          "moving": "Puede que me mude pronto",
+          "fine": "Por ahora no afecta",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "health_impact": {
+        "q": "¿Cómo afecta al trabajo?",
+        "help": "Este plan nunca te pide que nombres una condición.",
+        "c": {
+          "lifting": "Límites para estar de pie o cargar peso",
+          "breaks": "Necesito descansos",
+          "schedule": "Necesito un horario específico",
+          "appointments": "Citas",
+          "focus": "Concentración o memoria",
+          "settings": "Algunos ambientes son difíciles (ruido, multitudes, estrés)",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "health_helped": {
+        "q": "¿Algo te ha ayudado antes a trabajar bien?",
+        "c": {
+          "schedule": "Un horario diferente",
+          "equipment": "Un banquito, un carrito u otro equipo",
+          "written": "Pasos escritos o listas de verificación",
+          "quiet": "Un lugar más tranquilo",
+          "time_off": "Tiempo libre para las citas",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "health_ask": {
+        "q": "¿Quieres pedirle a un empleador un cambio que te ayude a trabajar?",
+        "c": {
+          "before": "Sí, antes de empezar",
+          "after": "Sí, después de empezar",
+          "no": "Ahora no",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "documents_missing": {
+        "q": "¿Qué te falta?",
+        "help": "Elige todo lo que aplique.",
+        "c": {
+          "state_id": "Identificación estatal",
+          "ss_card": "Tarjeta de Seguro Social",
+          "birth": "Acta de nacimiento",
+          "drivers": "Licencia de conducir",
+          "work_license": "Una licencia o certificado para un trabajo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "documents_blocker": {
+        "q": "¿Qué te impide conseguirlo?",
+        "c": {
+          "cost": "El costo",
+          "chain": "Primero necesito otro documento",
+          "address": "Necesito una dirección",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "documents_drivers": {
+        "q": "¿En qué situación está tu licencia?",
+        "c": {
+          "never": "Nunca tuve una",
+          "suspended": "Suspendida o revocada",
+          "expired": "Vencida",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "documents_work_license": {
+        "q": "¿Qué licencia o certificado? (por ejemplo CDL, montacargas, CNA)",
+        "ph": "Unas palabras. Puedes saltarte esto."
+      },
+      "documents_board": {
+        "q": "¿Has preguntado a quienes lo expiden qué necesitan de ti?",
+        "c": {
+          "yes": "Sí",
+          "no": "Todavía no",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "documents_need_by": {
+        "q": "¿Cuándo lo necesitas?",
+        "c": {
+          "apply": "Antes de poder solicitar",
+          "start": "Antes de empezar",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "skills_what": {
+        "q": "¿Qué se te atraviesa?",
+        "help": "Elige todo lo que aplique.",
+        "c": {
+          "computer": "No tengo computadora",
+          "phone": "Mi teléfono o mis datos se acaban",
+          "online": "El correo o las solicitudes en línea",
+          "job_skill": "Una habilidad que pide el trabajo",
+          "reading": "Leer o escribir",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "skills_online": {
+        "q": "¿Dónde puedes conectarte a internet?",
+        "c": {
+          "library": "Una biblioteca",
+          "friend": "Un amigo o un familiar",
+          "phone_only": "Solo mi teléfono",
+          "nowhere": "En ningún lugar por ahora",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "skills_which": {
+        "q": "¿Qué habilidad? (por ejemplo montacargas, Excel, mecanografía)",
+        "ph": "Unas palabras. Puedes saltarte esto."
+      },
+      "skills_reading": {
+        "q": "¿Qué te ayudaría?",
+        "c": {
+          "person": "Alguien que lo repase conmigo",
+          "voice": "Herramientas de voz o audio",
+          "time": "Más tiempo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "skills_learn": {
+        "q": "¿Cómo te gusta aprender?",
+        "c": {
+          "hands_on": "Practicando",
+          "video": "Con videos",
+          "class": "En una clase",
+          "one_on_one": "Uno a uno",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "money_what": {
+        "q": "¿Cuál es el problema de dinero?",
+        "help": "Elige todo lo que aplique.",
+        "c": {
+          "fast": "Necesito que me paguen pronto",
+          "start": "Costos para empezar (botas, ropa, herramientas, pasajes)",
+          "debt": "Deudas, multas o cargos",
+          "benefits": "Beneficios que podría perder",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "money_when": {
+        "q": "¿Qué tan pronto necesitas un pago?",
+        "c": {
+          "week": "Esta semana",
+          "month": "Este mes",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "money_start": {
+        "q": "¿Qué costos?",
+        "c": {
+          "boots": "Botas o equipo de seguridad",
+          "clothes": "Ropa de trabajo",
+          "tools": "Herramientas",
+          "fares": "Pasajes o gasolina de las primeras semanas",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "money_debt": {
+        "q": "¿Las multas, los cargos o las órdenes de manutención afectan tu licencia o tu pago?",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "money_benefits": {
+        "q": "¿Quieres saber cómo un sueldo podría cambiar tus beneficios antes de aceptar un trabajo?",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "other_what": {
+        "q": "En pocas palabras, ¿qué se te atraviesa?",
+        "ph": "Corto está bien. Puedes saltarte esto."
+      },
+      "other_where": {
+        "q": "¿Qué parte afecta?",
+        "c": {
+          "hired": "Que me contraten",
+          "getting_there": "Llegar al trabajo",
+          "keeping": "Mantener un trabajo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "not_sure_signs": {
+        "q": "¿Te ha pasado algo de esto en los últimos meses?",
+        "help": "Elige hasta tres, el que más importa primero. Cada uno agrega unas preguntas cortas. Puedes agregar más después desde la pantalla de inicio.",
+        "c": {
+          "ride": "Perdí o rechacé un trabajo por no tener cómo llegar",
+          "papers": "Me pidieron una identificación o papeles que no tenía",
+          "check": "Me rechazaron después de una verificación de antecedentes",
+          "gap": "Me preguntaron por el tiempo entre trabajos",
+          "hours": "Los hijos, la familia o los estudios me complicaron los horarios",
+          "health": "La salud se atravesó",
+          "housing": "Problemas con la vivienda o el correo",
+          "money": "Se me acabó el dinero antes del día de pago",
+          "online": "No pude terminar una solicitud en línea",
+          "none": "Ninguna de estas"
+        }
+      },
+      "not_sure_free": {
+        "q": "¿Qué sientes que no anda bien cuando buscas trabajo? Corto está bien.",
+        "ph": "Puedes saltarte esto."
+      },
+      "record_where": {
+        "q": "¿Dónde está saliendo el tema?",
+        "help": "Elige todo lo que aplique.",
+        "c": {
+          "form": "Una pregunta en una solicitud",
+          "interview": "En una entrevista",
+          "check": "Una verificación de antecedentes después de una oferta",
+          "work": "Con un supervisor o Recursos Humanos en el trabajo",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "record_form_question": {
+        "q": "¿Qué pregunta el formulario, con sus propias palabras?",
+        "help": "Cópialo exacto si puedes. Las palabras del formulario deciden lo que contestas.",
+        "ph": "Por ejemplo: ¿Ha sido condenado por un delito grave en los últimos 7 años?"
+      },
+      "record_check_stage": {
+        "q": "¿En qué punto estás con la verificación?",
+        "c": {
+          "not_started": "Todavía no empieza",
+          "signed": "Firmé el formulario para eso",
+          "notice": "Recibí una carta que dice que podrían no contratarme por eso",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "record_raise": {
+        "q": "¿Quieres sacar el tema tú, o esperar a que te pregunten?",
+        "help": "No hay una sola manera correcta. Tú decides.",
+        "c": {
+          "me": "Yo lo menciono",
+          "wait": "Espero a que me pregunten",
+          "later": "Lo decido después"
+        }
+      },
+      "record_kind": {
+        "q": "¿Qué tipo de antecedentes penales? Puedes saltarte esto.",
+        "c": {
+          "misdemeanor": "Delito menor",
+          "felony": "Delito grave",
+          "both": "Los dos",
+          "pending": "Un caso pendiente",
+          "rather_not": "Prefiero no decirlo"
+        }
+      },
+      "record_when": {
+        "q": "¿Hace cuánto fue el más reciente?",
+        "c": {
+          "lt1": "Menos de 1 año",
+          "1to3": "De 1 a 3 años",
+          "3to7": "De 3 a 7 años",
+          "7plus": "Más de 7 años",
+          "rather_not": "Prefiero no decirlo"
+        }
+      },
+      "record_supervision": {
+        "q": "¿Estás en libertad a prueba (probation), en libertad condicional (parole) u otra forma de supervisión ahora?",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "rather_not": "Prefiero no decirlo"
+        }
+      },
+      "record_conditions": {
+        "q": "¿Tus condiciones afectan el trabajo? (horarios, viajes, tipo de trabajo, uso de internet)",
+        "c": {
+          "yes": "Sí",
+          "no": "No",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "record_state": {
+        "q": "¿En qué estado está el trabajo?",
+        "help": "Dos letras, como MT o WI. Sirve para mostrar fuentes con fecha de ese estado.",
+        "ph": "MT"
+      },
+      "record_worry": {
+        "q": "¿Qué es lo que más te preocupa de la conversación?",
+        "c": {
+          "details": "Que me presionen por detalles",
+          "turned_down": "Que me rechacen",
+          "too_much": "Decir demasiado",
+          "surprise": "Que la verificación muestre algo que no esperaba",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "record_lead": {
+        "q": "¿Qué quieres que escuchen de ti ahora?",
+        "c": {
+          "work": "Mi trabajo actual o reciente",
+          "training": "La capacitación o los estudios que terminé",
+          "showing_up": "Que cumplo y llego a trabajar",
+          "reference": "Alguien que responderá por mí",
+          "not_sure": "No estoy seguro"
+        }
+      },
+      "record_own_words": {
+        "q": "Si tuvieras que decirlo en una sola oración, ¿qué dirías?",
+        "help": "Tus palabras. Corto está bien. No hacen falta detalles. Puedes saltarte esto.",
+        "ph": "Por ejemplo: Tengo un delito grave de 2019."
+      },
+      "record_now_words": {
+        "q": "¿Y una cosa cierta sobre lo que haces ahora?",
+        "help": "Tus palabras. Puedes saltarte esto.",
+        "ph": "Por ejemplo: Llevo un año y medio trabajando en el patio."
+      },
+      "gaps_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "schedule_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "transport_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "housing_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "health_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "documents_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "skills_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "money_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      },
+      "other_tell": {
+        "q": "¿Qué quieres que sepa un empleador sobre esto?",
+        "help": "Tú decides. Puedes cambiarlo cuando quieras.",
+        "c": {
+          "nothing": "Nada. Se queda conmigo.",
+          "job_only": "Solo lo que toca el horario o el trabajo",
+          "more": "Más del panorama, con mis propias palabras",
+          "later": "Lo decido después"
+        }
+      }
+    }
+  }
+}

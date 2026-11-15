@@ -15,8 +15,10 @@
 
 import { useMemo } from "react";
 import { runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
+import { useServerText } from "@/components/ServerTextProvider";
 
 export function MintCheckPanel({ resumeText, sourceText }: { resumeText: string; sourceText: string }) {
+  const ts = useServerText();
   const result = useMemo(
     () => runMintCheck({ output: resumeText || "", source: sourceText || "", kind: "resume" }),
     [resumeText, sourceText]
@@ -44,7 +46,7 @@ export function MintCheckPanel({ resumeText, sourceText }: { resumeText: string;
               <span className={f.severity === "BLOCK" ? "font-bold text-t-amber-bright" : "text-t-phos-dim"}>
                 {f.severity === "BLOCK" ? "Must fix: " : "Check: "}
               </span>
-              &ldquo;{f.line.length > 140 ? `${f.line.slice(0, 140)}...` : f.line}&rdquo; {f.why}
+              &ldquo;{f.line.length > 140 ? `${f.line.slice(0, 140)}...` : f.line}&rdquo; {ts(f.why)}
             </li>
           ))}
         </ul>

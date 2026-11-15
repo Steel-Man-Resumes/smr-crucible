@@ -37,6 +37,7 @@ import { saveFinishRevision, type ArtifactLite, type RevisionStore } from "../re
 import { resumeTextToDocument } from "../revision-to-doc";
 import { saveFirstSection, listVersions, restoreVersion, type LaneFirstStore } from "../lane-first-save";
 import { refineryOpenWithoutResume, keepGoingHref, savedWorkHref, taskNeedsResume, forgeStartUrl } from "../lane-task";
+import { MESSAGES } from "../../messages";
 import { revisionContentHash, type ArtifactRevision, type InsertRevisionResult, type NewRevision } from "@crucible/core/src/artifactRevision";
 import { RESUME, SOURCE, finishState, allAnswered, OWN_WORDS } from "./fixtures/revision-run";
 import { FORGE_SIGN_IN_PAGES } from "../forge-access";
@@ -552,8 +553,14 @@ test("demo 10/29 (Ceci): Keep going opens the account's saved resume, never the 
 
 test("L1: the lane home heading keeps the label's own casing", () => {
   const h = read("components/lanes/LaneHome.tsx");
-  assert.match(h, /Today: \{TASK_COPY\[task\]\.label\}/);
-  assert.doesNotMatch(h, /label\.toLowerCase\(\)/);
+  // The heading now comes from the catalog: "Today: {task}" with the task's label filled in as-is. Each catalog task label must equal
+  // TASK_COPY's own label character for character (own casing kept), and the component must pass that label through untouched.
+  const home = (MESSAGES.en as any).refineryHome.laneHome;
+  assert.equal(home.today, "Today: {task}");
+  for (const task of Object.keys(TASK_COPY) as (keyof typeof TASK_COPY)[]) assert.equal(home.task[task], TASK_COPY[task].label);
+  assert.match(h, /useTranslations\("refineryHome\.laneHome"\)/);
+  assert.match(h, /t\("today", \{ task: t\(`task\.\$\{task\}`\) \}\)/);
+  assert.doesNotMatch(h, /toLowerCase\(\)/);
 });
 
 test("L2: opening a resume for Check and finish writes nothing; only the same-origin POST saves", async () => {

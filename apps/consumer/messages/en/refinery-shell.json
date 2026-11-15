@@ -1,0 +1,671 @@
+{
+  "access": {
+    "active": "Partner access is active",
+    "welcome": "Welcome.",
+    "welcomeName": "Welcome, {name}.",
+    "intro": "This page gives your team the access details, product orientation, and sample material needed to evaluate the full Steel Man Resumes experience.",
+    "workspace": "Partner workspace",
+    "yourAccess": "Your access",
+    "noSetup": "No setup required.",
+    "signIn": "Sign in",
+    "signInPreAuth": "Sign in at The Refinery with the email address your invitation was sent to. It is already pre-authorized for partner access, so there is no code to enter.",
+    "signInCode": "Create an account or sign in, then redeem the partner code shown here in Settings.",
+    "partnerCode": "Partner code",
+    "shareCode": "Share it with staff or participants who should receive partner-tier access.",
+    "noCode": "Your code comes from your organization, and your invitation link carries it. If you reached this page without one, ask whoever invited you for the link rather than guessing a code.",
+    "tier": "Partner tier",
+    "tierBody": "All tools are available immediately so your organization can evaluate the complete workflow.",
+    "orientation": "Product orientation",
+    "twoTools": "Two tools. One connected workflow.",
+    "forgeBody": "The public starting point. It turns raw work history into a strengths-first narrative, practical career paths, barrier resources, and a resume starter.",
+    "forgeOpen": "No account is required.",
+    "forgeUp": "It is free, with one free sign-in.",
+    "refineryBody": "The authenticated workspace. People build targeted materials, prepare for disclosure and interviews, search for work, and track progress here.",
+    "inside": "Inside The Refinery",
+    "unlocked": "The full toolset is unlocked.",
+    "tools": {
+      "jobBoard": {
+        "name": "Job Board",
+        "description": "Local listings in plain language, with employers we checked for hiring people with records marked."
+      },
+      "applicationTailor": {
+        "name": "Application Tailor",
+        "description": "A targeted resume, cover letter, and disclosure materials built from Forge output."
+      },
+      "disclosurePlanner": {
+        "name": "Disclosure Planner",
+        "description": "Timing guidance, legal-rights context, and a natural conversation script."
+      },
+      "interviewPrep": {
+        "name": "Interview Prep",
+        "description": "Adaptive practice with structured written feedback."
+      },
+      "jobPaths": {
+        "name": "Job Paths",
+        "description": "Job paths that are realistic with a record, connected to live search and career materials."
+      },
+      "applicationTracker": {
+        "name": "Application Tracker",
+        "description": "A measurable record from intake through placement."
+      }
+    },
+    "sample": "Optional sample",
+    "pasteTitle": "Paste Jimmy's resume into The Forge.",
+    "pasteBody": "This fictional example shows how the workflow handles correctional work, employment gaps, plain language, and practical skills.",
+    "copied": "Copied",
+    "copySample": "Copy sample",
+    "closingNamed": "{name}, this work is built for people whose ability is easy to miss in a conventional hiring process. Your partnership helps put practical tools in front of them at the right time.",
+    "closing": "This work is built for people whose ability is easy to miss in a conventional hiring process. Your partnership helps put practical tools in front of them at the right time.",
+    "begin": "Begin in The Forge"
+  },
+  "actionCard": {
+    "savingFailed": "Saving failed. Reopen the page to check your saved work before trying again.",
+    "savedRevision": "Saved as a {status} revision. Review it on the document page.",
+    "savedResources": "Saved to your resource lists. No appointment or contact was made.",
+    "couldNotSave": "Could not save.",
+    "reviewTitle": "Review this correction",
+    "before": "Before:",
+    "after": "After:",
+    "confirmTrue": "Confirm the wording is true. The saved revision still goes through the document checks.",
+    "saveTitle": "Save these resources?",
+    "selected": "Selected services and steps",
+    "saved": "Saved",
+    "saving": "Saving...",
+    "apply": "Apply this correction",
+    "saveButton": "Save resources"
+  },
+  "brand": {
+    "tagline": "Career report",
+    "lockupAlt": "{name} by Steel Man Resumes",
+    "seatTip": "Your seat comes through {name}. What you share with them is your choice. See or change it in Settings.",
+    "withAria": "With {name}. {tip}",
+    "with": "With {name}"
+  },
+  "carry": {
+    "yourAccount": "your account",
+    "title": "Enter your code",
+    "lead": "The one you wrote down before you left. It fills in everything you already answered so you do not start over.",
+    "whereSignedIn": "Once you add your resume, your answers are saved to the account for {email}, so you can finish on any computer.",
+    "whereSignedOut": "Your answers stay on this computer. Sign in to save them to a free account.",
+    "codeLabel": "Your code",
+    "codeHint": "Dashes are optional. Codes never use the letter O, the letter I, the number zero, or the number one.",
+    "redeem": "Pick up where I left off",
+    "lost": "Lost the code? You can answer the questions again from the start. It takes a few minutes and nothing is gone forever."
+  },
+  "checkEmail": {
+    "title": "Check your email",
+    "body": "We sent you a magic link. Click the link in your email to sign in. If you don't see it, check your spam folder."
+  },
+  "forgot": {
+    "couldNotSend": "Could not send reset email.",
+    "wentWrong": "Something went wrong. Please try again.",
+    "sentTitle": "Check your email",
+    "sentBody": "If an account exists for <strong>{email}</strong>, we sent a password reset link. It expires in 60 minutes.",
+    "backToSignIn": "Back to sign in",
+    "title": "Reset your password",
+    "lead": "We'll email you a link to set a new password.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "sending": "Sending...",
+    "send": "Send reset email"
+  },
+  "getListed": {
+    "wentWrongShort": "Something went wrong",
+    "wentWrong": "Something went wrong. Please try again.",
+    "thanks": "Thank you!",
+    "thanksBody": "We'll review your submission and add your organization within 48 hours. We may reach out if we need more information.",
+    "back": "Back to Steel Man Resumes",
+    "title": "Get Your Organization Listed",
+    "lead": "We're building a network of verified resources for people rebuilding their careers in Milwaukee and Waukesha. If your organization offers support services, we want to connect people to you.",
+    "orgName": "Organization Name",
+    "orgNamePlaceholder": "e.g., Milwaukee Community Services",
+    "category": "Category",
+    "categoryPlaceholder": "Select a category",
+    "categories": {
+      "housing": "Housing & Shelter",
+      "transportation": "Transportation",
+      "legal": "Legal Aid",
+      "id_documents": "ID & Documents",
+      "mental_health": "Mental Health",
+      "substance": "Recovery Support",
+      "education": "Education & Training",
+      "financial": "Financial Literacy",
+      "employment": "Employment Help",
+      "other": "Other"
+    },
+    "city": "City",
+    "cityPlaceholder": "e.g., Milwaukee",
+    "phone": "Phone",
+    "website": "Website",
+    "description": "Describe Your Services",
+    "descriptionPlaceholder": "What services do you offer? Who can access them? Any eligibility requirements?",
+    "contactNote": "We'll use this to reach you if we have questions.",
+    "yourName": "Your Name",
+    "yourNamePlaceholder": "Jane Smith",
+    "yourEmail": "Your Email",
+    "submitting": "submitting...",
+    "submit": "submit for review",
+    "verifyNote": "We verify every submission. Your organization will be live within 48 hours."
+  },
+  "globalError": {
+    "title": "Something went wrong.",
+    "body": "Your work is saved on this device. Reload to continue.",
+    "tryAgain": "Try again"
+  },
+  "home": {
+    "forge": {
+      "eyebrow": "01 · Build the foundation",
+      "title": "Bring your resume to The Forge.",
+      "body": "Even a rough old resume gives t.ROY real work to start from. Upload a file, use a photo, or paste the text. The Forge helps you correct the facts and leave with a general resume you can explain. If you have no page, t.ROY can build one with you.",
+      "action": "Start in The Forge",
+      "point1": "Your own page is the best start",
+      "point2": "Check the facts before calling it done",
+      "point3Wall": "One free sign-in for your saved work",
+      "point3Open": "Free to start in this browser"
+    },
+    "refinery": {
+      "eyebrow": "02 · Put the foundation to work",
+      "title": "Use it for jobs in The Refinery.",
+      "body": "The Refinery uses your real history for job-specific resumes, applications, interview practice, and the harder conversations. Speak or type with t.ROY. It can search live jobs, save one you choose, and help you follow up. The new employer and resource directories are early. Check each source and date as they grow.",
+      "action": "Continue in The Refinery",
+      "point1": "Tailor one job at a time",
+      "point2": "Practice with your actual work history",
+      "point3": "Check sources and dates in the new directories"
+    },
+    "freeTools": "Free career tools",
+    "eyebrow": "Steel Man Resumes tools",
+    "headline": "Build your general resume in The Forge. Use it for jobs in The Refinery.",
+    "lead": "We split this into two steps on purpose. The Forge builds a truthful general resume from your history. The Refinery uses that foundation to go after specific jobs, practice interviews, and keep moving with t.ROY beside you.",
+    "bringOwn": "Bring your own resume if you have one, however bad it looks. Starting from something real takes less work than rebuilding your history from memory.",
+    "pathAria": "Your path through the tools",
+    "then": "then",
+    "orgsEyebrow": "For organizations",
+    "orgsTitle": "Bring your people into the same path.",
+    "orgsBody": "See how an organization can support the work. Steel Man Resumes keeps its own design; partner details can be worked out for a specific program.",
+    "orgsLink": "Organization page",
+    "footerTitle": "Steel Man Resumes career tools",
+    "security": "Security",
+    "mainSite": "Main site",
+    "contact": "Contact"
+  },
+  "journey": {
+    "processUnavailable": "Process unavailable.",
+    "retry": "Retry",
+    "loadingProcess": "Loading your process...",
+    "today": "Today",
+    "process": "Process",
+    "askOpen": "Ask t.ROY to open this",
+    "nextUnavailable": "Next step unavailable.",
+    "loadingNext": "Loading next step...",
+    "nextLabel": "Next:"
+  },
+  "nav": {
+    "yourPath": "Your path",
+    "pathInOrder": "Your path, in order",
+    "quickView": "Your path, quick view",
+    "askAction": "Ask t.ROY to open this early",
+    "askHint": "He opens guided steps when you ask.",
+    "guidedStep": "Guided step: ",
+    "seePreview": "{line} See a preview.",
+    "hideViews": "Hide {label} views",
+    "showViews": "Show {label} views",
+    "views": "{label} views",
+    "stationAria": "Station {n}, {label}. Open the path here.",
+    "stationAriaWithStatus": "Station {n}, {label}, {status}. Open the path here.",
+    "stripStatus": {
+      "completed": "completed",
+      "locked": "locked",
+      "early": "early access",
+      "current": "recommended now",
+      "available": "available"
+    },
+    "states": {
+      "completed": "Completed",
+      "recommendedEarly": "Recommended now · early access",
+      "early": "Early access",
+      "recommended": "Recommended now",
+      "nextLocked": "Next · locked",
+      "nextAvailable": "Next · available",
+      "available": "Available"
+    },
+    "blurbs": {
+      "overview": "Where you are and what is next",
+      "find": "Pick a real job worth going after",
+      "tailor": "Your resumes, fitted to the job",
+      "plan": "Your record, in your own words",
+      "practice": "Interview practice when the time is right",
+      "apply": "Send it, then keep track",
+      "next": "School, money, health, the rest of life"
+    },
+    "labels": {
+      "overview": "Overview",
+      "find_work": "Find work",
+      "tailor_and_package": "Tailor and package",
+      "plan_what_to_say": "Plan what to say",
+      "practice": "Practice",
+      "apply_and_track": "Apply and track",
+      "what_comes_next": "What comes next",
+      "find": "Find",
+      "tailor": "Tailor",
+      "plan": "Plan",
+      "apply": "Apply",
+      "next": "Next",
+      "progress": "Progress",
+      "from_your_case_manager": "From your case manager",
+      "jobs": "Jobs",
+      "explore_paths": "Explore paths",
+      "employers": "Employers",
+      "master_draft": "Master Draft",
+      "resumes_and_versions": "Resumes and versions",
+      "tailor_for_a_job": "Tailor for a job",
+      "creative_work": "Creative work",
+      "cv": "CV",
+      "performer_page": "Performer page",
+      "disclosure_plan": "Disclosure plan",
+      "private_records_and_documents": "Private records and documents",
+      "local_help": "Local help",
+      "toolbox": "Toolbox",
+      "you": "You",
+      "program": "Program",
+      "help_and_tour": "Help and tour",
+      "share_an_idea": "Share an idea",
+      "get_your_records": "Get your records",
+      "settings": "Settings",
+      "admin": "Admin",
+      "access_requests": "Access requests",
+      "profile_and_contact_details": "Profile and contact details",
+      "sharing_and_privacy": "Sharing and privacy",
+      "export_or_delete_my_data": "Export or delete my data",
+      "partner_dashboard": "Partner Dashboard",
+      "operator_home": "Operator Home",
+      "my_organization": "My Organization"
+    }
+  },
+  "overview": {
+    "eyebrow": "Full Technical + Research Overview",
+    "title": "The tool that didn't exist.",
+    "lead": "Justice-impacted people face a hiring system that treats their record as an automatic disqualifier. No tool combined AI career analysis, record-aware legal navigation, and disclosure coaching in one place. Until now.",
+    "lead2": "This page is the complete documentation of what this platform is, how it works, what research grounds it, and how every decision was made. Open source. Nothing hidden. Designed to be read by scholars, funders, developers, and partner organizations.",
+    "gapTitle": "The gap",
+    "stats": {
+      "s0": "Americans with a criminal record",
+      "s1": "Employed in year one after release",
+      "s2": "Median first-year earnings post-release",
+      "s3": "Tools that combined AI career analysis, legal navigation, and disclosure coaching in one place before this one"
+    },
+    "journeyTitle": "The full journey",
+    "journeyLead": "Six stages. One platform. Every stage builds on the last. Free at every step.",
+    "journeyStage": "Stage {n}",
+    "underHood": "Under the hood:",
+    "journey": {
+      "j0": {
+        "time": "One sitting",
+        "name": "The Forge",
+        "what": "Upload a resume or describe your work history. Answer a few questions about goals, barriers, readiness, and record. The Forge outputs a resume, a cover letter, career paths matched to your background, and a resource plan. All of it is in plain language.",
+        "tech": "Claude Sonnet (Anthropic) with a custom prompt scaffold that enforces the 10 behavioral rules. Resume parsed via OCR + NLP. Output hashed and logged."
+      },
+      "j1": {
+        "time": "5 minutes",
+        "name": "Profile and Job Board",
+        "what": "Fill in your contact info. Search real listings from several job sources. Employers we checked for hiring people with records are marked, and each mark shows where it applies.",
+        "tech": "Each mark rests on dated evidence in the employer directory (Neon PostgreSQL) that expires on its own, and it applies only where the evidence was found. No AI summary can grant a mark."
+      },
+      "j2": {
+        "time": "Ongoing",
+        "name": "Application Tailor",
+        "what": "Build job-targeted resume versions for specific listings. The AI tailors language to the job description while preserving your story.",
+        "tech": "Refinery Artifact system: each resume is versioned, stored with metadata (target job, company, application ID), and linked to the job application tracker."
+      },
+      "j3": {
+        "time": "15-30 minutes",
+        "name": "Disclosure Planner",
+        "what": "Plan when and how to talk about your record with specific employers. The planner walks through timing, framing, and what to say. It is grounded in actual Ban-the-Box law and research on employers that hire people with records.",
+        "tech": "Structured coaching dialogue with t.ROY. Output saved as a disclosure_plan artifact. Nothing in the practice transcript is stored."
+      },
+      "j4": {
+        "time": "Ongoing",
+        "name": "Interview Practice",
+        "what": "Text or live voice mock interviews tailored to your target role. Behavioral, situational, and disclosure-specific questions. Real-time feedback on framing, specificity, and narrative arc.",
+        "tech": "Text mode: Claude Sonnet. Voice mode: OpenAI Whisper (transcription) + Claude (feedback). We never store practice audio. Text practice keeps the feedback, not the conversation. Voice practice keeps a text transcript only when the person turns saving on."
+      },
+      "j5": {
+        "time": "Ongoing",
+        "name": "Applications + Follow-Up",
+        "what": "Track every application: company, status, dates, which resume version you used. Generate follow-up emails and save them to the Library.",
+        "tech": "job_application table in Neon. Refinery Artifact system for follow-up emails and cover letters. Library = the vault of all your generated documents."
+      }
+    },
+    "protocolTitle": "The behavioral protocol",
+    "protocolLead": "t.ROY follows 10 non-negotiable rules on every interaction. They are hard constraints derived from peer-reviewed research and Troy's decade of direct service. They cannot be overridden by user prompting.",
+    "rules": {
+      "r0": {
+        "rule": "Name the feeling before solving the problem",
+        "why": "Affect labeling reduces amygdala reactivity before high-stakes work begins (Lieberman et al., 2007)."
+      },
+      "r1": {
+        "rule": "Strengths before gaps. Always.",
+        "why": "Deficit-first framing activates threat response. Asset-first activates approach motivation."
+      },
+      "r2": {
+        "rule": "Never volunteer legal interpretations",
+        "why": "t.ROY is a career guide, not a lawyer. It flags disclosure moments and points to resources."
+      },
+      "r3": {
+        "rule": "Match complexity to the user's stated readiness",
+        "why": "Cognitive load theory: overwhelming someone mid-crisis loses them permanently."
+      },
+      "r4": {
+        "rule": "Offer the next step. Never a lecture.",
+        "why": "Autonomy-supportive language predicts sustained engagement (Deci & Ryan, 2000)."
+      },
+      "r5": {
+        "rule": "Use plain language. Always.",
+        "why": "The platform is written at a 6th-grade reading level. People in crisis don't need vocabulary tests."
+      },
+      "r6": {
+        "rule": "Redemption arc, not deficit report",
+        "why": "People who construct bad-to-good story arcs show measurably better post-release outcomes (McAdams, 2013)."
+      },
+      "r7": {
+        "rule": "Consent before every data use",
+        "why": "Surveillance trauma is real. Trust must be built, not assumed."
+      },
+      "r8": {
+        "rule": "Every recommendation requires a reason",
+        "why": "Unexplained AI advice erodes trust. t.ROY explains its reasoning in plain language every time."
+      },
+      "r9": {
+        "rule": "If someone is in crisis, stop and redirect",
+        "why": "A crisis disclosure during career coaching requires a human, not a chatbot. Full stop."
+      }
+    },
+    "differentTitle": "What makes it different",
+    "different": {
+      "d0": {
+        "us": "AI career analysis built for justice-impacted people, with employment gaps, records, and barriers included in the model",
+        "them": "Generic resume builders that treat a 10-year gap as a red flag"
+      },
+      "d1": {
+        "us": "Record-aware disclosure coaching built into the Refinery as a core tool",
+        "them": "Job boards that surface Ban-the-Box listings but give no guidance on what to say when asked"
+      },
+      "d2": {
+        "us": "Most AI steps logged with an input fingerprint, the model, a short note and the time taken, so you can see what ran and when",
+        "them": "Black-box recommendations with no accountability"
+      },
+      "d3": {
+        "us": "10 documented, non-negotiable behavioral rules, grounded in research, that govern every t.ROY response",
+        "them": "A generic chatbot tuned for engagement, not outcomes"
+      },
+      "d4": {
+        "us": "Consent-gated partner dashboard where organizations see only clients who have explicitly opted in",
+        "them": "Program tools that harvest participant data without meaningful consent"
+      },
+      "d5": {
+        "us": "Free at every step. No paywall, no credit card, and no data sold, ever.",
+        "them": "Freemium tools that paywall the parts people actually need"
+      },
+      "d6": {
+        "us": "Built by someone who went through the same system firsthand",
+        "them": "Tools designed by people who have never been incarcerated, for people who have"
+      }
+    },
+    "versus": "vs. {them}",
+    "privacyTitle": "The privacy model",
+    "privacyLead": "Surveillance trauma is real. Many justice-impacted people have been monitored, recorded, and reported on without their knowledge or consent for years. This platform is designed to actively undo that pattern.",
+    "privacy": {
+      "p0": {
+        "title": "Practice transcripts are saved only by choice",
+        "detail": "Text interview practice keeps the role, the frame practiced and the coach's feedback, not the conversation. Voice interview practice and disclosure rehearsal keep an encrypted text transcript only when the person turns saving on, and the person can delete it. Audio is never stored by us. Programs cannot read practice through sharing; with progress sharing on, they see a count of sessions."
+      },
+      "p1": {
+        "title": "Partner access is consent-gated",
+        "detail": "Partner organizations (nonprofits, reentry programs, job centers) can only see clients who have explicitly opted in to share their progress. The toggle is in Settings. Off by default. Only the user can turn it on. The partner cannot."
+      },
+      "p2": {
+        "title": "Forge data stays local until you choose otherwise",
+        "detail": "The Forge runs client-side. Resume data, goals, and story answers are stored in your browser's localStorage, not on our servers, until you create an account and choose to sync. You can complete the Forge and never create an account."
+      },
+      "p3": {
+        "title": "No data sold, ever",
+        "detail": "Steel Man Resumes is not funded by advertising. There is no data monetization layer. This is documented in the AGPL-3.0 license and the source code is public."
+      },
+      "p4": {
+        "title": "Right to deletion",
+        "detail": "Settings > Privacy > Delete all data removes everything server-side and clears localStorage. The deletion is immediate and irreversible."
+      }
+    },
+    "researchTitle": "The research foundation",
+    "researchLead": "Every design decision is grounded in peer-reviewed research. The behavioral protocol, the copy reading level, the narrative arc of the Forge output, and the privacy model all trace to specific empirical literature.",
+    "research": {
+      "c0": {
+        "finding": "Affect labeling reduces amygdala reactivity by up to 50%",
+        "source": "Lieberman et al., 2007 (UCLA)",
+        "detail": "Putting feelings into words activates prefrontal cortex and dampens the stress response. The Forge uses narrative reframing at every step as a documented performance technique that lowers cognitive resistance before high-stakes work. It is not therapy."
+      },
+      "c1": {
+        "finding": "Redemption narrative sequences predict higher well-being and post-release stability",
+        "source": "McAdams, 2013 (Northwestern)",
+        "detail": "People who construct bad-to-good story arcs show measurably better outcomes across health, relationships, and stability. The Forge output is structured as a redemption arc, not a deficit report. That structure replicates a documented psychological mechanism."
+      },
+      "c2": {
+        "finding": "Autonomy, competence, and relatedness are the three non-negotiable psychological needs",
+        "source": "Deci & Ryan, 2000 (Self-Determination Theory)",
+        "detail": "Incarceration systematically strips all three. This platform rebuilds them: user-driven choices (autonomy), skills surfaced from real history (competence), and language grounded in lived experience rather than clinical distance (relatedness)."
+      },
+      "c3": {
+        "finding": "Stigma-based discrimination persists even in Ban-the-Box jurisdictions",
+        "source": "Agan & Starr, 2018 (American Economic Review)",
+        "detail": "Removing the checkbox doesn't remove the bias. The Refinery's disclosure coaching prepares users for the form and for the conversation that happens after the application."
+      },
+      "c4": {
+        "finding": "Cognitive load undermines decision quality under economic stress",
+        "source": "Mullainathan & Shafir, 2013 (Scarcity)",
+        "detail": "Scarcity (of money, time, housing stability) taxes cognitive bandwidth directly. The platform is designed for people under maximum load: short prompts, no jargon, one question at a time, no decision fatigue."
+      },
+      "c5": {
+        "finding": "Workforce reentry programs with wraparound support show 2-3x better employment retention",
+        "source": "MDRC / CEP Meta-Analysis",
+        "detail": "Employment alone doesn't stick. The Refinery is a wraparound: resume + disclosure + interview + applications + coaching, in one place, free."
+      }
+    },
+    "archTitle": "Architecture and accountability",
+    "archLead": "Most AI steps are logged with a keyed, one-way fingerprint of the input (never the input itself), the model, a short note and the time taken. Resume reading, fact checks and voice practice are not in this log, and without an account the note holds none of the words a person typed. Built for funder reporting, compliance review, and program evaluation.",
+    "archLog": "// Most AI decisions logged:",
+    "arch": {
+      "a0": "Neon PostgreSQL: all structured data (users, profiles, artifacts, applications, consent records, decision log)",
+      "a1": "Cloudflare R2: encrypted document storage (uploaded resumes, generated PDFs)",
+      "a2": "Vercel: serverless hosting, edge functions, preview deployments",
+      "a3": "Resend: transactional email (magic links only, no marketing email)",
+      "a4": "Airtable: verified employer data source (manually curated, imported to PostgreSQL)"
+    },
+    "partnersTitle": "For partner organizations",
+    "partnersLead": "Reentry programs, workforce development orgs, legal aid societies, and job centers can integrate Steel Man Resumes into their client workflow. Access codes unlock higher AI usage limits and allow consent-gated progress tracking.",
+    "partners": {
+      "n0": {
+        "label": "Access code",
+        "detail": "One code per program. Clients enter it at sign-in to unlock higher limits. Codes are linked to your partner account."
+      },
+      "n1": {
+        "label": "Partner dashboard",
+        "detail": "See cohort progress (stage, artifacts completed, last activity) for clients who have opted in to share. CSV export for program reporting."
+      },
+      "n2": {
+        "label": "No vendor lock-in",
+        "detail": "AGPL-3.0 license. The source code is public. You can self-host a private instance for your program."
+      },
+      "n3": {
+        "label": "To get an access code",
+        "detail": "Email Steel Man Resumes directly. Free for nonprofits and community organizations during the launch period."
+      }
+    },
+    "fundersTitle": "For funders",
+    "fundersLead": "The platform is AGPL-3.0 open source and free to all users. No revenue is generated from user data.",
+    "funders": {
+      "n0": {
+        "label": "Measurable outputs",
+        "detail": "Every Forge completion, resume built, disclosure plan, interview session, and application tracked, with user consent and without collecting PII in aggregate reports."
+      },
+      "n1": {
+        "label": "Audit trail",
+        "detail": "The decision_log table records most AI steps: which tool ran, which model, a one-way fingerprint of the input, the time taken and tokens used, and a short note for signed-in users. Resume reading and fact checks are not in it. For voice practice it records that a session started, never what is said. Funders can request reports on AI performance, model usage, and outcome signals."
+      },
+      "n2": {
+        "label": "Target population",
+        "detail": "Justice-impacted adults in Wisconsin (initial), Midwest (expansion), national (AGPL self-host). Primary focus: people within 90 days of release or recently released."
+      },
+      "n3": {
+        "label": "No paywall, by design",
+        "detail": "The platform will never charge users. Sustainability comes from organizational licensing, grants, and eventual nonprofit status."
+      }
+    },
+    "livedTitle": "Built by someone who lived it",
+    "lived1": "Steel Man Resumes was built by Troy Carr, a justice-impacted workforce advocate with a decade of direct service navigating the same system these tools are designed to help people survive.",
+    "lived2": "The platform reflects what he wished existed when he was in it: one place that understood records, didn't treat gaps as disqualifiers, and gave plain-language guidance instead of generic advice designed for people who have never been incarcerated.",
+    "lived3": "The research is real. The behavioral rules are real. The employers are verified. The privacy model was designed with surveillance trauma in mind because Troy has lived that too.",
+    "licenseLine": "Steel Man Resumes · AGPL-3.0 open source",
+    "seeDemo": "see The Forge in action (demo mode)",
+    "backIntro": "Back to the intro"
+  },
+  "policy": {
+    "banner": "{orgs} {count, plural, =1 {requires} other {require}} some sharing as part of the program. Nothing is open yet.",
+    "and": " and ",
+    "read": "Read what they require"
+  },
+  "seat": {
+    "title": "The Refinery opens with a seat",
+    "intro": "Organizations that work with Steel Man Resumes give their people seats. Your Forge resume is yours either way, and it is saved to your account.",
+    "open": "The Refinery is open to you.",
+    "openButton": "Go to the Refinery",
+    "emailed": "We emailed your Forge package to your account address.",
+    "sendIt": "Send it to me",
+    "sendItHelp": "Email your finished Forge resume to your account address.",
+    "download": "Download it from the Forge",
+    "offerLead": "{org} asked you to join them.",
+    "offerBody": "If you join, they only see progress you choose to share from your Settings. They never see your resume text, disclosure plans, or practice answers. Joining uses one of their seats.",
+    "offerYes": "Join",
+    "offerNo": "No thanks",
+    "codeHeading": "Have a code from an organization?",
+    "codeButton": "Use code",
+    "askHeading": "No code? Ask for a seat.",
+    "askNoteLabel": "Anything you want Troy to know (optional)",
+    "askRefLabel": "Who sent you here? (optional)",
+    "askButton": "Ask for a seat",
+    "askPending": "Your request is in. Troy reviews these himself.",
+    "alwaysHeading": "These always work",
+    "backToForge": "Back to the Forge",
+    "settings": "Settings",
+    "myData": "Download or delete my data",
+    "pending": "Finish signing in first.",
+    "signedOut": "Sign in first.",
+    "checkFailed": "Your seat could not be checked. Try again shortly.",
+    "codeFailed": "That code did not work.",
+    "done": "Done.",
+    "answerFailed": "Your answer did not save. Try again.",
+    "requestFailed": "Your request did not save. Try again.",
+    "noResume": "There is no finished Forge resume to send yet.",
+    "sentTo": "Sent to {to}.",
+    "unproven": "Confirm your email address first: sign in once with an email link. You can download it now instead.",
+    "stillDraft": "Your Forge resume is still a draft. Finish it in the Forge first.",
+    "notSent": "It did not send. You can download it from the Forge instead.",
+    "goSignIn": "Go to sign in",
+    "checking": "Checking your seat...",
+    "saving": "Saving...",
+    "sending": "Sending...",
+    "troyAsked": "Troy asked: {note}"
+  },
+  "shell": {
+    "partnerView": "Partner view",
+    "clientView": "Client view",
+    "returnPartner": "Return to your partner view",
+    "experienceClient": "Experience the platform exactly as a client",
+    "loadingWorkspace": "Loading your workspace...",
+    "signOutFailed": "We couldn't confirm sign-out. Stay here and try again before leaving this computer.",
+    "notSavedGone": "Nothing was saved. That resume is no longer on this computer.",
+    "savedToAccount": "Saved to your account.",
+    "skip": "Skip to content",
+    "openNav": "Open navigation",
+    "settings": "Settings",
+    "signingOutAria": "Signing out",
+    "signOut": "Sign out",
+    "signingOut": "Signing out...",
+    "tryAgain": "Try again",
+    "inviteOne": "{org} invited you to join their team.",
+    "inviteMany": "You have {count} invitations to join a team.",
+    "reviewInvite": "Review the invitation",
+    "resumeRegion": "Resume on this computer",
+    "resumeAsk": "There's a resume in progress on this computer. Is it yours?",
+    "resumeChanged": "The resume on this computer changed since we asked. Nothing was saved. Is this one yours?",
+    "didNotSave": "It did not save. Try again.",
+    "saving": "Saving...",
+    "yesSaveTo": "Yes, save it to {email}",
+    "yesSaveMine": "Yes, save it to my account",
+    "noErase": "No, erase it",
+    "admin2faTitle": "Two-step verification is required for admin accounts.",
+    "admin2faBody": "Admin tools stay locked until you turn it on under <b>Security</b> below.",
+    "navAdmin": "Platform admin navigation",
+    "navOrg": "Organization workspace navigation",
+    "navCareer": "Career workspace navigation",
+    "closeNav": "Close navigation",
+    "trySignOutAgain": "Try sign-out again",
+    "assistantTitle": "t.ROY, for your work with people",
+    "assistantSub": "for your work with people",
+    "checkingAccount": "Checking your account...",
+    "careerWorkspace": "Career workspace",
+    "orgNav": {
+      "overview": "Organization overview",
+      "team": "Team & seats",
+      "add": "Add participants",
+      "security": "Security & privacy",
+      "clients": "My clients"
+    }
+  },
+  "spotlight": {
+    "pointing": "Assistant is pointing at an element",
+    "gotIt": "Got it"
+  },
+  "welcome": {
+    "readiness": {
+      "exploring": {
+        "label": "Just exploring",
+        "description": "Not sure I'm ready yet, but I'm curious."
+      },
+      "thinking": {
+        "label": "Thinking about it",
+        "description": "I know I need to do something, but I don't know where to start."
+      },
+      "getting-ready": {
+        "label": "Getting ready",
+        "description": "I've decided to make a change. Show me what's next."
+      },
+      "ready-now": {
+        "label": "Ready to go",
+        "description": "I'm looking for work right now. Let's move."
+      }
+    },
+    "troyResponses": {
+      "exploring": "No pressure. Let's just see what's out there. You can stop anytime.",
+      "thinking": "That's where most people start. Let's figure it out together.",
+      "getting-ready": "Good. You've already made the hardest decision. Let's build on it.",
+      "ready-now": "Let's go. First thing: your resume."
+    },
+    "path": {
+      "light": {
+        "label": "The short path",
+        "description": "The essentials only, then I build your page. You can add more on the way."
+      },
+      "full": {
+        "label": "The full path",
+        "description": "Every question, your story too. Takes longer and makes a stronger page."
+      }
+    },
+    "title": "Where are you at right now?",
+    "subtitle": "This changes how much I talk. Pick what's true.",
+    "footer": "No employer or program sees this answer. You can change it any time.",
+    "savedBefore": "Your answers from before are saved. Change this one and keep going, or start fresh.",
+    "demoNote": "Demo mode: sample data pre-filled. Watch how t.ROY guides each step.",
+    "howMuch": "How much do you want to do today?",
+    "shortSet": "You need work now, so the short path is set. Want the full one? Tap it.",
+    "pickFits": "Pick what fits. You can switch later by coming back here."
+  }
+}

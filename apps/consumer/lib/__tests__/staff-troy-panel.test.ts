@@ -53,6 +53,7 @@ it("fix round 1: header and task reads, and a t.ROY applications open, read plai
   // accessLogLine, which uses accessLogAction for every staff line.
   const exp = read("../../app/api/user/export-data/route.ts");
   assert.match(exp, /accessLogLine\(e, scopeLabel\)/);
-  assert.match(read("../../components/SharingControls.tsx"), /accessLogLine\(e, label\)/);
+  // The one shared line function, now wrapped by ts() for Spanish (lib/server-text.ts).
+  assert.match(read("../../components/SharingControls.tsx"), /ts\(accessLogLine\(e, labelText\)\)/);
   assert.match(read("../access-log-words.ts"), /accessLogAction\(e\.kind, e\.scope, label, e\.via\)/);
 });

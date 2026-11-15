@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { RECORD_CHECK_ENABLED_ENV, recordStepOn, serverSwitchOn, switchedOffResponse } from "../server-switch";
 import { buildSystemPrompt } from "../assistant-prompt";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { intlMarkup, MESSAGES } from "./helpers/intl";
 
 // SecurityContent uses the classic JSX runtime.
 (globalThis as { React?: unknown }).React = React;
@@ -152,9 +152,9 @@ describe("the screen and the entry points", () => {
 describe("review M1: the security page and Settings describe the step only while on", () => {
   it("SecurityContent renders no record check copy while off, and all of it while on", async () => {
     const { SecurityContent } = await import("../../components/SecurityContent");
-    const off = renderToStaticMarkup(React.createElement(SecurityContent, {})).toLowerCase();
-    const offExplicit = renderToStaticMarkup(React.createElement(SecurityContent, { recordStep: false })).toLowerCase();
-    const on = renderToStaticMarkup(React.createElement(SecurityContent, { recordStep: true })).toLowerCase();
+    const off = intlMarkup(React.createElement(SecurityContent, {})).toLowerCase();
+    const offExplicit = intlMarkup(React.createElement(SecurityContent, { recordStep: false })).toLowerCase();
+    const on = intlMarkup(React.createElement(SecurityContent, { recordStep: true })).toLowerCase();
     for (const html of [off, offExplicit]) {
       assert.ok(!html.includes("record check"), "no record check mention while off");
       assert.ok(!html.includes("2 years"), "no retention exception while off");
@@ -176,8 +176,13 @@ describe("review M1: the security page and Settings describe the step only while
 
   it("Settings shows its record check line only while on", () => {
     const page = code(read("app/(dashboard)/dashboard/settings/page.tsx"));
-    const at = page.indexOf("In the record check, what you type");
-    assert.ok(at > 0);
+    // The line's English now lives in the catalog; it must still say what it said.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const line: string = (MESSAGES.en as any).refineryAccount.settings.data.handleRecordCheck;
+    assert.match(line, /^In the record check, what you type about your record goes to the AI only after you say yes on that screen\./);
+    const at = page.indexOf('t("handleRecordCheck")');
+    assert.ok(at > 0, "the page shows the catalog line");
+    assert.match(page.slice(page.lastIndexOf("useTranslations(", at)), /^useTranslations\("refineryAccount\.settings\.data"\)/, "from the settings.data namespace");
     const before = page.slice(Math.max(0, at - 400), at);
     assert.match(before, /\{recordStep && !isOrgStaff && \(\s*<li/, "staff never see the record check line (staff pass S2)");
     assert.match(page, /const \{ recordStep \} = useServerSwitches\(\);/);

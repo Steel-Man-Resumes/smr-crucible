@@ -10,8 +10,10 @@
 
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AiPolicyEditor } from "./AiPolicyEditor";
 import { labelForEndpoint } from "@/lib/ai-usage-labels";
+import { useServerText } from "@/components/ServerTextProvider";
 
 function usd(v: unknown): string {
   const n = Number(v || 0);
@@ -36,6 +38,7 @@ function Shell({
   subtitle: string;
   children: React.ReactNode;
 }) {
+  const tr = useTranslations("refineryAccount.aiCosts");
   const [open, setOpen] = useState(false);
   return (
     <div className="border border-t-line bg-t-panel mt-6">
@@ -47,7 +50,7 @@ function Shell({
           <span className="text-sm font-semibold text-t-white block">{title}</span>
           <span className="text-xs text-t-phos-dim">{subtitle}</span>
         </span>
-        <span className="text-xs text-t-phos-dim ml-3">{open ? "Hide" : "Show"}</span>
+        <span className="text-xs text-t-phos-dim ml-3">{open ? tr("hide") : tr("show")}</span>
       </button>
       {open && <div className="px-4 pb-4 border-t border-t-line pt-3">{children}</div>}
     </div>
@@ -176,6 +179,9 @@ export function AiCostsAdminSection() {
 }
 
 export function AiCostsOwnSection() {
+  const tr = useTranslations("refineryAccount.aiCosts");
+  const ts = useServerText();
+  const endpointLabel = (key: string | null | undefined) => (key != null && tr.has(`endpoints.${String(key).trim()}`) ? tr(`endpoints.${String(key).trim()}`) : ts(labelForEndpoint(key)));
   const staff = !!useEffectiveRole()?.orgRole;
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
@@ -187,7 +193,7 @@ export function AiCostsOwnSection() {
     fetch("/api/user/ai-costs?days=30")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => !cancelled && setData(d))
-      .catch(() => !cancelled && setError("Could not load usage."));
+      .catch(() => !cancelled && setError(tr("loadError")));
     return () => {
       cancelled = true;
     };
@@ -195,40 +201,37 @@ export function AiCostsOwnSection() {
 
   return (
     <Shell
-      title="Your AI usage"
-      subtitle="Recorded costs and estimates for your account (last 30 days)"
+      title={tr("ownTitle")}
+      subtitle={tr("ownSubtitle")}
     >
       {error && <p className="text-xs text-t-red">{error}</p>}
-      {!data && !error && <p className="text-xs text-t-phos-dim">Loading...</p>}
+      {!data && !error && <p className="text-xs text-t-phos-dim">{tr("loading")}</p>}
       {data && (
         <div className="space-y-3">
           <p className="text-sm text-t-white">
             <strong>{usd(data.totals?.cost_usd)}</strong>{" "}
             <span className="text-xs text-t-phos-dim">
-              across {num(data.totals?.calls)} AI calls (
-              {num(data.totals?.input_tokens)} in / {num(data.totals?.output_tokens)}{" "}
-              out tokens)
+              {tr("ownTotals", { calls: num(data.totals?.calls), input: num(data.totals?.input_tokens), output: num(data.totals?.output_tokens) })}
             </span>
           </p>
           {voiceMinutes(data.totals?.audio_seconds) > 0 && (
             <p className="text-xs text-t-phos-dim">
-              Includes {num(voiceMinutes(data.totals?.audio_seconds))} minutes of
-              voice practice.
+              {tr("voiceMinutes", { minutes: num(voiceMinutes(data.totals?.audio_seconds)) })}
             </p>
           )}
           {data.perEndpoint?.length > 0 && (
             <table className="w-full">
               <thead>
                 <tr>
-                  <th className={th}>Feature</th>
-                  <th className={th}>Calls</th>
-                  <th className={th}>Cost</th>
+                  <th className={th}>{tr("feature")}</th>
+                  <th className={th}>{tr("calls")}</th>
+                  <th className={th}>{tr("cost")}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.perEndpoint.map((e: any, i: number) => (
                   <tr key={i} className="border-t border-t-line">
-                    <td className={td}>{labelForEndpoint(e.endpoint)}</td>
+                    <td className={td}>{endpointLabel(e.endpoint)}</td>
                     <td className={td}>{num(e.calls)}</td>
                     <td className={`${td} font-medium text-t-white`}>{usd(e.cost_usd)}</td>
                   </tr>
@@ -236,14 +239,12 @@ export function AiCostsOwnSection() {
               </tbody>
             </table>
           )}
-          <p className="text-xs text-t-phos-dim">{usd(data.totals?.estimated_usd)} is estimated. {num(data.totals?.unpriced_calls)} calls have no price yet, and {num(data.totals?.legacy_calls)} use earlier accounting. This is not a bill.</p>
+          <p className="text-xs text-t-phos-dim">{tr("estimated", { estimated: usd(data.totals?.estimated_usd), unpriced: num(data.totals?.unpriced_calls), legacy: num(data.totals?.legacy_calls) })}</p>
           <p className="text-[10px] text-t-phos-dim">
-            Cost tracking began Aug 2, 2026. AI work before that date is not
-            shown here.
+            {tr("trackingBegan")}
           </p>
           {!staff && <p className="text-[10px] text-t-phos-dim">
-            If a partner organization sponsors your account, they see this too.
-            That is how your access stays free.
+            {tr("sponsorSees")}
           </p>}
         </div>
       )}

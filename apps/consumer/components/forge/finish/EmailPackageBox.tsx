@@ -12,6 +12,7 @@ import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { NEWSLETTER_DEFAULT_CHECKED, NEWSLETTER_LINE } from "@/lib/finish-gate";
+import { useServerText } from "@/components/ServerTextProvider";
 
 export function EmailPackageBox({
   resumeText,
@@ -28,6 +29,7 @@ export function EmailPackageBox({
   finish: unknown;
 }) {
   const t = useTranslations("forgeOutput.emailBox");
+  const ts = useServerText();
   const [email, setEmail] = useState("");
   const [letter, setLetter] = useState(NEWSLETTER_DEFAULT_CHECKED);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -114,7 +116,7 @@ export function EmailPackageBox({
           className="mt-0.5 accent-t-amber"
           data-testid="newsletter-optin"
         />
-        <span>{NEWSLETTER_LINE}</span>
+        <span>{ts(NEWSLETTER_LINE)}</span>
       </label>
       {/* Bot check: renders only when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set;
           the server checks it when TURNSTILE_SECRET_KEY is set. */}

@@ -16,6 +16,7 @@ import { gapStart, serviceCatalog, serviceRows } from '../tour/services';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { leaveAction, lockPageForTour, safeTourDestination } from '../tour/page-lock';
 import { TOUR_STOP_COUNT, TOUR_VERSION } from '../guidedTour';
+import { MESSAGES } from './helpers/intl';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -347,11 +348,14 @@ test('tour destinations stay inside the workspace', () => {
 
 /* Copy matches the code */
 test('the lock scenes repeat the server messages word for word', () => {
+  // The scenes read these sentences from the catalog (refineryAccount.tour.lock) with the step name filled in; the English after the name must still be the server's, word for word.
   const server = read('lib/progression-server.ts');
-  for (const text of ['is open. The recommended preparation is still there when you need it.', 'opened at your request.']) {
+  const lock = MESSAGES.en.refineryAccount.tour.lock;
+  for (const [key, text] of [['isOpen', 'is open. The recommended preparation is still there when you need it.'], ['opened', 'opened at your request.']] as const) {
     assert.ok(server.includes(text), `server: ${text}`);
-    assert.ok(read('components/tour/TourScenes.tsx').includes(text), `desktop scene: ${text}`);
-    assert.ok(read('components/tour/TourPortrait.tsx').includes(text), `portrait scene: ${text}`);
+    assert.equal(lock[key], `{step} ${text}`, `catalog ${key}: the step name then the server's words`);
+    assert.ok(read('components/tour/TourScenes.tsx').includes(`tr('lock.${key}', { step: stepLabel })`), `desktop scene reads lock.${key}`);
+    assert.ok(read('components/tour/TourPortrait.tsx').includes(`tr('lock.${key}', { step: stepLabel })`), `portrait scene reads lock.${key}`);
   }
 });
 

@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useReducer, useRef, useState, Suspense } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { saveArtifactReceipt } from "@/lib/artifact-save";
@@ -31,9 +32,10 @@ import { ConfidenceCoach } from "@/components/ConfidenceCoach";
 import { CheckCircle2 } from "lucide-react";
 import { RECORD_CHECK_COPY } from "@/lib/record-check/copy";
 import { useServerSwitches } from "@/components/ServerSwitches";
+import { useServerText } from "@/components/ServerTextProvider";
 import { HurdlePicker } from "@/components/hurdles/HurdlePicker";
 import { HurdleQuestion } from "@/components/hurdles/HurdleQuestion";
-import { HurdlePlanView, type WordingStatus } from "@/components/hurdles/HurdlePlanView";
+import { HurdlePlanView, tsPlanLine, type WordingStatus } from "@/components/hurdles/HurdlePlanView";
 import { HURDLES, type HurdleId } from "@/lib/hurdles/graph";
 import { INITIAL_STATE, hurdlesOf, plannerReducer, position, reachedAnswers } from "@/lib/hurdles/reducer";
 import { coverageOf } from "@/lib/hurdles/coverage";
@@ -74,6 +76,11 @@ export default function DisclosurePlannerPageWrapper() {
 }
 
 function DisclosurePlannerPage() {
+  const t = useTranslations("refineryInterview.disclosure");
+  const th = useTranslations("refineryInterview.hurdles");
+  const tc = useTranslations("common.actions");
+  const ts = useServerText();
+  const locale = useLocale();
   const effectiveRole = useEffectiveRole();
   const searchParams = useSearchParams();
   const { context } = useUserContext();
@@ -128,17 +135,17 @@ function DisclosurePlannerPage() {
       if (yes) {
         const r = await fetch("/api/hurdle-plan/consent", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
         const d = await r.json().catch(() => null);
-        if (!r.ok || !d?.granted) throw new Error(d?.error || "Your yes did not save, so record answers stay away from the AI. Try again.");
+        if (!r.ok || !d?.granted) throw new Error(d?.error || t("consent.yesNotSaved"));
         setAiConsent(true);
       } else {
         if (aiConsent) {
           const r = await fetch("/api/hurdle-plan/consent", { method: "DELETE" });
-          if (!r.ok) throw new Error("That did not save. Try again.");
+          if (!r.ok) throw new Error(t("consent.notSaved"));
         }
         setAiConsent(false);
       }
       setConsentAsked(true);
-    } catch (e) { setConsentError(e instanceof Error ? e.message : "That did not save. Try again."); }
+    } catch (e) { setConsentError(e instanceof Error ? e.message : t("consent.notSaved")); }
     finally { setConsentBusy(false); }
   }
 
@@ -180,7 +187,7 @@ function DisclosurePlannerPage() {
       if (!live) return;
       setTargetCompany(data.application.company || "");
       setTargetJob(data.application.job_title || "");
-    }).catch(() => live && setApplicationError("This saved job could not be loaded. Check your applications before continuing."));
+    }).catch(() => live && setApplicationError(t("applicationLoadError")));
     return () => { live = false; };
   }, [searchParams]);
 
@@ -246,7 +253,7 @@ function DisclosurePlannerPage() {
     const payload = payloadRef.current;
     if (!payload) return;
     await runSave({ ...INITIAL_SAVE, version: versionRef.current }, async () => {
-      if (!accountId) throw new Error("Your account is still loading.");
+      if (!accountId) throw new Error(t("accountLoading"));
       return saveArtifactReceipt(payload, accountId);
     }, (e) => {
       saveDispatch(e);
@@ -268,11 +275,11 @@ function DisclosurePlannerPage() {
         signal: AbortSignal.timeout(30_000),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok || !data) return { ...NO_WORDING, status: "failed", message: data?.error || "The AI wording didn't come through. Your plan is built from your answers and is complete without it." };
+      if (!res.ok || !data) return { ...NO_WORDING, status: "failed", message: data?.error || t("wording.failedApi") };
       if (data.status === "nothing_to_phrase") return NO_WORDING;
       return { status: "done", message: "", summaries: data.phrasing?.summaries ?? {}, strippedCount: Number(data.strippedCount) || 0 };
     } catch {
-      return { ...NO_WORDING, status: "failed", message: "The connection dropped before the wording came back. Your plan is built from your answers. Try the wording again." };
+      return { ...NO_WORDING, status: "failed", message: t("wording.failedConnection") };
     }
   }
 
@@ -309,7 +316,7 @@ function DisclosurePlannerPage() {
     try {
       const current = await fetch("/api/job-search/preferences", { cache: "no-store" });
       const data = await current.json().catch(() => null);
-      if (!current.ok || !data) throw new Error(data?.error || "Your job search choices could not be loaded.");
+      if (!current.ok || !data) throw new Error(data?.error || t("jobFilter.loadFailed"));
       const filters = applyConstraints(data.saved?.filters, plan.constraints);
       const res = await fetch("/api/job-search/preferences", {
         method: "POST",
@@ -317,10 +324,10 @@ function DisclosurePlannerPage() {
         body: JSON.stringify({ laneId: data.laneId ?? "main", scope: "lane", revision: data.revision || 0, role: data.saved?.role || targetJob || "", location: data.saved?.location || location || "", filters }),
       });
       const out = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(out?.error || "Your job search choices didn't save.");
-      setJobFilter({ status: "saved", message: "Added to your job search filters. You can change them on the Find work page." });
+      if (!res.ok) throw new Error(out?.error || t("jobFilter.saveFailed"));
+      setJobFilter({ status: "saved", message: t("jobFilter.added") });
     } catch (error) {
-      setJobFilter({ status: "failed", message: `${error instanceof Error ? error.message : "That didn't save."} Try again.` });
+      setJobFilter({ status: "failed", message: t("jobFilter.failed", { reason: error instanceof Error ? error.message : t("jobFilter.defaultReason") }) });
     }
   }
 
@@ -354,26 +361,26 @@ function DisclosurePlannerPage() {
   async function copyRecordPlan() {
     if (!plan?.record) return;
     const text = [...plan.record.whenToBringItUp, plan.record.open, plan.record.next, plan.record.disclaimer].join("\n");
-    try { await navigator.clipboard.writeText(text); setCopyNote("Copied. Paste it somewhere you keep private."); }
-    catch { setCopyNote("Copying did not work here. Use Download instead."); }
+    try { await navigator.clipboard.writeText(text); setCopyNote(t("copy.done")); }
+    catch { setCopyNote(t("copy.failed")); }
   }
 
   const consentCard = (
     <div className="bg-t-panel p-5 border border-t-steel mb-6" data-testid="record-consent">
-      <h3 className="font-semibold text-t-white mb-2">Your record answers and AI</h3>
+      <h3 className="font-semibold text-t-white mb-2">{t("consent.title")}</h3>
       <div className="text-sm text-t-phos-dim leading-relaxed space-y-2 mb-4">
-        <p>The record questions ask where it comes up, the kind of record, how long ago, supervision, and your own words. Every one can be skipped. This plan never asks what happened.</p>
-        <p>With your yes, those answers can go to an AI service (our main one, or a backup if it is down) to read your plan back to you, and your own record words go into practice with t.ROY. AI never rewrites your record lines. Without your yes, no record answer goes to any AI.</p>
-        <p>Your yes is saved to your account with the date, and you can take it back here any time.</p>
-        <p>Your record answers and your record words are never saved: not in your plan, not in your Library, not with a job application. Copy or download them before you leave the page.</p>
+        <p>{t("consent.p1")}</p>
+        <p>{t("consent.p2")}</p>
+        <p>{t("consent.p3")}</p>
+        <p>{t("consent.p4")}</p>
       </div>
       {consentError && <p role="alert" className="text-sm text-t-red mb-3">{consentError}</p>}
       <div className="flex flex-wrap gap-3">
         <button disabled={consentBusy} onClick={() => void answerConsent(true)} className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright min-h-touch disabled:opacity-50">
-          Yes, an AI service can use them
+          {t("consent.yes")}
         </button>
         <button disabled={consentBusy} onClick={() => void answerConsent(false)} className="t-focus px-4 py-3 text-t-phos-dim text-sm hover:text-t-white min-h-touch disabled:opacity-50">
-          No, keep my record answers away from AI
+          {t("consent.no")}
         </button>
       </div>
     </div>
@@ -428,17 +435,17 @@ function DisclosurePlannerPage() {
     if (getNode(planner.cursor)?.hurdle === "record" && !consentAsked) {
       return (
         <div className="max-w-2xl">
-          <h1 className="text-2xl font-bold text-t-white mb-2">Before the record questions</h1>
-          <p className="text-sm text-t-phos mb-4">Your answers added the record conversation to your plan. One question first.</p>
+          <h1 className="text-2xl font-bold text-t-white mb-2">{t("beforeRecord.title")}</h1>
+          <p className="text-sm text-t-phos mb-4">{t("beforeRecord.body")}</p>
           {consentCard}
-          {recordStep && <p className="text-sm text-t-phos-dim mb-4">{RECORD_CHECK_COPY.entryQuestion} <a href="/dashboard/record-check" className="underline text-t-steel">{RECORD_CHECK_COPY.entryButton}</a></p>}
-          <button onClick={() => dispatch({ type: "back" })} className="t-focus px-3 py-2.5 text-sm text-t-phos-dim hover:text-t-white min-h-touch">Back</button>
+          {recordStep && <p className="text-sm text-t-phos-dim mb-4">{ts(RECORD_CHECK_COPY.entryQuestion)} <a href="/dashboard/record-check" className="underline text-t-steel">{ts(RECORD_CHECK_COPY.entryButton)}</a></p>}
+          <button onClick={() => dispatch({ type: "back" })} className="t-focus px-3 py-2.5 text-sm text-t-phos-dim hover:text-t-white min-h-touch">{tc("back")}</button>
         </div>
       );
     }
     return (
       <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-t-white mb-4">Plan what to say</h1>
+        <h1 className="text-2xl font-bold text-t-white mb-4">{t("title")}</h1>
         <HurdleQuestion
           key={planner.cursor}
           nodeId={planner.cursor}
@@ -450,7 +457,7 @@ function DisclosurePlannerPage() {
           onSkip={() => dispatch({ type: "skip", nodeId: planner.cursor! })}
           onBack={() => dispatch({ type: "back" })}
         />
-        <p className="text-xs text-t-phos-dim mt-3" aria-live="polite">{cov.line}</p>
+        <p className="text-xs text-t-phos-dim mt-3" aria-live="polite">{tsPlanLine(cov.line, ts)}</p>
       </div>
     );
   }
@@ -460,21 +467,21 @@ function DisclosurePlannerPage() {
     const cov = coverageOf(planner);
     return (
       <div className="max-w-2xl">
-        <h1 className="text-2xl font-bold text-t-white mb-2">That&apos;s everything on your path</h1>
-        <p className="text-sm text-t-phos mb-4">{cov.line}</p>
+        <h1 className="text-2xl font-bold text-t-white mb-2">{t("done.title")}</h1>
+        <p className="text-sm text-t-phos mb-4">{tsPlanLine(cov.line, ts)}</p>
         <ul className="mb-6 space-y-1">
           {cov.byHurdle.map((c) => (
             <li key={c.hurdle} className="text-sm text-t-phos">
-              <span className="text-t-white font-medium">{HURDLES[c.hurdle].label}:</span> {c.answered} answered{c.skipped ? `, ${c.skipped} skipped` : ""}{c.notSure ? `, ${c.notSure} not sure` : ""}
+              <span className="text-t-white font-medium">{th(`h.${c.hurdle}.label`)}:</span> {t("done.answered", { count: c.answered })}{c.skipped ? t("done.skipped", { count: c.skipped }) : ""}{c.notSure ? t("done.notSure", { count: c.notSure }) : ""}
             </li>
           ))}
         </ul>
         <div className="flex flex-wrap gap-3">
           <button onClick={() => void finishPlan()} className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright min-h-touch" data-testid="build-plan">
-            Build my plan
+            {t("done.build")}
           </button>
-          <button onClick={() => dispatch({ type: "back" })} className="t-focus px-4 py-3 text-sm text-t-phos-dim hover:text-t-white min-h-touch">Back</button>
-          <button onClick={() => dispatch({ type: "edit" })} className="t-focus px-4 py-3 text-sm text-t-phos-dim hover:text-t-white min-h-touch">Change hurdles</button>
+          <button onClick={() => dispatch({ type: "back" })} className="t-focus px-4 py-3 text-sm text-t-phos-dim hover:text-t-white min-h-touch">{tc("back")}</button>
+          <button onClick={() => dispatch({ type: "edit" })} className="t-focus px-4 py-3 text-sm text-t-phos-dim hover:text-t-white min-h-touch">{t("done.changeHurdles")}</button>
         </div>
       </div>
     );
@@ -483,18 +490,17 @@ function DisclosurePlannerPage() {
   // --- Pick ---
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold text-t-white mb-2">Plan what to say</h1>
-      <GhostGuide message={getOpusMessage("disclosure")} pageId="disclosure" />
+      <h1 className="text-2xl font-bold text-t-white mb-2">{t("title")}</h1>
+      <GhostGuide message={getOpusMessage("disclosure", undefined, undefined, locale)} pageId="disclosure" />
       <p className="text-base text-t-phos-dim mb-6">
-        Name what is in your way, work through it one question at a time, and leave with a plan:
-        what you know, what is still open, what to do now, who can help, and what you choose to tell an employer.
+        {t("pick.intro")}
       </p>
 
       {lastSaved && (
         <div className="bg-t-panel p-4 border border-t-line mb-6">
-          <p className="text-sm text-t-phos mb-2">You have a saved plan. Pick up from its answers? Record answers are never saved, so those questions will ask again.</p>
+          <p className="text-sm text-t-phos mb-2">{t("pick.savedPlan")}</p>
           <button onClick={() => { dispatch({ type: "restore", selected: lastSaved.selected, answers: lastSaved.choices }); setLastSaved(null); }} className="t-focus px-4 py-2 border border-t-steel text-t-steel text-sm font-bold min-h-touch">
-            Pick up where I left off
+            {t("pick.resume")}
           </button>
         </div>
       )}
@@ -503,10 +509,10 @@ function DisclosurePlannerPage() {
 
       {isRecord && recordStep && (
         <div className="bg-t-panel p-5 border border-t-line mb-6" data-testid="record-check-entry">
-          <h3 className="font-semibold text-t-white mb-2">{RECORD_CHECK_COPY.entryQuestion}</h3>
-          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{RECORD_CHECK_COPY.entryBody}</p>
+          <h3 className="font-semibold text-t-white mb-2">{ts(RECORD_CHECK_COPY.entryQuestion)}</h3>
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{ts(RECORD_CHECK_COPY.entryBody)}</p>
           <a href="/dashboard/record-check" className="t-focus inline-block px-4 py-2.5 border border-t-steel text-t-steel text-sm font-bold min-h-touch">
-            {RECORD_CHECK_COPY.entryButton}
+            {ts(RECORD_CHECK_COPY.entryButton)}
           </a>
         </div>
       )}
@@ -514,58 +520,58 @@ function DisclosurePlannerPage() {
       {isRecord && !consentAsked && consentCard}
       {isRecord && consentAsked && (
         <p className="text-xs text-t-phos-dim mb-6">
-          {aiConsent ? "You said yes: record answers can go to an AI service. " : "Your record answers stay away from every AI. "}
-          <button onClick={() => setConsentAsked(false)} className="underline">Change this</button>
+          {aiConsent ? t("pick.consentYes") : t("pick.consentNo")}{" "}
+          <button onClick={() => setConsentAsked(false)} className="underline">{t("pick.changeThis")}</button>
         </p>
       )}
 
       <div className="mb-6">
         <label htmlFor="target-job" className="text-sm font-medium text-t-white block mb-1">
-          Target job <span className="font-normal text-t-phos-dim">(optional)</span>
+          {t("pick.targetJob")} <span className="font-normal text-t-phos-dim">{t("pick.optional")}</span>
         </label>
         <input
           id="target-job"
           value={targetJob}
           onChange={(e) => setTargetJob(e.target.value)}
-          placeholder={forge.careerPaths[0]?.title ? `e.g., ${forge.careerPaths[0].title}` : "e.g., Warehouse Associate"}
+          placeholder={forge.careerPaths[0]?.title ? t("pick.targetJobExample", { job: forge.careerPaths[0].title }) : t("pick.targetJobDefault")}
           className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
         />
         {applicationError && <p role="alert" className="text-sm text-t-red mt-2">{applicationError}</p>}
-        {targetCompany && <p className="text-xs text-t-phos-dim mt-2">Employer: {targetCompany}</p>}
+        {targetCompany && <p className="text-xs text-t-phos-dim mt-2">{t("pick.employer", { company: targetCompany })}</p>}
       </div>
 
       <div className="bg-t-panel p-5 border border-t-line mb-8">
-        <h2 className="font-semibold text-t-amber-bright mb-1">Strengths to lead with</h2>
-        <p className="text-xs text-t-phos-dim mb-3">From your Forge work, if you have any. Edit them, or ask for suggestions. Nothing is added until you say yes.</p>
+        <h2 className="font-semibold text-t-amber-bright mb-1">{t("strengths.title")}</h2>
+        <p className="text-xs text-t-phos-dim mb-3">{t("strengths.note")}</p>
         {forge.strengths.map((s, i) => (
           <div key={i} className="flex gap-2 mb-2">
-            <input aria-label={`Strength ${i + 1}`} value={s.title} onChange={(e) => updateStrength(i, "title", e.target.value)} className="flex-1 px-3 py-2 border border-t-line text-sm text-t-white bg-t-panel-2 focus:border-t-amber focus:outline-none" />
-            <button type="button" onClick={() => setForge((p) => ({ ...p, strengths: p.strengths.filter((_, j) => j !== i) }))} aria-label="Remove this strength" className="text-t-phos-dim hover:text-t-red text-xl px-2">&times;</button>
+            <input aria-label={t("strengths.itemAria", { number: i + 1 })} value={s.title} onChange={(e) => updateStrength(i, "title", e.target.value)} className="flex-1 px-3 py-2 border border-t-line text-sm text-t-white bg-t-panel-2 focus:border-t-amber focus:outline-none" />
+            <button type="button" onClick={() => setForge((p) => ({ ...p, strengths: p.strengths.filter((_, j) => j !== i) }))} aria-label={t("strengths.removeAria")} className="text-t-phos-dim hover:text-t-red text-xl px-2">&times;</button>
           </div>
         ))}
         {proposalsState !== "loading" && proposals.length === 0 && (
           <button type="button" onClick={() => void proposeStrengths()} className="t-focus mt-1 px-4 py-2 bg-t-steel text-white text-sm font-bold hover:opacity-90 min-h-touch">
-            {proposalsState === "done" ? "Look again" : "Suggest strengths from my history"}
+            {proposalsState === "done" ? t("strengths.lookAgain") : t("strengths.suggest")}
           </button>
         )}
-        {proposalsState === "loading" && <p className="text-sm text-t-phos mt-2" role="status">Looking through your history...</p>}
+        {proposalsState === "loading" && <p className="text-sm text-t-phos mt-2" role="status">{t("strengths.looking")}</p>}
         {proposalsState === "done" && proposals.length === 0 && (
-          <p className="text-sm text-t-phos mt-2" role="status">No new strengths turned up. Add one yourself: one thing you did that you would want a boss to know.</p>
+          <p className="text-sm text-t-phos mt-2" role="status">{t("strengths.none")}</p>
         )}
-        {proposalsState === "error" && <p className="text-sm text-t-amber-bright mt-2" role="alert">Suggestions could not load right now. You can still add strengths yourself.</p>}
+        {proposalsState === "error" && <p className="text-sm text-t-amber-bright mt-2" role="alert">{t("strengths.loadError")}</p>}
         {proposals.map((p, i) => (
           <div key={i} className="bg-t-panel-2 px-4 py-3 border border-t-line mt-2">
-            <p className="text-xs text-t-steel font-medium mb-1">Does this describe something you did?</p>
+            <p className="text-xs text-t-steel font-medium mb-1">{t("strengths.proposalQuestion")}</p>
             <p className="text-sm font-medium text-t-white">{p.title}</p>
-            <p className="text-xs text-t-phos-dim mb-2">{p.evidence}{p.source ? ` (from your ${p.source})` : ""}</p>
+            <p className="text-xs text-t-phos-dim mb-2">{p.evidence}{p.source ? t("strengths.fromSource", { source: p.source }) : ""}</p>
             <div className="flex gap-2">
-              <button type="button" onClick={() => acceptProposal(i)} className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold">Yes, that&apos;s me</button>
-              <button type="button" onClick={() => setProposals((prev) => prev.filter((_, j) => j !== i))} className="px-3 py-1.5 text-t-phos-dim text-xs hover:text-t-white">Not this one</button>
+              <button type="button" onClick={() => acceptProposal(i)} className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold">{t("strengths.yesMe")}</button>
+              <button type="button" onClick={() => setProposals((prev) => prev.filter((_, j) => j !== i))} className="px-3 py-1.5 text-t-phos-dim text-xs hover:text-t-white">{t("strengths.notThis")}</button>
             </div>
           </div>
         ))}
         <button type="button" onClick={() => setForge((p) => ({ ...p, strengths: [...p.strengths, { title: "", evidence: "" }] }))} className="block mt-3 text-sm font-medium text-t-amber-bright hover:text-t-amber">
-          + Add a strength
+          {t("strengths.add")}
         </button>
       </div>
 
@@ -575,25 +581,26 @@ function DisclosurePlannerPage() {
         className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-40 min-h-touch"
         data-testid="start-planner"
       >
-        {planner.selected.length ? `Start with ${HURDLES[planner.selected[0]].label.toLowerCase()}` : "Pick at least one to start"}
+        {planner.selected.length ? t("pick.startWith", { hurdle: th(`h.${planner.selected[0]}.label`).toLowerCase() }) : t("pick.pickOne")}
       </button>
-      {isRecord && !consentAsked && <p className="text-xs text-t-phos-dim mt-2">Answer the AI question above first. Either answer is fine.</p>}
+      {isRecord && !consentAsked && <p className="text-xs text-t-phos-dim mt-2">{t("pick.answerAiFirst")}</p>}
     </div>
   );
 }
 
 function SavedToast({ onDone }: { onDone: () => void }) {
+  const t = useTranslations("refineryInterview.disclosure");
   useEffect(() => {
-    const t = setTimeout(onDone, 3200);
-    return () => clearTimeout(t);
+    const timer = setTimeout(onDone, 3200);
+    return () => clearTimeout(timer);
   }, [onDone]);
   return (
     <div className="pointer-events-none fixed left-1/2 top-24 z-50 -translate-x-1/2">
       <div className="flex items-center gap-3 rounded-[6px] border border-[#b9cdbd] bg-[#e3ede5] px-5 py-3 text-[#344b38] shadow-[0_8px_22px_rgba(22,26,21,0.14)]">
         <CheckCircle2 size={20} aria-hidden="true" />
         <div>
-          <p className="m-0 text-sm font-semibold">Plan saved</p>
-          <p className="m-0 mt-0.5 text-xs">It&apos;s in your Library</p>
+          <p className="m-0 text-sm font-semibold">{t("toast.title")}</p>
+          <p className="m-0 mt-0.5 text-xs">{t("toast.body")}</p>
         </div>
       </div>
     </div>

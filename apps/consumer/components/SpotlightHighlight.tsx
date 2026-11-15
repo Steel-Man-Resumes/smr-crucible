@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   HIGHLIGHT_EVENT,
   HIGHLIGHT_CLEAR_EVENT,
@@ -33,6 +34,7 @@ interface Box {
 }
 
 export function HighlightHost() {
+  const t = useTranslations("refineryShell.spotlight");
   const [active, setActive] = useState<HighlightDetail | null>(null);
   const [box, setBox] = useState<Box | null>(null);
   const pathname = usePathname();
@@ -164,7 +166,7 @@ export function HighlightHost() {
         className="pointer-events-auto absolute w-[280px] rounded-[7px] border border-amber-300 bg-[#fdf9ef] p-3 shadow-xl"
         style={{ top: captionTop, bottom: captionBottom, left: captionLeft }}
         role="note"
-        aria-label="Assistant is pointing at an element"
+        aria-label={t("pointing")}
       >
         <p className="text-sm leading-snug text-[#3a3a33]">{active.note}</p>
         <button
@@ -172,7 +174,7 @@ export function HighlightHost() {
           onClick={dismiss}
           className="mt-2 rounded-[5px] border border-[#b9cdbd] bg-white px-3 py-1.5 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
         >
-          Got it
+          {t("gotIt")}
         </button>
       </div>
     </div>

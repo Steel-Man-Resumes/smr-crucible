@@ -11,13 +11,15 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useLanes } from "@/components/lanes/useLanes";
 import { laneKindOf } from "@crucible/core/src/careerLaneShared";
-import { CREATIVE_INTRO } from "@/lib/creative";
 import { CreativeLaneView } from "@/components/creative/CreativeLaneView";
 import { StartCreativeLane } from "@/components/creative/StartCreativeLane";
 
 function CreativeInner() {
+  const t = useTranslations("refineryResume.creativePage");
+  const ts = useTranslations("refineryResume.creative.shared");
   const lanesApi = useLanes();
   const params = useSearchParams();
   const wanted = params.get("lane");
@@ -38,8 +40,8 @@ function CreativeInner() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 sm:py-10">
-      <h1 className="text-2xl font-bold text-t-white">Creative work</h1>
-      <p className="text-t-phos-dim mt-1">{CREATIVE_INTRO}</p>
+      <h1 className="text-2xl font-bold text-t-white">{t("title")}</h1>
+      <p className="text-t-phos-dim mt-1">{ts("intro.creative")}</p>
 
       {!lanesApi.loaded ? (
         <div className="mt-6 h-24 border border-t-line bg-t-panel" aria-hidden="true" />
@@ -48,7 +50,7 @@ function CreativeInner() {
           {creative.length > 0 && (
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center" data-testid="creative-lane-picker">
               <label htmlFor="creative-lane" className="text-xs font-mono uppercase tracking-wide text-t-phos-dim">
-                Creative lane
+                {t("laneLabel")}
               </label>
               <select
                 id="creative-lane"
@@ -73,7 +75,7 @@ function CreativeInner() {
                 aria-expanded={starting}
                 className="t-focus min-h-touch px-3 text-sm font-medium text-t-amber-bright border border-t-line hover:text-t-amber"
               >
-                New creative lane
+                {t("newLane")}
               </button>
             </div>
           )}
@@ -106,9 +108,14 @@ function CreativeInner() {
   );
 }
 
+function CreativeLoading() {
+  const t = useTranslations("refineryResume.creativePage");
+  return <div className="max-w-3xl mx-auto px-4 py-10 text-t-phos-dim">{t("loading")}</div>;
+}
+
 export default function CreativePage() {
   return (
-    <Suspense fallback={<div className="max-w-3xl mx-auto px-4 py-10 text-t-phos-dim">Loading...</div>}>
+    <Suspense fallback={<CreativeLoading />}>
       <CreativeInner />
     </Suspense>
   );

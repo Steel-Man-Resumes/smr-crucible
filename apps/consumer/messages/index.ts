@@ -35,6 +35,34 @@ import enForgeRush from "./en/forge-rush.json";
 import esForgeRush from "./es/forge-rush.json";
 import enAuth from "./en/auth.json";
 import esAuth from "./es/auth.json";
+import enRefineryHome from "./en/refinery-home.json";
+import esRefineryHome from "./es/refinery-home.json";
+import enRefineryInterview from "./en/refinery-interview.json";
+import esRefineryInterview from "./es/refinery-interview.json";
+import enRefineryJobs from "./en/refinery-jobs.json";
+import esRefineryJobs from "./es/refinery-jobs.json";
+import enRefineryAccount from "./en/refinery-account.json";
+import esRefineryAccount from "./es/refinery-account.json";
+import enRefineryShell from "./en/refinery-shell.json";
+import esRefineryShell from "./es/refinery-shell.json";
+import enRefineryResume from "./en/refinery-resume.json";
+import esRefineryResume from "./es/refinery-resume.json";
+import enServerTextApi from "./en/server-text-api.json";
+import esServerTextApi from "./es/server-text-api.json";
+import enServerTextFinish from "./en/server-text-finish.json";
+import esServerTextFinish from "./es/server-text-finish.json";
+import enServerTextProgress from "./en/server-text-progress.json";
+import esServerTextProgress from "./es/server-text-progress.json";
+import enServerTextPlans from "./en/server-text-plans.json";
+import esServerTextPlans from "./es/server-text-plans.json";
+import enServerTextJobs from "./en/server-text-jobs.json";
+import esServerTextJobs from "./es/server-text-jobs.json";
+import enServerTextHelp from "./en/server-text-help.json";
+import esServerTextHelp from "./es/server-text-help.json";
+import enServerTextExtras from "./en/server-text-extras.json";
+import esServerTextExtras from "./es/server-text-extras.json";
+import enServerTextRecordcheck from "./en/server-text-recordcheck.json";
+import esServerTextRecordcheck from "./es/server-text-recordcheck.json";
 
 export const MESSAGES = {
   en: {
@@ -52,6 +80,13 @@ export const MESSAGES = {
     forgeDefend: enForgeDefend,
     forgeRush: enForgeRush,
     auth: enAuth,
+    refineryHome: enRefineryHome,
+    refineryInterview: enRefineryInterview,
+    refineryJobs: enRefineryJobs,
+    refineryAccount: enRefineryAccount,
+    refineryShell: enRefineryShell,
+    refineryResume: enRefineryResume,
+    serverText: { ...enServerTextApi, ...enServerTextFinish, ...enServerTextProgress, ...enServerTextPlans, ...enServerTextJobs, ...enServerTextHelp, ...enServerTextExtras, ...enServerTextRecordcheck },
   },
   es: {
     common: esCommon,
@@ -68,6 +103,13 @@ export const MESSAGES = {
     forgeDefend: esForgeDefend,
     forgeRush: esForgeRush,
     auth: esAuth,
+    refineryHome: esRefineryHome,
+    refineryInterview: esRefineryInterview,
+    refineryJobs: esRefineryJobs,
+    refineryAccount: esRefineryAccount,
+    refineryShell: esRefineryShell,
+    refineryResume: esRefineryResume,
+    serverText: { ...esServerTextApi, ...esServerTextFinish, ...esServerTextProgress, ...esServerTextPlans, ...esServerTextJobs, ...esServerTextHelp, ...esServerTextExtras, ...esServerTextRecordcheck },
   },
 } as const;
 

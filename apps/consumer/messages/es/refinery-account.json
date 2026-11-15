@@ -1,0 +1,831 @@
+{
+  "packageEmail": {
+    "heading": "Tu currículum terminado por correo",
+    "toggle": "Envíame mi currículum terminado por correo",
+    "confirmed": "Cuando termines un currículum en The Forge, lo enviamos a {email}. Solo a esa dirección.",
+    "unconfirmed": "Cuando termines un currículum en The Forge, lo enviamos a {email} en cuanto esa dirección esté confirmada. Inicia sesión una vez con un enlace de correo para confirmarla.",
+    "noEmail": "Cuando termines un currículum en The Forge, lo enviamos al correo de tu cuenta.",
+    "notSaved": "No se guardó. Inténtalo de nuevo."
+  },
+  "requirement": {
+    "whatRequires": "Lo que {org} requiere",
+    "staysPrivate": "Sigue siendo privado:",
+    "whoCanOpen": "Quién puede abrirlo",
+    "theirReason": "Su razón, en sus palabras",
+    "recording": "Registrando...",
+    "acknowledge": "Lo leí. Que mi gestor de casos pueda abrir esto."
+  },
+  "decisionLog": {
+    "title": "Por qué t.ROY sugirió cosas",
+    "subtitle": "La razón que el asistente registró para cada sugerencia",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "explainer": "Aquí ves el razonamiento que el asistente registró para sus sugerencias. No muestra pensamientos privados, y nunca guarda las palabras exactas que escribiste.",
+    "loading": "Cargando...",
+    "loadError": "No se pudo cargar este historial.",
+    "empty": "Aún no hay nada aquí. Cuando t.ROY te haga una sugerencia, su razón aparecerá aquí.",
+    "model": "Modelo: {provider} {id}",
+    "pages": {
+      "interview-practice": "Práctica de entrevista (texto)",
+      "interview": "Práctica de entrevista (texto)",
+      "interview-voice": "Práctica de entrevista (voz)",
+      "resume-generate-full": "Adaptar el currículum a un empleo",
+      "resume-full": "Adaptar el currículum a un empleo",
+      "resume-generate": "Sugerencias de viñetas",
+      "resume": "Sugerencias de viñetas",
+      "resume-assist": "Ayuda con el currículum en The Forge",
+      "forge-resume-assist": "Ayuda con el currículum en The Forge",
+      "job-search": "Búsqueda de empleo ampliada",
+      "jobs": "Búsqueda de empleo ampliada",
+      "mini-forge": "The Forge rápido",
+      "disclosure-guide": "Plan para hablar de tus antecedentes penales",
+      "disclosure": "Plan para hablar de tus antecedentes penales",
+      "disclosure-strengths": "Descubrir tus fortalezas",
+      "disclosure-takeaways": "Lo que te llevas de la práctica",
+      "analyze": "Análisis de carrera",
+      "apply-email": "Borrador de correo de postulación",
+      "follow-up": "Borrador de seguimiento",
+      "parse": "Lectura del currículum",
+      "fit-check": "Revisión de compatibilidad",
+      "next-step-why": "Consejo para el siguiente paso",
+      "career-plan": "Plan de carrera",
+      "assistant": "Chat con t.ROY",
+      "coach": "Chat con t.ROY",
+      "unknown": "Otro trabajo de IA"
+    }
+  },
+  "loginHistory": {
+    "title": "Actividad de seguridad reciente",
+    "intro": "Inicios de sesión y cambios de seguridad en tu cuenta. Si ves algo que no hiciste tú, cambia tu contraseña.",
+    "loading": "Cargando...",
+    "loadError": "No se pudo cargar la actividad reciente.",
+    "empty": "Aún no hay actividad.",
+    "events": {
+      "sign_in": "Iniciaste sesión",
+      "two_factor_enabled": "Se activó la verificación en dos pasos",
+      "two_factor_disabled": "Se desactivó la verificación en dos pasos",
+      "password_created": "Se creó una contraseña",
+      "password_changed": "Se cambió la contraseña",
+      "password_reset": "Contraseña restablecida con un enlace de correo",
+      "sessions_revoked": "Se cerró la sesión en otros dispositivos",
+      "credentials_cleared": "Se quitó una contraseña o verificación en dos pasos que dijiste que no configuraste"
+    }
+  },
+  "avatar": {
+    "aria": "Tu avatar"
+  },
+  "consent": {
+    "heading": "Opciones de privacidad",
+    "loading": "Cargando...",
+    "saveFallback": "No se pudo guardar. Inténtalo de nuevo.",
+    "connectionError": "No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.",
+    "memory": {
+      "title": "Memoria de IA y personalización",
+      "body": "t.ROY recuerda tu trabajo reciente para retomar donde lo dejaste. Si lo desactivas, empieza de cero en cada sesión. Tus documentos guardados no cambian.",
+      "on": "Activado: t.ROY recuerda tu trabajo reciente.",
+      "off": "Desactivado: t.ROY empieza de cero en cada sesión."
+    },
+    "research": {
+      "title": "Investigación con datos sin identidad",
+      "body": "Permite que tus datos de avance, anonimizados, se incluyan en investigaciones sobre lo que ayuda a las personas a conseguir empleo. Está desactivado a menos que lo actives.",
+      "on": "Activado: tus datos sin identidad pueden usarse en investigación.",
+      "off": "Desactivado: tus datos no se usan para investigación."
+    },
+    "outcome": {
+      "title": "Comparte tu historia de éxito",
+      "body": "Si te contratan, tú decides si podemos mencionarlo alguna vez. Es tu decisión y puedes cambiarla cuando quieras.",
+      "none": {
+        "label": "Ninguna",
+        "description": "Tu contratación nunca se menciona en ningún lado."
+      },
+      "anonymous": {
+        "label": "Anónima",
+        "description": "Tu contratación puede contarse en historias de éxito, nunca con tu nombre."
+      },
+      "named": {
+        "label": "Con nombre",
+        "description": "Tu primer nombre puede aparecer con tu historia de éxito."
+      }
+    }
+  },
+  "coach": {
+    "heading": "Tu coach",
+    "intro": "Tu coach te acompaña en tu búsqueda de empleo. Hazlo tuyo.",
+    "nameLabel": "Nombre del coach",
+    "namePlaceholder": "Guía",
+    "styleLabel": "Estilo de coaching",
+    "styles": {
+      "supportive": {
+        "label": "De apoyo",
+        "hint": "Cálido, alentador"
+      },
+      "balanced": {
+        "label": "Equilibrado",
+        "hint": "Cálido y directo"
+      },
+      "direct": {
+        "label": "Directo",
+        "hint": "Eficiente, sin rodeos"
+      }
+    },
+    "lengthLabel": "Largo de las respuestas",
+    "lengths": {
+      "brief": "breve",
+      "full": "completa"
+    },
+    "focusLabel": "Enfoque",
+    "focus": {
+      "guide": "Guíame",
+      "answer": "Solo responde"
+    },
+    "advanced": "Ajustes avanzados",
+    "hideAdvanced": "Ocultar ajustes avanzados",
+    "creativityLabel": "¿Qué tan creativo debe ser tu coach?",
+    "focusedAdvice": "Consejos enfocados",
+    "moreExploratory": "Más exploratorio",
+    "save": "guardar",
+    "saving": "guardando...",
+    "saved": "Guardado.",
+    "couldNotSave": "No se pudo guardar."
+  },
+  "deleteData": {
+    "requirementsError": "No pudimos revisar la confirmación que pide esta cuenta. Inténtalo de nuevo.",
+    "notFinished": "La eliminación no terminó. Puedes reintentar; es posible que ya se hayan borrado algunos datos.",
+    "unconfirmed": "No pudimos confirmar si la eliminación terminó. Puedes reintentar; es posible que ya se hayan borrado algunos datos.",
+    "accountDeleted": "Tu cuenta fue eliminada.",
+    "dataDeleted": "Tus datos fueron eliminados. Tu acceso se mantiene.",
+    "signOutFailed": "No se pudo cerrar la sesión. No necesitas eliminar de nuevo.",
+    "finishSignOut": "Terminar de cerrar sesión",
+    "signingOut": "Cerrando tu sesión...",
+    "data": {
+      "title": "Eliminar mis datos",
+      "body": "Borra tu trabajo guardado y tu historial, y quita tus vínculos con programas. Tu acceso se mantiene, así que puedes empezar de nuevo. Esto no se puede deshacer.",
+      "bodyStaff": "Borra los datos de tu propia cuenta. Las notas y los registros que escribiste se quedan con tu organización. Tu acceso se mantiene. Esto no se puede deshacer.",
+      "button": "Eliminar datos",
+      "confirmAria": "Confirmar la eliminación de datos",
+      "confirmButton": "Eliminar mis datos para siempre"
+    },
+    "account": {
+      "title": "Eliminar mi cuenta",
+      "body": "Quita tu trabajo guardado y tu acceso. Se cerrará tu sesión. Esto no se puede deshacer.",
+      "button": "Eliminar cuenta",
+      "confirmAria": "Confirmar la eliminación de la cuenta",
+      "confirmButton": "Eliminar mi cuenta para siempre"
+    },
+    "accountLine": "Cuenta: {account}",
+    "yourAccount": "tu cuenta con sesión iniciada",
+    "checkAgain": "Revisar de nuevo",
+    "checking": "Revisando esta cuenta...",
+    "hasPassword": "Esta cuenta tiene contraseña. Escríbela aquí para confirmar la eliminación, aunque hayas iniciado sesión con un enlace de correo o con Google.",
+    "passwordLabel": "Contraseña actual de la cuenta",
+    "forgot": "¿Olvidaste tu contraseña? Restablécela primero",
+    "noPassword": "Esta cuenta no tiene contraseña. Escribe DELETE abajo para confirmar la eliminación.",
+    "typeDelete": "Escribe DELETE",
+    "cancel": "Cancelar",
+    "deleting": "Eliminando..."
+  },
+  "avatarSettings": {
+    "title": "Tu foto de perfil",
+    "intro": "Usa un dibujo sencillo o una foto para tu cuenta. Esta imagen es solo para tu cuenta.",
+    "introResume": "Nunca se agrega sola a tu currículum.",
+    "shape": "Forma",
+    "color": "Color",
+    "accent": "Detalle",
+    "letter": "Letra",
+    "shapes": {
+      "circle": "Círculo",
+      "square": "Redondeada",
+      "hex": "Hexágono",
+      "shield": "Escudo"
+    },
+    "colors": {
+      "amber": "ámbar",
+      "phos": "verde",
+      "slate": "gris pizarra",
+      "clay": "arcilla",
+      "plum": "ciruela",
+      "teal": "verde azulado"
+    },
+    "accents": {
+      "solid": "Liso",
+      "ring": "Aro",
+      "corner": "Punto"
+    },
+    "saving": "guardando...",
+    "saveDrawing": "guardar dibujo",
+    "saved": "Guardado.",
+    "useDrawing": "Usar este dibujo en vez de mi foto",
+    "photoTitle": "Usar una foto",
+    "photoIntro": "Agrega una foto tuya. Se recorta en un cuadrado en tu dispositivo antes de enviarse, se guarda cifrada y solo tú puedes abrirla.",
+    "photoIntroResume": "Nunca se agrega a tu currículum.",
+    "working": "trabajando...",
+    "uploadPhoto": "subir una foto",
+    "yourPhotos": "Tus fotos",
+    "useGenerated": "Usar el retrato generado",
+    "useUploaded": "Usar la foto subida",
+    "generated": "Generada",
+    "uploadedLabel": "Subida",
+    "inUse": "(en uso)",
+    "remove": "quitar",
+    "uploadError": "No se pudo subir esa foto.",
+    "uploaded": "Foto subida. Elígela abajo para usarla.",
+    "readError": "No se pudo leer esa imagen. Prueba con un JPG, PNG o WebP.",
+    "useError": "No se pudo usar esa foto.",
+    "removeError": "No se pudo quitar esa foto."
+  },
+  "settings": {
+    "usage": {
+      "loading": "Cargando tu uso...",
+      "usedToday": "Usado hoy",
+      "lowerLimit": "Herramientas con un límite más bajo propio",
+      "paused": "en pausa",
+      "leftToday": "quedan {count} hoy"
+    },
+    "page": {
+      "usageError": "Por ahora no pudimos leer tu cupo.",
+      "redeemError": "No se pudo canjear el código",
+      "wentWrong": "Algo salió mal. Inténtalo de nuevo.",
+      "exportFailed": "No se pudieron exportar tus datos. Inténtalo de nuevo.",
+      "documentsFailed": "No se pudieron descargar tus documentos en un solo ZIP. Descárgalos uno por uno desde Registros y documentos privados.",
+      "sections": {
+        "account": "Cuenta",
+        "coach": "Coach e IA",
+        "accessibility": "Accesibilidad",
+        "privacy": "Privacidad y consentimiento",
+        "security": "Seguridad",
+        "data": "Datos",
+        "usage": "Uso",
+        "help": "Ayuda y acerca de"
+      },
+      "title": "Configuración",
+      "showMeAround": "Muéstrame cómo funciona",
+      "subtitle": "Tus datos, tu control. Administra tu información y tu privacidad.",
+      "viewing": "Estás viendo la configuración de esta persona. Aquí no se puede cambiar nada.",
+      "assisting": "Estás ayudando a esta persona con su configuración.",
+      "impersonatingNote": "Esta es su configuración, no la tuya. Los interruptores de compartir y de consentimiento, los códigos de programa y los recorridos solo los puede cambiar esa persona. La seguridad, la foto, la exportación y la eliminación están ocultas.",
+      "sectionsAria": "Secciones de la configuración",
+      "programRequiresAria": "Lo que pide este programa",
+      "joiningNote": "Unirte no abre nada por sí solo. Después de unirte, se te pedirá que confirmes que lo leíste, y puedes volver a leerlo antes.",
+      "join": "Unirme a {org}",
+      "notNow": "Ahora no",
+      "easierTitle": "Hazlo más fácil de usar",
+      "easierBody": "Texto más grande, menos movimiento y ayuda para leer. Los cambios se aplican enseguida.",
+      "noProgram": "Ningún programa está vinculado a tu cuenta, así que ningún programa puede ver tu avance.",
+      "hiddenWhileViewing": "Oculto mientras ves o ayudas como esta persona.",
+      "dailyUsage": "Uso diario",
+      "getHelp": "Recibir ayuda",
+      "helpBody": "¿Necesitas ayuda con algo? Pregúntale a t.ROY en cualquier página, o abre Ayuda y comentarios para buscar una respuesta, reportar un problema o escribirle a Troy. Una persona real lee cada mensaje.",
+      "openHelp": "Abrir Ayuda y comentarios",
+      "trustQuestion": "¿Quieres saber exactamente cómo protegemos tus datos?",
+      "trustLink": "Lee nuestra página de confianza",
+      "about": "Acerca de",
+      "aboutBody": "Lo hicieron personas que creen que tu pasado no define tu sueldo. The Forge y The Refinery son herramientas para ayudarte a dar el siguiente paso a tu manera.",
+      "aboutAi": "Todas las funciones con IA están pensadas con transparencia, consentimiento y respeto por tu dignidad."
+    },
+    "data": {
+      "handleTitle": "Cómo manejamos tus datos",
+      "handleForge": "Tus respuestas y resultados de The Forge se guardan en tu cuenta para que tu trabajo esté aquí cuando regreses",
+      "handleChats": "Las conversaciones con t.ROY se guardan en tu cuenta para que pueda recordar tu trabajo reciente. Si eliminas tus datos, se borran.",
+      "handleRecordCheck": "En la revisión de antecedentes penales, lo que escribes sobre tus antecedentes penales llega a la IA solo después de que dices que sí en esa pantalla. Una lista guardada conserva la lista y el estado. Lo que escribiste se conserva solo si marcas la casilla para eso. Si retiras tu sí, se borran tus listas guardadas.",
+      "handleSell": "Nunca vendemos tu información personal. Solo llega a los servicios que hacen funcionar la app, y a un programa cuando tú decides compartirla con él",
+      "handleAnytime": "Puedes exportar o eliminar tus datos en cualquier momento",
+      "downloadTitle": "Descarga tus datos",
+      "downloadBody": "Recibe una copia de lo que tenemos guardado, en un solo archivo. Deja todas las casillas marcadas para una copia completa. Tus archivos de documentos vienen aparte, con el botón de más abajo.",
+      "passwordLabel": "Contraseña para las descargas",
+      "passwordHelp": "Si tu cuenta tiene contraseña, escríbela aquí. Si no tiene, déjalo en blanco. Confirma el dispositivo abajo antes de descargar.",
+      "boxes": {
+        "resumes": "Currículums y resultados de The Forge",
+        "applications": "Postulaciones de empleo",
+        "chat": "Historial de chat con t.ROY",
+        "consent": "Registros de consentimiento",
+        "usage": "Totales de uso",
+        "progress": "Tu historial de actividad",
+        "record_check": "Revisiones de antecedentes penales guardadas",
+        "sharing": "Lo que compartes, quién lo abrió y lo que tu organización tiene archivado sobre ti"
+      },
+      "fullCopyOnly": {
+        "decisions": "el registro de sugerencias de IA sobre ti",
+        "login_history": "tu historial de inicios de sesión",
+        "org": "los programas a los que perteneces",
+        "support": "los mensajes que enviaste a Steel Man",
+        "disclosure_rehearsal": "las transcripciones de tu práctica para hablar de tus antecedentes penales",
+        "interview_voice": "las transcripciones de tu práctica de entrevista",
+        "avatar": "la lista de tus fotos",
+        "vault": "la lista de tus documentos"
+      },
+      "leavesOut": "Esta copia no incluye {list}. Marca todas las casillas para una copia completa.",
+      "sharedWarning": "Estos archivos tienen tu historial de chat, tus revisiones de antecedentes penales y tus documentos. En una computadora compartida o de biblioteca, cualquiera que abra la carpeta de Descargas puede leerlos. Descarga solo en tu propio teléfono o computadora, o borra los archivos y vacía la papelera cuando termines.",
+      "ownDevice": "Este es mi propio teléfono o computadora",
+      "preparing": "Preparando...",
+      "downloaded": "Descargado",
+      "export": "Exportar",
+      "docsTitle": "Tus archivos de documentos",
+      "docsBody": "Todos los archivos de Registros y documentos privados, en un solo ZIP, hasta unos 4 MB a la vez. Si tienes más que eso, descárgalos uno por uno desde esa página.",
+      "docsButton": "Descargar mis documentos"
+    },
+    "accountExtras": {
+      "joinTitle": "Únete a un programa con un código",
+      "enterCode": "Escribe un código",
+      "enterCodeBody": "Si un programa (como un centro de empleo u organización sin fines de lucro) te dio un código, escríbelo aquí. El código te une a un lugar del programa. Si el programa tiene reglas para compartir, las ves antes de unirte, y unirte no comparte nada por sí solo. Si el código cambia tu cupo de IA, la sección Uso, más abajo, muestra el número nuevo.",
+      "codePlaceholder": "Tu código",
+      "codeAria": "Código del programa",
+      "join": "unirme",
+      "joined": "Te uniste. Tu programa aparece abajo.",
+      "yourPrograms": "Tus programas",
+      "joinedWithCode": "Te uniste con un código",
+      "hiddenTitle": "Empleadores ocultos",
+      "hiddenBody": "Los empleadores que ocultas nunca aparecen en tu búsqueda de empleo. Oculta a un empleador anterior, o cualquier lugar donde ya postulaste. Aquí puedes volver a mostrar cualquiera de ellos.",
+      "hideNamePlaceholder": "Nombre del empleador que quieres ocultar",
+      "hideReasonPlaceholder": "Motivo (opcional)",
+      "hideButton": "ocultar empleador",
+      "noneHidden": "No has ocultado ningún empleador.",
+      "unhide": "Mostrar de nuevo"
+    },
+    "security": {
+      "noMatch": "Las dos contraseñas todavía no coinciden.",
+      "saveError": "No se pudo guardar. Inténtalo de nuevo.",
+      "wentWrong": "Algo salió mal. Inténtalo de nuevo.",
+      "title": "Seguridad",
+      "intro": "Administra tu contraseña, la verificación en dos pasos y los dispositivos con sesión iniciada.",
+      "createTitle": "Crea una contraseña",
+      "passwordTitle": "Contraseña",
+      "createBody": "Crea una contraseña para iniciar sesión al instante, sin esperar un enlace por correo.",
+      "lastChanged": "Se cambió por última vez el {date}.",
+      "signInWithPassword": "Inicia sesión con tu correo y tu contraseña.",
+      "passwordSet": "Contraseña creada",
+      "currentPassword": "Contraseña actual",
+      "newPassword": "Contraseña nueva",
+      "newPasswordCreate": "Contraseña nueva (mínimo {min} caracteres)",
+      "confirmPassword": "Confirma la contraseña nueva",
+      "passwordHint": "Mínimo {min} caracteres, con una letra y un número. Usa una contraseña que no uses en otro sitio. Un administrador de contraseñas puede crear una y recordarla por ti.",
+      "created": "Contraseña creada.",
+      "updated": "Contraseña actualizada.",
+      "saving": "guardando...",
+      "createButton": "crear contraseña",
+      "updateButton": "actualizar contraseña"
+    },
+    "devices": {
+      "title": "Dispositivos activos",
+      "intro": "Dónde tienes la sesión iniciada. Revoca cualquiera que no reconozcas. Se le cierra la sesión enseguida.",
+      "signOutOthers": "Cerrar los otros",
+      "loading": "Cargando...",
+      "thisDevice": "Este dispositivo",
+      "lastActive": "última actividad: {date}",
+      "revoke": "Revocar"
+    },
+    "twoFactor": {
+      "startError": "No se pudo iniciar la configuración.",
+      "codeMismatch": "Ese código no coincidió.",
+      "turnOffError": "No se pudo desactivar.",
+      "title": "Verificación en dos pasos",
+      "onBody": "Activada. Cada vez que inicies sesión, escribirás un código de tu aplicación de autenticación, uses contraseña, un enlace por correo o Google.",
+      "offBody": "Agrega un segundo paso al iniciar sesión con una aplicación de autenticación (Google Authenticator, Authy, 1Password).",
+      "on": "Activada",
+      "off": "Desactivada",
+      "starting": "iniciando...",
+      "turnOn": "activar dos pasos",
+      "confirmEmailTitle": "Primero confirma tu correo",
+      "confirmEmailBody": "La verificación en dos pasos necesita un correo confirmado. Te enviaremos un enlace para iniciar sesión a {email}. Ábrelo y después podrás activar los dos pasos aquí.",
+      "yourEmail": "tu dirección de correo",
+      "checkEmail": "Revisa tu correo para ver el enlace.",
+      "sending": "enviando...",
+      "emailLink": "Envíame un enlace",
+      "sendFailed": "No pudimos enviar el enlace. Inténtalo de nuevo en unos minutos.",
+      "scan": "1. Escanea esto con tu aplicación de autenticación.",
+      "qrAlt": "Código QR de verificación en dos pasos",
+      "cantScan": "¿No puedes escanear? Escribe esta clave a mano:",
+      "enterCode": "2. Escribe el código de 6 dígitos que muestra.",
+      "verifying": "verificando...",
+      "verify": "verificar y activar",
+      "cancel": "cancelar",
+      "backupIntro": "Los dos pasos están activados. Guarda estos códigos de respaldo en un lugar seguro. Cada uno sirve una sola vez si algún día pierdes tu teléfono. No volverás a verlos.",
+      "copyCodes": "copiar códigos",
+      "savedThem": "Ya los guardé",
+      "turnOff": "Desactivar la verificación en dos pasos",
+      "disablePlaceholder": "Código actual o un código de respaldo",
+      "confirmTurnOff": "confirmar y desactivar"
+    },
+    "account": {
+      "title": "Cuenta",
+      "contactHeading": "Datos de contacto del currículum",
+      "signedInAs": "Sesión iniciada como",
+      "unknown": "Desconocido",
+      "edit": "Editar",
+      "name": "Nombre:",
+      "phone": "Teléfono:",
+      "email": "Correo:",
+      "location": "Ubicación:",
+      "notSet": "Sin definir",
+      "noContact": "No hay datos de contacto. Completa tu perfil en el panel.",
+      "editHeading": "Editar: {heading}",
+      "fullName": "Nombre completo",
+      "phonePlaceholder": "Teléfono",
+      "resumeEmail": "Correo del currículum",
+      "city": "Ciudad",
+      "state": "Estado",
+      "saving": "guardando...",
+      "save": "guardar",
+      "cancel": "Cancelar",
+      "methodsTitle": "Formas de iniciar sesión",
+      "emailPassword": "Correo y contraseña",
+      "emailPasswordBody": "Inicia sesión con tu correo y una contraseña que tú creaste",
+      "active": "Activa",
+      "magicLink": "Enlace mágico",
+      "magicLinkBody": "Un enlace de un solo uso llega a tu correo. No necesitas contraseña.",
+      "available": "Disponible",
+      "lostDevice": "¿Perdiste tu dispositivo? Usa la opción de enlace mágico en la página de inicio de sesión para volver a entrar. Puedes crear una contraseña nueva cuando quieras, aquí abajo."
+    }
+  },
+  "tour": {
+    "kicker": "The Refinery, con t.ROY",
+    "yourBase": "Tu base",
+    "fromForge": "Desde The Forge",
+    "baseResume": "Tu currículum base",
+    "trueHistory": "Tu historia real",
+    "offer": "La oferta",
+    "nextStep": "Y luego el siguiente paso",
+    "badge": "Contrata a personas con antecedentes penales",
+    "chips": {
+      "job": "Este empleo",
+      "facts": "Los mismos datos",
+      "copy": "Una copia nueva"
+    },
+    "toYou": "Para: ti",
+    "notes": {
+      "whenItComes": "Cuando salga el tema",
+      "whatISay": "Lo que digo",
+      "whatISayNext": "Lo que digo después"
+    },
+    "question": "Cuéntame de un día difícil en el trabajo.",
+    "answer": "Aquí va un ejemplo real.",
+    "steps": {
+      "saved": "Guardado",
+      "applied": "Postulado",
+      "interview": "Entrevista",
+      "offer": "Oferta"
+    },
+    "stations": {
+      "find": {
+        "label": "Encuentra un empleo real",
+        "line": "Una vacante real"
+      },
+      "tailor": {
+        "label": "Adapta la base",
+        "line": "Los mismos datos, este empleo"
+      },
+      "package": {
+        "label": "Paquete para ti",
+        "line": "De vuelta a ti"
+      },
+      "plan": {
+        "label": "Planea qué decir",
+        "line": "Tus antecedentes penales, tus palabras"
+      },
+      "practice": {
+        "label": "Practica",
+        "line": "Cuando se acerca"
+      },
+      "track": {
+        "label": "Sigue hasta la oferta",
+        "line": "De guardado a oferta"
+      }
+    },
+    "lock": {
+      "tailorLabel": "Adapta tu currículum",
+      "tailorReason": "Elige un empleo y un currículum para que los cambios tengan un propósito claro.",
+      "openEarly": "Abierto antes de tiempo",
+      "lockedForNow": "Bloqueado por ahora",
+      "isOpen": "{step} está abierto. La preparación recomendada sigue ahí para cuando la necesites.",
+      "opened": "{step} se abrió a petición tuya.",
+      "ask": "Pídele a t.ROY que lo abra antes",
+      "actionsPerDay": "Acciones de IA por día",
+      "stairs": {
+        "toStart": "Para empezar",
+        "afterTailor": "Después de adaptar",
+        "afterApply": "Después de postular"
+      },
+      "needMore": "¿Necesitas más?",
+      "flowAsk": "<b>Pídeselo a t.ROY.</b>",
+      "flowEarned": "<b>¿Ya lo ganaste?</b> Se agrega.",
+      "flowNotYet": "<b>¿Todavía no?</b> Tú apruebas una nota corta, y Troy la revisa."
+    },
+    "chart": {
+      "kicker": "Lo que tendrías que juntar por tu cuenta, y lo que hay aquí",
+      "portraitKicker": "Lo que usarías por tu cuenta",
+      "status": {
+        "here": "Aquí",
+        "limits": "Aquí, con límites",
+        "absent": "No está aquí"
+      }
+    },
+    "rows": {
+      "resume": {
+        "need": "Armador de currículum"
+      },
+      "check": {
+        "need": "Revisor de currículum",
+        "limit": "Cinco enfoques, sin una sola nota"
+      },
+      "jobs": {
+        "need": "Bolsa de empleo",
+        "limit": "Una fuente puede estar caída"
+      },
+      "employers": {
+        "need": "Lista de empleadores",
+        "limit": "Pequeña, con fecha, revisada"
+      },
+      "tailor": {
+        "need": "Herramienta para adaptar",
+        "limit": "Algunos sitios bloquean los enlaces"
+      },
+      "interview": {
+        "need": "App de entrevistas",
+        "limit": "La voz la patrocina un programa"
+      },
+      "disclosure": {
+        "need": "Coach para hablar de tus antecedentes penales",
+        "limit": "Orientación, no asesoría legal"
+      },
+      "local": {
+        "need": "Directorio de ayuda local",
+        "limit": "Encuentra lugares, no hace coincidencias"
+      },
+      "track": {
+        "need": "Seguimiento de postulaciones"
+      },
+      "vault": {
+        "need": "Caja segura de documentos"
+      },
+      "coach": {
+        "need": "Coach de carrera con IA"
+      },
+      "network": {
+        "need": "Red de empleadores",
+        "here": "Ningún empleador contrata a través de Steel Man, y nadie publica empleos aquí"
+      },
+      "apply": {
+        "need": "Postular por mí",
+        "here": "Nada envía una postulación por ti. Tú postulas a la manera del empleador"
+      },
+      "ats": {
+        "need": "Una sola nota de ATS",
+        "here": "No hay una sola nota, ni imitamos un sistema de seguimiento con nombre"
+      }
+    },
+    "meter": {
+      "title": "Medidor de Steel Man, un ejemplo",
+      "one": "Una sola cosa, una y otra vez",
+      "many": "Un poco de todo",
+      "say": {
+        "0": "Se llena a medida que haces el trabajo.",
+        "1": "Una sola cosa, una y otra vez, casi no lo mueve.",
+        "2": "Un poco de todo lo mueve mucho.",
+        "3": "Este es un ejemplo. El tuyo empieza en el número real."
+      }
+    }
+  },
+  "lesson": {
+    "summary": "Aprende tu configuración: ocho lecciones prácticas",
+    "intro": "Hazlo a tu ritmo. Lee una lección, visita los controles reales y luego regresa aquí. Nada cambia hasta que tú uses un ajuste.",
+    "navAria": "Lecciones de configuración",
+    "tabs": {
+      "account": "Cuenta",
+      "coach": "Coach",
+      "accessibility": "Lectura y movimiento",
+      "privacy": "Privacidad",
+      "security": "Seguridad",
+      "data": "Datos",
+      "usage": "Uso",
+      "help": "Ayuda"
+    },
+    "showControls": "Mostrar estos controles",
+    "previous": "Lección anterior",
+    "next": "Lección siguiente",
+    "orientationCheck": "Hacer la revisión de orientación opcional",
+    "mainTour": "Volver al recorrido principal",
+    "revisit": "Puedes volver a cualquier capítulo.",
+    "lessons": {
+      "account": {
+        "title": "Los datos de contacto correctos",
+        "why": "Un empleador necesita una forma que funcione para comunicarse contigo.",
+        "body": "Revisa los datos de contacto del currículum por separado de la cuenta con la que inicias sesión. Un cambio aquí no prueba que un archivo descargado antes haya cambiado. Revisa tu próximo paquete exportado.",
+        "try": "Lee el correo y el teléfono de tu currículum real antes de enviarlo."
+      },
+      "coach": {
+        "title": "Un coach con quien puedas trabajar",
+        "why": "Una buena ayuda debe ajustarse a cómo quieres aprender.",
+        "body": "Elige el nombre de tu coach, su estilo, el largo de las respuestas, el enfoque y la creatividad. Con poca creatividad, t.ROY sigue el camino de siempre. Con mucha creatividad, agrega una opción menos obvia y te dice cuál es cuál. La mitad del control deslizante no cambia nada. Usa el botón de guardar para conservar esas opciones. Que sea directo o cálido cambia la forma de decirlo, no hace que una sugerencia sea más acertada. El registro de decisiones explica las sugerencias registradas, no un razonamiento oculto de la IA.",
+        "try": "Pide una pregunta a la vez y luego revisa si la respuesta te ayuda a dar un ejemplo concreto."
+      },
+      "accessibility": {
+        "title": "Hazlo más fácil de usar",
+        "why": "Las preferencias de lectura y de movimiento deben ayudarte a seguir con la tarea.",
+        "body": "Explora el tamaño del texto, el diseño cómodo o compacto y el movimiento. La ayuda para leer incluye lenguaje sencillo, lectura en voz alta y el idioma de las respuestas del coach. Las respuestas en español no traducen toda la interfaz. Estos controles son independientes, así que puedes elegir lo que te ayude. Verifica un cambio cuando vuelvas a la página.",
+        "try": "Prueba un texto más grande o Reducir movimiento. Puedes volver atrás. El recorrido nunca cambia tus preferencias."
+      },
+      "privacy": {
+        "title": "Ten claro lo que compartes",
+        "why": "Recibir apoyo y compartir información personal son decisiones distintas.",
+        "body": "Lee cada control de consentimiento y de compartir, incluyendo la información que se pide y la organización involucrada. Un programa puede tener requisitos; revísalos antes de aceptar. No supongas que un lugar patrocinado le da al personal acceso a todos tus documentos o conversaciones.",
+        "try": "Revisa las opciones reales de compartir antes de dar acceso. Cambia una solo cuando entiendas su alcance."
+      },
+      "security": {
+        "title": "Protege tu camino de regreso",
+        "why": "Tu trabajo necesita una cuenta confiable a la que puedas entrar.",
+        "body": "Revisa tus formas de iniciar sesión, los controles de contraseña, los dispositivos activos y la verificación en dos pasos. En una computadora compartida, cierra la sesión al terminar. Guarda tu información de recuperación en un lugar que controles tú.",
+        "try": "Revisa que puedas entrar al correo con el que inicias sesión antes de cambiar la seguridad de la cuenta."
+      },
+      "data": {
+        "title": "Guarda una copia. Elimina con cuidado.",
+        "why": "Exportar y eliminar hacen trabajos distintos.",
+        "body": "Revisa las categorías de tu exportación de datos. Si eliminas tus datos, tu acceso se mantiene; si eliminas tu cuenta, también se quita el acceso. Las dos cosas piden confirmación. Una exportación puede tener información privada, así que elige dónde guardarla. Nunca uses la eliminación solo para ordenar una pantalla.",
+        "try": "Lee la confirmación antes de cualquier acción que no se pueda deshacer. Esta lección no inicia una exportación ni elimina nada."
+      },
+      "usage": {
+        "title": "Entiende los límites",
+        "why": "Un cupo claro te deja planear tu siguiente solicitud útil.",
+        "body": "Revisa el uso en vivo y los detalles de acceso. El acceso guiado, las acciones de IA y las herramientas patrocinadas son cosas distintas. Una recompensa de la orientación abre herramientas guiadas, mientras que los controles de uso y de gasto siguen igual. Tu trabajo guardado no se convierte en una solicitud de IA nueva solo porque lo leas.",
+        "try": "Usa la barra de progreso para ver tu cupo actual. Pide ayuda si un límite te frena una preparación urgente."
+      },
+      "help": {
+        "title": "Sigue aprendiendo, pide ayuda",
+        "why": "No deberías tener que adivinar qué significa una pantalla.",
+        "body": "Vuelve a ver la introducción, regresa a esta lección o usa las rutas de ayuda. Describe la pantalla, lo que intentaste y lo que esperabas. No incluyas contraseñas ni documentos privados en un reporte de error.",
+        "try": "Cuando estés listo, haz la revisión de orientación. Puedes repasar cualquier lección y reintentar sin perder el acceso."
+      }
+    }
+  },
+  "sharing": {
+    "notSaved": "No se guardó. No se cambió nada.",
+    "title": "Quién puede ver qué",
+    "caseManager": "Tu gestor de casos ahí es {name}.",
+    "noCaseManager": "Todavía no tienes un gestor de casos asignado ahí.",
+    "someone": "Alguien de tu organización",
+    "askedToSee": "{who} pidió ver <strong>{scope}</strong>.",
+    "shareIt": "Compartirlo",
+    "notNow": "Ahora no",
+    "notNowOk": "Está bien decir que ahora no. No se les dice por qué.",
+    "confirmStop": "{org} lo exige.\n\n{stopping}\n\n¿Dejar de compartirlo?",
+    "requiredBy": "Exigido por {org}",
+    "stopped": "Dejaste de compartir esto. {org} puede ver que lo hiciste.",
+    "theySee": "Verían:",
+    "staysPrivate": "Sigue siendo privado:",
+    "shareAria": "Compartir {what} con {org}",
+    "logTitle": "Quién abrió qué",
+    "logEmpty": "Nadie ha abierto nada de lo que compartiste.",
+    "logLine": "{line} el {when}"
+  },
+  "aiCosts": {
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "ownTitle": "Tu uso de IA",
+    "ownSubtitle": "Costos registrados y estimados de tu cuenta (últimos 30 días)",
+    "loading": "Cargando...",
+    "loadError": "No se pudo cargar el uso.",
+    "ownTotals": "en {calls} llamadas de IA ({input} de entrada / {output} de salida, en tokens)",
+    "voiceMinutes": "Incluye {minutes} minutos de práctica con voz.",
+    "feature": "Función",
+    "calls": "Llamadas",
+    "cost": "Costo",
+    "estimated": "{estimated} es un estimado. {unpriced} llamadas todavía no tienen precio y {legacy} usan una contabilidad anterior. Esto no es una factura.",
+    "trackingBegan": "El registro de costos empezó el 2 de agosto de 2026. El trabajo de IA anterior a esa fecha no aparece aquí.",
+    "sponsorSees": "Si una organización aliada patrocina tu cuenta, ella también ve esto. Así tu acceso sigue siendo gratis.",
+    "endpoints": {
+      "interview-practice": "Práctica de entrevista (texto)",
+      "interview": "Práctica de entrevista (texto)",
+      "interview-voice": "Práctica de entrevista (voz)",
+      "resume-generate-full": "Adaptar el currículum a un empleo",
+      "resume-full": "Adaptar el currículum a un empleo",
+      "resume-generate": "Sugerencias de viñetas",
+      "resume": "Sugerencias de viñetas",
+      "resume-assist": "Ayuda con el currículum en The Forge",
+      "forge-resume-assist": "Ayuda con el currículum en The Forge",
+      "job-search": "Búsqueda de empleo ampliada",
+      "jobs": "Búsqueda de empleo ampliada",
+      "mini-forge": "The Forge rápido",
+      "disclosure-guide": "Plan para hablar de tus antecedentes penales",
+      "disclosure": "Plan para hablar de tus antecedentes penales",
+      "disclosure-strengths": "Descubrir tus fortalezas",
+      "disclosure-takeaways": "Lo que te llevas de la práctica",
+      "analyze": "Análisis de carrera",
+      "apply-email": "Borrador de correo de postulación",
+      "follow-up": "Borrador de seguimiento",
+      "parse": "Lectura del currículum",
+      "fit-check": "Revisión de compatibilidad",
+      "next-step-why": "Consejo para el siguiente paso",
+      "career-plan": "Plan de carrera",
+      "assistant": "Chat con t.ROY",
+      "coach": "Chat con t.ROY",
+      "unknown": "Otro trabajo de IA"
+    }
+  },
+  "security": {
+    "title": "Tus datos: quién los ve",
+    "intro": "Hicimos esta herramienta para personas que necesitan poder confiar en ella. Aquí te explicamos exactamente cómo te protegemos.",
+    "collect": {
+      "title": "Qué recopilamos",
+      "resume": "El texto de tu currículum, para encontrar tus habilidades y relacionarte con empleos",
+      "answers": "Tus respuestas a las preguntas de The Forge, para relacionar empleos y recursos con tu situación",
+      "refinery": "Tu actividad en The Refinery, para seguir tu avance y sugerirte los siguientes pasos",
+      "chats": "Tus chats con t.ROY, si iniciaste sesión y activaste Mejor ayuda, para que pueda recordar tu trabajo reciente. Puedes borrarlos cuando quieras en Configuración.",
+      "connect": "Algunos datos básicos de cómo te conectas: tu dirección IP, el tipo de dispositivo y la ciudad aproximada a la que apunta. Los usamos para frenar abusos y para mostrarte dónde tienes la sesión iniciada.",
+      "noTrack": "No rastreamos lo que haces en otros sitios y no miramos tus redes sociales."
+    },
+    "who": {
+      "title": "Quién puede ver tus datos",
+      "banner": "Tú decides. El personal de un programa no puede leer tu trabajo a menos que tú lo compartas.",
+      "nothing": "<lead>Si no compartes nada:</lead> tu nombre no aparece en su lista de casos. No pueden leer tu currículum, tus cartas, tus empleos ni nada de lo que escribiste. El personal que te inscribió, o con quien compartiste antes, todavía puede ver tu nombre, tu correo y tu paso.",
+      "progress": "<lead>Si compartes tu avance:</lead> ven tu nombre, tu correo, tu paso, cuántos empleos guardaste y a cuántos postulaste, cuándo entraste por última vez y si te contrataron. También ven cuántas veces practicaste y si hiciste un plan para hablar de tus antecedentes penales. No pueden leer ninguno de los dos.",
+      "more": "<lead>Puedes compartir más, un elemento a la vez,</lead> si tu programa lo ofrece: tus postulaciones, tus currículums o tus cartas de presentación. Primero ves qué muestra cada uno. El personal puede leerlos. No puede cambiarlos.",
+      "noRead": "<lead>Ningún programa puede leer esto a través de compartir:</lead> tu plan sobre tus antecedentes penales (lo que haces en el Planificador de divulgación), {checks, select, yes {tus revisiones de antecedentes penales guardadas, } other {}}tu práctica de entrevista o los archivos de tu Bóveda.",
+      "stop": "<lead>Detén esto cuando quieras en Configuración.</lead> Eso termina las vistas nuevas. No puede deshacer lo que alguien ya leyó o anotó.",
+      "logged": "<lead>Puedes ver quién miró.</lead> Donde tu programa usa el espacio de trabajo completo, se registra cada vez que el personal abre algo que compartiste, y puedes ver la lista en Configuración.",
+      "rule": "<lead>Si un programa tiene su propia regla para compartir,</lead> primero ves la regla y su razón. No se abre nada hasta que digas que la viste, y no lo llamaremos tu decisión.",
+      "law": "Un jefe, un oficial de libertad condicional o la policía no entran solo por quiénes son. Si la ley nos obliga a entregar algo, tenemos que hacerlo.",
+      "staff": "Nuestro propio personal puede abrir una cuenta para ayudarte cuando pides apoyo o algo falla. Cada vez se registra quién y cuándo."
+    },
+    "lives": {
+      "title": "Dónde viven tus datos",
+      "db": "Se guardan en una base de datos cifrada en reposo. Si alguien robara los discos físicos, no podría leer tus datos.",
+      "https": "Toda conexión usa HTTPS, así que tus datos van cifrados mientras viajan entre tu dispositivo y nuestros servidores",
+      "vault": "Los archivos que subes a tu Bóveda tienen un segundo candado encima de la base de datos: cada uno se sella con cifrado AES-256-GCM ligado a tu cuenta, así que solo se puede abrir para ti."
+    },
+    "ai": {
+      "title": "Qué ve la IA",
+      "job": "La IA lee tu currículum y tus respuestas para ayudarte. Ese es su único trabajo.",
+      "record": "La mayoría de los pasos con IA dejan un registro corto: qué herramienta se usó, qué modelo de IA y una nota breve sobre el paso. La nota no incluye las palabras que escribiste, y el registro no guarda copia de lo que la IA te escribió.",
+      "memory": "Cuando tienes la sesión iniciada y Mejor ayuda está activada, t.ROY recuerda tus chats recientes para retomar donde lo dejaste. Puedes borrar ese historial cuando quieras. Sin una cuenta, t.ROY no guarda tus chats.",
+      "versions": "Cuando tienes la sesión iniciada, cada versión revisada de tu currículum se guarda en tu cuenta, con las respuestas que diste sobre sus líneas. Puedes descargarlas o borrarlas en Configuración.",
+      "recordStep": "La revisión de antecedentes penales es la única pantalla que te pide tu delito, y primero te pide tu sí. Lo que escribes ahí va a Anthropic, que elige elementos de nuestra propia lista para armar tu lista de tareas. Si escribes tus antecedentes penales en otro lugar, como el chat o el planificador de divulgación, la IA también los ve ahí. Una lista guardada conserva la lista y el estado, y conserva lo que escribiste solo si marcas la casilla para eso. Si retiras tu sí, se borran tus listas guardadas.",
+      "recordPlain": "Si escribes tus antecedentes penales en el chat o en el planificador de divulgación, la IA los ve ahí.",
+      "never": "La IA nunca comparte tu información con otros usuarios"
+    },
+    "control": {
+      "title": "Tú tienes el control",
+      "export": {
+        "title": "Exporta tus datos",
+        "description": "Descarga una copia de tus datos: tu currículum, los resultados de The Forge, tus postulaciones, el historial de chat y más. Puedes elegir qué partes incluir. Primero te pedimos que confirmes que eres tú.",
+        "button": "Exportar en Configuración"
+      },
+      "delete": {
+        "title": "Elimina tus datos o tu cuenta",
+        "description": "Tú eliges: eliminar solo tus datos y conservar tu acceso, o eliminar toda tu cuenta. De cualquier forma, son dos pasos. Confirmas que eres tú y luego confirmas otra vez. No se puede deshacer. Los registros cortos de IA de antes de que iniciaras sesión no están ligados a tu cuenta, así que se quedan. No tienen nombre ni ninguna de tus palabras. Los conteos para evitar abusos se borran a los 30 días.",
+        "button": "Eliminar en Configuración"
+      },
+      "consent": {
+        "title": "Preferencias de consentimiento",
+        "description": "Administra lo que compartes de forma opcional en Configuración. Puedes detener el acceso con la función de compartir; las copias y los registros del programa que ya existan pueden seguir ahí.",
+        "button": "Administrar consentimiento"
+      },
+      "noAccount": {
+        "title": "No necesitas una cuenta",
+        "description": "The Forge funciona sin cuenta. No guardamos tu currículum ni tus respuestas en nuestros servidores a menos que inicies sesión. Tu trabajo se queda guardado en este navegador hasta que empieces de nuevo, presiones Borrar mis datos de esta computadora o lo dejes sin tocar por un día. En una computadora compartida o de biblioteca, presiona Borrar mis datos de esta computadora al terminar. Para frenar abusos contamos los usos por conexión a internet, guardada como un código hecho con tu dirección IP que cambia todos los días, nunca la dirección misma, y se borra a los 30 días. Los registros cortos de IA dicen qué paso se usó, no lo que escribiste."
+      },
+      "oneAccount": {
+        "title": "Una cuenta gratis",
+        "description": "The Forge te pide iniciar sesión con una cuenta gratis, la misma que usa The Refinery. Así tu trabajo te sigue a otro dispositivo, y así puedes descargarlo o borrarlo en Configuración. Mientras no esté guardado en tu cuenta, tu trabajo también está en este navegador. En una computadora compartida o de biblioteca, cierra la sesión y presiona Borrar mis datos de esta computadora al terminar. Para frenar abusos contamos los usos por cuenta y por conexión a internet. La conexión se guarda como un código hecho con tu dirección IP que cambia todos los días, nunca la dirección misma, y se borra a los 30 días. Los registros cortos de IA dicen qué paso se usó, no lo que escribiste. La revisión gratis de currículum funciona sin iniciar sesión y no guarda nada."
+      }
+    },
+    "lock": {
+      "title": "Protege tu cuenta",
+      "password": "Crea una contraseña, o inicia sesión con un enlace mágico de un solo uso que llega a tu correo. Las contraseñas se guardan como un código revuelto (hash), no como las palabras que escribiste.",
+      "twoStep": "Activa la verificación en dos pasos. Entonces, cada inicio de sesión pide un código de una aplicación de autenticación, uses contraseña, un enlace por correo o Google, y recibes códigos de respaldo de un solo uso por si pierdes tu teléfono. El secreto detrás de esos códigos se guarda cifrado.",
+      "devices": "Mira todos los dispositivos con la sesión iniciada en tu cuenta y cierra la de cualquiera que no reconozcas. Pierde el acceso al instante.",
+      "proof": "Exportar o eliminar tus datos te pide primero demostrar que eres tú, con tu contraseña, o escribiendo DELETE si usas el enlace mágico para iniciar sesión. Así, un dispositivo prestado o sin bloquear no puede borrar ni copiar tus datos."
+    },
+    "choice": {
+      "title": "Lo que compartes es tu decisión",
+      "intro": "Controlas algunas decisiones separadas en Configuración. Puedes cambiar cualquiera cuando quieras:",
+      "better": "<b>Mejor ayuda:</b> deja que la IA use más de tus respuestas de The Forge para darte sugerencias más precisas y personales.",
+      "research": "<b>Investigación:</b> permite que tus datos, sin tu nombre ni tus detalles, ayuden a estudiar qué ayuda a las personas a encontrar trabajo.",
+      "outcomes": "<b>Resultados:</b> comparte si conseguiste empleo para que los programas aliados vean si esto funciona. Puedes compartir esto sin compartir nada más."
+    },
+    "dont": {
+      "title": "Lo que no hacemos",
+      "ads": "Sin anuncios. Nunca.",
+      "sell": "No vendemos tus datos. Nunca.",
+      "networks": "Sin redes de publicidad ni corredores de datos. Contamos visitas con Google Analytics y Vercel para ver qué herramientas ayudan a las personas. Ven qué páginas se usan, no lo que escribes. Los mantenemos fuera de la práctica para hablar de tus antecedentes penales, la práctica de entrevista, la Bóveda, tus documentos y los enlaces de invitación que llevan un código o un nombre.",
+      "providers": "Usamos proveedores de servicios para alojamiento, almacenamiento, IA, correo, revisión de bots, ofertas de empleo y conteo de visitas. Lo que se comparte con programas y lo que la ley exige revelar está descrito arriba.",
+      "mining": "Sin minería de datos",
+      "surprises": "Sin sorpresas. Si algo cambia, te avisamos primero"
+    },
+    "orgs": {
+      "title": "Para organizaciones",
+      "intro": "Si estás pensando en esta plataforma para tus clientes:",
+      "staff": "El acceso del personal a los materiales de los participantes está limitado por organización, por los permisos del personal y por lo que el participante tiene activo para compartir",
+      "record": "La mayoría de los pasos con IA dejan un registro corto (herramienta, modelo, hora) para revisión. El registro no guarda la respuesta completa de la IA.",
+      "voice": "El audio de la práctica con voz pasa por OpenAI, que puede conservarlo hasta 30 días para vigilar abusos. Nosotros no guardamos el audio. Si la persona decide guardar una práctica, conservamos las palabras escritas, cifradas.",
+      "users": "Los usuarios controlan sus propios datos. Pueden exportarlos o eliminarlos por su cuenta, sin pasar por ustedes",
+      "rate": "Los límites de uso protegen contra abusos. Los programas que comparten una sola conexión a internet pueden usar un código de acceso para que su grupo tenga un límite compartido más grande.",
+      "codes": "Los códigos de acceso de organizaciones aliadas les permiten incorporar a sus clientes con permisos ampliados"
+    },
+    "tech": {
+      "title": "Detalles técnicos",
+      "intro": "Para profesionales de seguridad y equipos de cumplimiento:"
+    },
+    "contact": {
+      "question": "¿Preguntas sobre tus datos o tu privacidad?",
+      "ask": "Pregúntale a t.ROY. Está en cada página. O escríbenos a <email></email>"
+    }
+  }
+}

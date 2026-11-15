@@ -12,13 +12,15 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { StatusBadges } from "@/components/apply/StatusBadges";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
-import { revisionStatusOf, trackerReadinessLine, type TailoredStatus } from "@/lib/tailor-readiness";
-import { oneActionCostLine, toolRemaining, draftFailureWords, type UsageView } from "@/lib/usage-view";
+import { revisionStatusOf, type TailoredStatus } from "@/lib/tailor-readiness";
+import { toolRemaining, type UsageView } from "@/lib/usage-view";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,59 +51,49 @@ type PipelineStatus =
 
 const PIPELINE: {
   status: PipelineStatus;
-  label: string;
   color: string;
   bgColor: string;
   borderColor: string;
-  suggestion: { text: string; href: string } | null;
+  suggestion: { href: string } | null;
 }[] = [
   {
     status: "saved",
-    label: "Saved",
     color: "text-t-phos-dim",
     bgColor: "bg-t-panel",
     borderColor: "border-t-line",
     suggestion: {
-      text: "Build a targeted resume for this job",
       href: "/dashboard/application-tailor",
     },
   },
   {
     status: "applied",
-    label: "Applied",
     color: "text-t-steel",
     bgColor: "bg-t-panel",
     borderColor: "border-t-steel",
     suggestion: {
-      text: "Prep your disclosure plan",
       href: "/dashboard/disclosure",
     },
   },
   {
     status: "heard_back",
-    label: "Heard Back",
     color: "text-t-amber-bright",
     bgColor: "bg-t-panel",
     borderColor: "border-t-amber",
     suggestion: {
-      text: "Practice interviewing for this role",
       href: "/dashboard/interview",
     },
   },
   {
     status: "interviewing",
-    label: "Interviewing",
     color: "text-t-amber-bright",
     bgColor: "bg-t-panel-2",
     borderColor: "border-t-amber",
     suggestion: {
-      text: "Review your disclosure script",
       href: "/dashboard/disclosure",
     },
   },
   {
     status: "offered",
-    label: "Offered",
     color: "text-t-phos",
     bgColor: "bg-t-panel",
     borderColor: "border-t-phos",
@@ -117,6 +109,7 @@ const TERMINAL_STATUSES = ["declined", "rejected"];
  * read as the Tailor's Check and finish line); a draft gets the same way out.
  */
 function TailoredReadiness({ artifactId }: { artifactId: string }) {
+  const t = useTranslations("refineryResume.applications");
   const [status, setStatus] = useState<TailoredStatus | null>(null);
   useEffect(() => {
     let live = true;
@@ -129,7 +122,7 @@ function TailoredReadiness({ artifactId }: { artifactId: string }) {
       live = false;
     };
   }, [artifactId]);
-  const line = trackerReadinessLine(status);
+  const line = status === "finished" ? t("readiness.finished") : status === "draft" ? t("readiness.draft") : status === "unknown" ? t("readiness.unknown") : null;
   if (!line) return null;
   return (
     <div className="mb-2" data-testid="tracker-readiness" data-status={status ?? ""}>
@@ -150,6 +143,9 @@ export default function ApplicationsPageWrapper() {
 }
 
 function ApplicationsPage() {
+  const t = useTranslations("refineryResume.applications");
+  const locale = useLocale();
+  const ts = useServerText();
   // Shared-computer rule: only a local run marked as this user's is read.
   const ownerUid = useSession().data?.user?.id;
   const [apps, setApps] = useState<Application[]>([]);
@@ -188,9 +184,9 @@ function ApplicationsPage() {
       window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT));
       if (status === "interviewing") {
         setInterviewReady(id);
-        setStatusNotice("You got the interview. Let’s prepare with the job and documents you saved.");
-      } else setStatusNotice("Application updated.");
-    } catch { setStatusNotice("That update did not save. Your application is unchanged. Try again."); }
+        setStatusNotice(t("interviewReady"));
+      } else setStatusNotice(t("updated"));
+    } catch { setStatusNotice(t("updateFailed")); }
     setUpdating(null);
   }
 
@@ -209,7 +205,23 @@ function ApplicationsPage() {
       .then((v) => setFollowUpUsage(v && typeof v.kind === "string" ? (v as UsageView) : null))
       .catch(() => setFollowUpUsage(null));
   useEffect(() => { loadFollowUpUsage(); }, []);
-  const followUpCost = oneActionCostLine(followUpUsage ? toolRemaining(followUpUsage, "follow-up") : null);
+  // The cost line the usage helper builds, in the person's language. A reason the server gave stays as it is.
+  const followUpCost = ((r: ReturnType<typeof toolRemaining> | null): { line: string; canRun: boolean } => {
+    const cost = t("cost.base");
+    if (!r) return { line: cost, canRun: true };
+    if (r.paused) return { line: t("cost.paused"), canRun: false };
+    if (r.blockedReason) return { line: ts(r.blockedReason), canRun: false };
+    if (r.left === null) return { line: cost, canRun: true };
+    if (r.left <= 0) return { line: `${cost} ${t("cost.none")}`, canRun: false };
+    return { line: `${cost} ${t("cost.left", { left: r.left })}`, canRun: true };
+  })(followUpUsage ? toolRemaining(followUpUsage, "follow-up") : null);
+  const draftFailureWords = (status: number, error?: unknown): string => {
+    const said = typeof error === "string" && error.trim() && error.length < 300 ? error.trim() : "";
+    if (status === 401) return t("failure.401");
+    if (status === 429 || status === 403) return said || t("failure.allowance");
+    if (status === 404) return t("failure.404");
+    return t("failure.other");
+  };
 
   function forgeStrengths(): string[] {
     try {
@@ -249,16 +261,16 @@ function ApplicationsPage() {
   async function copyFollowUp(id: string) {
     const f = followUps[id];
     if (!f) return;
-    const text = `Subject: ${f.subject}\n\n${f.body}`;
+    const text = `${t("followUpSubject", { subject: f.subject })}\n\n${f.body}`;
     try {
       await navigator.clipboard.writeText(text);
     } catch {
-      const t = document.createElement("textarea");
-      t.value = text;
-      document.body.appendChild(t);
-      t.select();
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
       document.execCommand("copy");
-      t.remove();
+      ta.remove();
     }
     setCopiedId(id);
     setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
@@ -275,7 +287,7 @@ function ApplicationsPage() {
     return (
       <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
         <TroyWork compact decorative />
-        Loading applications...
+        {t("loading")}
       </div>
     );
   }
@@ -283,30 +295,28 @@ function ApplicationsPage() {
   return (
     <div className="max-w-4xl">
       <header id={activeApps.length === 0 && archivedApps.length > 0 ? "refinery-tool-application-overview" : undefined}><h1 className="text-2xl font-bold text-t-white mb-2">
-        Application Tracker
+        {t("title")}
       </h1>
       <p className="text-base text-t-phos-dim mb-6">
-        Track your job applications from saved to offered. Each step has tools
-        to help you prepare.
+        {t("intro")}
       </p></header>
 
       {statusNotice && <div role="status" className="mb-5 border border-t-amber bg-t-panel p-4 text-t-phos">
         <p>{statusNotice}</p>
-        {interviewReady && <Link href={`/dashboard/interview?applicationId=${encodeURIComponent(interviewReady)}`} className="t-focus mt-2 inline-flex min-h-touch items-center text-t-amber-bright underline">Prepare for this interview with t.ROY</Link>}
+        {interviewReady && <Link href={`/dashboard/interview?applicationId=${encodeURIComponent(interviewReady)}`} className="t-focus mt-2 inline-flex min-h-touch items-center text-t-amber-bright underline">{t("prepInterview")}</Link>}
       </div>}
-      <p className="mb-5 text-sm text-t-phos-dim">You can <Link href="/dashboard/interview" className="t-focus text-t-amber-bright underline">practice an interview anytime</Link>. An invitation moves that job straight to preparation.</p>
+      <p className="mb-5 text-sm text-t-phos-dim">{t.rich("practiceAnytime", { link: (chunks) => <Link href="/dashboard/interview" className="t-focus text-t-amber-bright underline">{chunks}</Link> })}</p>
 
       {activeApps.length === 0 && archivedApps.length === 0 && (
         <div id="refinery-tool-application-overview" className="text-center py-16">
           <p className="text-t-phos-dim mb-4">
-            No applications yet. Save jobs from the Job Board to start
-            tracking.
+            {t("empty")}
           </p>
           <Link
             href="/dashboard/jobs"
             className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
           >
-            Find Jobs &rarr;
+            {t("findJobs")}
           </Link>
         </div>
       )}
@@ -327,7 +337,7 @@ function ApplicationsPage() {
                   <span className={`text-xl font-bold block ${stage.color}`}>
                     {count}
                   </span>
-                  <span className="text-xs text-t-phos-dim">{stage.label}</span>
+                  <span className="text-xs text-t-phos-dim">{t(`stage.${stage.status}`)}</span>
                 </div>
               );
             })}
@@ -348,7 +358,7 @@ function ApplicationsPage() {
                   <h2
                     className={`text-sm font-semibold uppercase mb-3 ${stage.color}`}
                   >
-                    {stage.label} ({stageApps.length})
+                    {t(`stage.${stage.status}`)} ({stageApps.length})
                   </h2>
                   <div className="space-y-3">
                     {stageApps.map((app) => (
@@ -369,7 +379,7 @@ function ApplicationsPage() {
                                   {app.salary}
                                 </span>
                               )}
-                              <span>{timeAgo(app.status_updated_at)}</span>
+                              <span>{timeAgo(app.status_updated_at, t, locale)}</span>
                             </div>
                             {/* Per-job status (R1): what's done for this job. */}
                             <div className="mt-2">
@@ -385,7 +395,7 @@ function ApplicationsPage() {
                               applied lives in the ApplyActions block below (the
                               full apply ladder); later stages just advance. */}
                           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                            {["saved", "applied", "heard_back"].includes(app.status) && <button type="button" disabled={updating === app.id} onClick={() => updateStatus(app.id, "interviewing")} className="t-focus min-h-touch border border-t-amber px-3 py-1.5 text-xs font-semibold text-t-amber-bright disabled:opacity-50">I got an interview</button>}
+                            {["saved", "applied", "heard_back"].includes(app.status) && <button type="button" disabled={updating === app.id} onClick={() => updateStatus(app.id, "interviewing")} className="t-focus min-h-touch border border-t-amber px-3 py-1.5 text-xs font-semibold text-t-amber-bright disabled:opacity-50">{t("gotInterview")}</button>}
                             {stage.status !== "saved" && nextStage && (
                               <button
                                 onClick={() =>
@@ -396,7 +406,7 @@ function ApplicationsPage() {
                               >
                                 {updating === app.id
                                   ? "..."
-                                  : `Move to ${nextStage.label}`}
+                                  : t("moveTo", { stage: t(`stage.${nextStage.status}`) })}
                               </button>
                             )}
                             <button
@@ -404,7 +414,7 @@ function ApplicationsPage() {
                                 updateStatus(app.id, "rejected")
                               }
                               className="text-xs text-t-phos-dim hover:text-t-red"
-                              title="Remove"
+                              title={t("remove")}
                             >
                               <svg
                                 width="14"
@@ -467,7 +477,7 @@ function ApplicationsPage() {
                                 strokeLinecap="round"
                               />
                             </svg>
-                            {stage.suggestion.text} for {app.company}
+                            {t("suggestionFor", { text: t(`suggestion.${stage.status}`), company: app.company })}
                           </Link>
                         )}
 
@@ -487,13 +497,13 @@ function ApplicationsPage() {
                                 className="t-focus inline-flex items-center gap-2 px-3 py-2 bg-t-panel-2 border border-t-line text-xs font-medium text-t-amber-bright hover:text-t-amber transition-colors disabled:opacity-50"
                               >
                                 {followUpFor === app.id
-                                  ? "Drafting your follow-up..."
-                                  : "Draft a follow-up message"}
+                                  ? t("drafting")
+                                  : t("draftFollowUp")}
                               </button>
                             ) : (
                               <div className="bg-t-panel-2 border border-t-line p-3">
                                 <p className="text-xs font-semibold text-t-white">
-                                  Subject: {followUps[app.id].subject}
+                                  {t("followUpSubject", { subject: followUps[app.id].subject })}
                                 </p>
                                 <p className="text-xs text-t-phos whitespace-pre-line mt-2 leading-relaxed">
                                   {followUps[app.id].body}
@@ -503,17 +513,17 @@ function ApplicationsPage() {
                                     onClick={() => copyFollowUp(app.id)}
                                     className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
                                   >
-                                    {copiedId === app.id ? "Copied" : "Copy"}
+                                    {copiedId === app.id ? t("copied") : t("copy")}
                                   </button>
                                   <button
                                     onClick={() => draftFollowUp(app.id)}
                                     disabled={followUpFor === app.id || !followUpCost.canRun}
                                     className="text-xs text-t-phos-dim hover:text-t-white disabled:opacity-50"
                                   >
-                                    {followUpFor === app.id ? "..." : "Redraft"}
+                                    {followUpFor === app.id ? "..." : t("redraft")}
                                   </button>
                                   <span className="text-[11px] text-t-phos-dim ml-auto">
-                                    Saved to your materials. Review before sending.
+                                    {t("savedMaterials")}
                                   </span>
                                 </div>
                               </div>
@@ -525,15 +535,15 @@ function ApplicationsPage() {
                         {stage.status === "offered" && (
                           <div className="mt-3 bg-t-panel-2 px-3 py-2 border border-t-phos">
                             <p className="text-xs text-t-phos font-medium">
-                              You have an offer. Confirm the terms and your next step.
+                              {t("offer.title")}
                             </p>
                             <ul className="mt-2 list-disc pl-4 text-xs text-t-phos space-y-1">
-                              <li>Ask your contact which conditions remain and which documents to bring.</li>
-                              <li>Confirm your start date, time, location and transportation.</li>
-                              <li>After you actually start, tell your program contact if you choose to share.</li>
-                              <li>Set your own check-in for your first week. An offer alone is not a confirmed start.</li>
+                              <li>{t("offer.1")}</li>
+                              <li>{t("offer.2")}</li>
+                              <li>{t("offer.3")}</li>
+                              <li>{t("offer.4")}</li>
                             </ul>
-                            <Link href="/dashboard/resources#support" className="t-focus mt-2 inline-flex min-h-touch items-center text-xs underline">Get help with the next step</Link>
+                            <Link href="/dashboard/resources#support" className="t-focus mt-2 inline-flex min-h-touch items-center text-xs underline">{t("offer.help")}</Link>
                           </div>
                         )}
                       </div>
@@ -550,7 +560,7 @@ function ApplicationsPage() {
       {archivedApps.length > 0 && (
         <section className="mt-10 pt-6 border-t border-t-line">
           <h2 className="text-sm font-semibold text-t-phos-dim mb-3">
-            Archived ({archivedApps.length})
+            {t("archived", { count: archivedApps.length })}
           </h2>
           <div className="space-y-2">
             {archivedApps.map((app) => (
@@ -567,7 +577,7 @@ function ApplicationsPage() {
                   </span>
                 </div>
                 <span className="text-xs text-t-phos-dim capitalize">
-                  {app.status.replace("_", " ")}
+                  {app.status === "declined" || app.status === "rejected" ? t(`archivedStatus.${app.status}`) : app.status.replace("_", " ")}
                 </span>
               </div>
             ))}
@@ -580,14 +590,14 @@ function ApplicationsPage() {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string, values?: Record<string, string | number>) => string, locale?: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t("ago.now");
+  if (mins < 60) return t("ago.mins", { n: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("ago.hours", { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+  if (days < 7) return t("ago.days", { n: days });
+  return new Date(dateStr).toLocaleDateString(locale === "es" ? "es-US" : undefined);
 }

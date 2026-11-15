@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 import { RECORD_CHECK_CONSENT_VERSION, RECORD_CHECK_COPY as C } from "@/lib/record-check/copy";
 import { STATE_NAMES } from "@/lib/record-check/states";
 import type { ChecklistView } from "@/lib/record-check/handler";
@@ -51,6 +52,19 @@ const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 const STATE_OPTIONS = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
 
+/**
+ * ts() for a system-built line that has a state name in it. The line is matched with the English state
+ * name; when it was translated, the state name in it is put into Spanish too (the last one, since the state
+ * comes after any typed job). English and untranslated lines come back unchanged.
+ */
+function tsWithState(ts: (s: string) => string, text: string, stateName: string): string {
+  const out = ts(text);
+  const es = ts(stateName);
+  if (out === text || es === stateName) return out;
+  const i = out.lastIndexOf(stateName);
+  return i < 0 ? out : out.slice(0, i) + es + out.slice(i + stateName.length);
+}
+
 export default function RecordCheckPageWrapper() {
   return (
     <TierGate requiredTier="client">
@@ -60,6 +74,7 @@ export default function RecordCheckPageWrapper() {
 }
 
 function RecordCheckPage() {
+  const ts = useServerText();
   const [consent, setConsent] = useState<ConsentInfo | null>(null);
   const [ticked, setTicked] = useState(false);
   const [offense, setOffense] = useState("");
@@ -210,7 +225,7 @@ function RecordCheckPage() {
   }
 
   async function revoke() {
-    if (!window.confirm(C.revokeConfirm)) return;
+    if (!window.confirm(ts(C.revokeConfirm))) return;
     setBusy(true);
     setError("");
     try {
@@ -231,44 +246,44 @@ function RecordCheckPage() {
   }
 
   if (!consent) {
-    return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-t-phos-dim">Loading...</div>;
+    return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-t-phos-dim">{ts("Loading...")}</div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8" data-testid="record-check">
-      <h1 className="text-2xl font-bold text-t-white mb-2">{C.title}</h1>
-      <p className="text-sm text-t-phos leading-relaxed mb-6">{C.intro}</p>
+      <h1 className="text-2xl font-bold text-t-white mb-2">{ts(C.title)}</h1>
+      <p className="text-sm text-t-phos leading-relaxed mb-6">{ts(C.intro)}</p>
 
       {notice && (
         <p role="status" className="mb-6 bg-t-panel border border-t-line p-4 text-sm text-t-phos" data-testid="rc-notice">
-          {notice}
+          {ts(notice)}
         </p>
       )}
       {error && (
         <p role="alert" className="mb-6 border border-t-amber p-4 text-sm text-t-white" data-testid="rc-error">
-          {error}
+          {ts(error)}
         </p>
       )}
 
       {consent.staffBlocked ? (
         <p className="bg-t-panel border border-t-line p-5 text-sm text-t-phos" data-testid="rc-staff-blocked">
-          {C.staffBlocked}
+          {ts(C.staffBlocked)}
         </p>
       ) : !consent.granted ? (
         <section className="bg-t-panel p-6 border border-t-steel mb-8" data-testid="rc-consent">
-          <h2 className="font-bold text-t-white mb-4 text-lg">{C.consentTitle}</h2>
+          <h2 className="font-bold text-t-white mb-4 text-lg">{ts(C.consentTitle)}</h2>
           <div className="space-y-4 text-sm text-t-phos leading-relaxed mb-6">
             <div>
-              <p className="font-semibold text-t-white mb-1">{C.whatIsSentLabel}</p>
-              <p className="text-t-phos-dim">{C.whatIsSent}</p>
+              <p className="font-semibold text-t-white mb-1">{ts(C.whatIsSentLabel)}</p>
+              <p className="text-t-phos-dim">{ts(C.whatIsSent)}</p>
             </div>
             <div>
-              <p className="font-semibold text-t-white mb-1">{C.howLongLabel}</p>
-              <p className="text-t-phos-dim">{C.howLong}</p>
+              <p className="font-semibold text-t-white mb-1">{ts(C.howLongLabel)}</p>
+              <p className="text-t-phos-dim">{ts(C.howLong)}</p>
             </div>
             <div>
-              <p className="font-semibold text-t-white mb-1">{C.yourChoiceLabel}</p>
-              <p className="text-t-phos-dim">{C.yourChoice}</p>
+              <p className="font-semibold text-t-white mb-1">{ts(C.yourChoiceLabel)}</p>
+              <p className="text-t-phos-dim">{ts(C.yourChoice)}</p>
             </div>
           </div>
           <label className="flex items-start gap-3 text-sm text-t-white mb-5 cursor-pointer">
@@ -279,7 +294,7 @@ function RecordCheckPage() {
               className="mt-1 h-5 w-5"
               data-testid="rc-consent-box"
             />
-            <span>{C.checkboxLabel}</span>
+            <span>{ts(C.checkboxLabel)}</span>
           </label>
           <div className="flex flex-wrap gap-3">
             <button
@@ -288,10 +303,10 @@ function RecordCheckPage() {
               className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold disabled:opacity-40 min-h-touch"
               data-testid="rc-consent-continue"
             >
-              {C.continueButton}
+              {ts(C.continueButton)}
             </button>
             <a href="/dashboard/disclosure" className="px-4 py-3 text-t-steel text-sm font-medium min-h-touch">
-              {C.notNow}
+              {ts(C.notNow)}
             </a>
           </div>
         </section>
@@ -299,21 +314,23 @@ function RecordCheckPage() {
         <>
           <section className="mb-8" data-testid="rc-form">
             <div className="mb-4">
-              <label htmlFor="rc-state" className="text-sm font-medium text-t-white block mb-1">{C.stateLabel}</label>
+              <label htmlFor="rc-state" className="text-sm font-medium text-t-white block mb-1">{ts(C.stateLabel)}</label>
               <select
                 id="rc-state"
                 value={stateCode}
                 onChange={(e) => setStateCode(e.target.value)}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white min-h-touch"
               >
-                <option value="">Select...</option>
-                {STATE_OPTIONS.map(([code, name]) => (
-                  <option key={code} value={code}>{name}</option>
-                ))}
+                <option value="">{ts("Select...")}</option>
+                {STATE_OPTIONS.map(([code, name]) => [code, ts(name)] as const)
+                  .sort((a, b) => a[1].localeCompare(b[1]))
+                  .map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
+                  ))}
               </select>
             </div>
             <div className="mb-4">
-              <label htmlFor="rc-job" className="text-sm font-medium text-t-white block mb-1">{C.jobLabel}</label>
+              <label htmlFor="rc-job" className="text-sm font-medium text-t-white block mb-1">{ts(C.jobLabel)}</label>
               <input
                 id="rc-job"
                 value={job}
@@ -322,10 +339,10 @@ function RecordCheckPage() {
                 autoComplete="off"
                 className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white min-h-touch"
               />
-              <p className="text-xs text-t-phos-dim mt-1">{C.jobHint}</p>
+              <p className="text-xs text-t-phos-dim mt-1">{ts(C.jobHint)}</p>
             </div>
             <div className="mb-4">
-              <label htmlFor="rc-offense" className="text-sm font-medium text-t-white block mb-1">{C.offenseLabel}</label>
+              <label htmlFor="rc-offense" className="text-sm font-medium text-t-white block mb-1">{ts(C.offenseLabel)}</label>
               <textarea
                 id="rc-offense"
                 value={offense}
@@ -336,7 +353,7 @@ function RecordCheckPage() {
                 spellCheck={false}
                 className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white"
               />
-              <p className="text-xs text-t-phos-dim mt-1">{C.offenseHint}</p>
+              <p className="text-xs text-t-phos-dim mt-1">{ts(C.offenseHint)}</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <button
@@ -345,11 +362,11 @@ function RecordCheckPage() {
                 className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold disabled:opacity-40 min-h-touch"
                 data-testid="rc-build"
               >
-                {busy ? "Working..." : C.buildButton}
+                {busy ? ts("Working...") : ts(C.buildButton)}
               </button>
               {(checklist || offense || job) && (
                 <button onClick={clearTyped} className="px-4 py-3 text-t-steel text-sm font-medium min-h-touch">
-                  {C.startOver}
+                  {ts(C.startOver)}
                 </button>
               )}
             </div>
@@ -367,7 +384,7 @@ function RecordCheckPage() {
                   className="mt-1 h-5 w-5"
                   data-testid="rc-keep-offense"
                 />
-                <span>{C.keepOffenseLabel}</span>
+                <span>{ts(C.keepOffenseLabel)}</span>
               </label>
               <button
                 onClick={save}
@@ -375,44 +392,44 @@ function RecordCheckPage() {
                 className="t-focus px-5 py-3 bg-t-steel text-white text-sm font-bold disabled:opacity-40 min-h-touch"
                 data-testid="rc-save-button"
               >
-                {C.saveButton}
+                {ts(C.saveButton)}
               </button>
-              {savedThis && <p className="text-sm text-t-phos mt-3" data-testid="rc-saved-note">{C.savedNote}</p>}
+              {savedThis && <p className="text-sm text-t-phos mt-3" data-testid="rc-saved-note">{ts(C.savedNote)}</p>}
             </section>
           )}
 
           {saved.length > 0 && (
             <section className="mb-8" data-testid="rc-saved-list">
-              <h2 className="font-bold text-t-white mb-3">{C.savedTitle}</h2>
+              <h2 className="font-bold text-t-white mb-3">{ts(C.savedTitle)}</h2>
               <ul className="space-y-3">
                 {saved.map((s) => (
                   <li key={s.id} className="bg-t-panel border border-t-line p-4" data-testid="rc-saved-item">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm text-t-white">
-                        Checklist, {s.stateName}
+                        {tsWithState(ts, `Checklist, ${s.stateName}`, s.stateName)}
                         <span className="block text-xs text-t-phos-dim">
-                          {new Date(s.createdAt).toLocaleDateString()} · {s.keptTyped ? C.keptYes : C.keptNo}
+                          {new Date(s.createdAt).toLocaleDateString()} · {ts(s.keptTyped ? C.keptYes : C.keptNo)}
                         </span>
                       </p>
                       <div className="flex gap-2">
                         <button onClick={() => openSaved(s.id)} className="px-3 py-2 text-sm text-t-steel min-h-touch" data-testid="rc-saved-open">
-                          {C.openButton}
+                          {ts(C.openButton)}
                         </button>
                         <button
                           onClick={() => deleteSaved(s.id)}
                           disabled={busy}
                           className="px-3 py-2 text-sm text-t-steel min-h-touch"
                         >
-                          {C.deleteButton}
+                          {ts(C.deleteButton)}
                         </button>
                       </div>
                     </div>
                     {opened[s.id] && (
                       <div className="mt-3" data-testid="rc-saved-opened">
-                        {opened[s.id].error && <p className="text-sm text-t-phos">{opened[s.id].error}</p>}
+                        {opened[s.id].error && <p className="text-sm text-t-phos">{ts(opened[s.id].error!)}</p>}
                         {opened[s.id].typed && (
                           <p className="text-xs text-t-phos-dim mb-3" data-testid="rc-saved-typed">
-                            {C.jobLabel}: {opened[s.id].typed!.job}. {C.offenseLabel}: {opened[s.id].typed!.offense}
+                            {ts(C.jobLabel)}: {opened[s.id].typed!.job}. {ts(C.offenseLabel)}: {opened[s.id].typed!.offense}
                           </p>
                         )}
                         {opened[s.id].checklist && <ChecklistBlock checklist={opened[s.id].checklist!} />}
@@ -431,7 +448,7 @@ function RecordCheckPage() {
               className="px-4 py-3 text-sm font-medium text-t-white border border-t-line min-h-touch"
               data-testid="rc-revoke"
             >
-              {C.revokeButton}
+              {ts(C.revokeButton)}
             </button>
           </section>
         </>
@@ -441,6 +458,7 @@ function RecordCheckPage() {
 }
 
 function ChecklistBlock({ checklist }: { checklist: ChecklistView }) {
+  const ts = useServerText();
   const byTopic = new Map<SourceTopic, ChecklistView["sources"]>();
   for (const s of checklist.sources) {
     const list = byTopic.get(s.topic) ?? [];
@@ -450,39 +468,39 @@ function ChecklistBlock({ checklist }: { checklist: ChecklistView }) {
   return (
     <section className="mb-8" data-testid="rc-checklist">
       <p className="bg-t-panel-2 border border-t-line p-4 text-sm text-t-white leading-relaxed mb-5" data-testid="rc-not-a-verdict">
-        {checklist.notAVerdict}
+        {ts(checklist.notAVerdict)}
       </p>
-      {checklist.generatedBy === "plain" && <p className="text-xs text-t-phos-dim mb-4">{C.plainNote}</p>}
+      {checklist.generatedBy === "plain" && <p className="text-xs text-t-phos-dim mb-4">{ts(C.plainNote)}</p>}
 
-      <h2 className="font-bold text-t-white mb-2">{C.stepsLabel}</h2>
+      <h2 className="font-bold text-t-white mb-2">{ts(C.stepsLabel)}</h2>
       <ol className="list-decimal ml-5 space-y-2 text-sm text-t-phos mb-6" data-testid="rc-steps">
         {checklist.steps.map((s) => (
-          <li key={s.id}>{s.text}</li>
+          <li key={s.id}>{tsWithState(ts, s.text, checklist.stateName)}</li>
         ))}
       </ol>
 
-      <h2 className="font-bold text-t-white mb-2">{C.questionsLabel}</h2>
+      <h2 className="font-bold text-t-white mb-2">{ts(C.questionsLabel)}</h2>
       <ul className="list-disc ml-5 space-y-2 text-sm text-t-phos mb-6" data-testid="rc-questions">
         {checklist.questions.map((q) => (
-          <li key={q.id}>{q.text}</li>
+          <li key={q.id}>{tsWithState(ts, q.text, checklist.stateName)}</li>
         ))}
       </ul>
 
-      <h2 className="font-bold text-t-white mb-1">{C.sourcesLabel}</h2>
-      <p className="text-xs text-t-phos-dim mb-3">{C.sourcesNote}</p>
+      <h2 className="font-bold text-t-white mb-1">{ts(C.sourcesLabel)}</h2>
+      <p className="text-xs text-t-phos-dim mb-3">{ts(C.sourcesNote)}</p>
       <div className="space-y-4" data-testid="rc-sources">
         {Array.from(byTopic.entries()).map(([topic, list]) => (
           <div key={topic}>
-            <p className="text-xs font-semibold uppercase text-t-phos-dim mb-1">{TOPIC_LABELS[topic] ?? topic}</p>
+            <p className="text-xs font-semibold uppercase text-t-phos-dim mb-1">{ts(TOPIC_LABELS[topic] ?? topic)}</p>
             <ul className="space-y-2">
               {list.map((s) => (
                 <li key={s.id} className="text-sm">
                   <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="text-t-amber-bright underline" data-testid="rc-source-link">
-                    {s.title}
+                    {ts(s.title)}
                   </a>
-                  {s.kind === "reference_copy" && <span className="text-xs text-t-phos-dim"> ({C.referenceCopy})</span>}
+                  {s.kind === "reference_copy" && <span className="text-xs text-t-phos-dim"> ({ts(C.referenceCopy)})</span>}
                   <span className="block text-t-phos-dim text-xs">
-                    {s.whatItIs} {s.label}{s.asOf ? `, as of ${s.asOf}` : ""}.
+                    {ts(s.whatItIs)} {ts(s.label)}{s.asOf ? `, ${ts(`as of ${s.asOf}`)}` : ""}.
                   </span>
                 </li>
               ))}

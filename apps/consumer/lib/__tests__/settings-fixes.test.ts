@@ -13,12 +13,19 @@ import { PROGRESSION_AI } from '../progression-policy';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { TOURS, readTourSlot, isTourId, slotSql } from '../tour/registry';
 import { grantTourRewardWith } from '../tour/tour-sql';
-import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed, vaultZipPlan, VAULT_ZIP_MAX_BYTES, VAULT_ZIP_TOO_LARGE, DOCUMENTS_DOWNLOAD_FAILED, skippedFilesNote, SKIPPED_FILE_NAME } from '../export-plan';
+import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed, vaultZipPlan, VAULT_ZIP_MAX_BYTES, VAULT_ZIP_TOO_LARGE, DOCUMENTS_DOWNLOAD_FAILED, skippedFilesNote, SKIPPED_FILE_NAME, SHARED_COMPUTER_WARNING, OWN_DEVICE_LABEL } from '../export-plan';
 import { saveErrorWords, SAVE_ERROR_FALLBACK } from '../save-error';
+import { MESSAGES } from './helpers/intl';
 import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, legacyToolLeft, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
+/** The English catalog value for a dotted path, e.g. 'refineryAccount.settings.page.noProgram' (copy moved out of the components). */
+const en = (path: string): string => {
+  const v = path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], MESSAGES.en);
+  assert.equal(typeof v, 'string', `English catalog has ${path}`);
+  return v as string;
+};
 
 /* S1: Coach Save must not undo reading help */
 const GET_PAYLOAD = {
@@ -122,12 +129,15 @@ test('S10 (SF-6): a refused save shows the route\'s words beside the control and
   assert.equal(saveErrorWords({ error: 7 }, 'fallback'), 'fallback');
   for (const c of ['components/ConsentPanel.tsx', 'components/SharingConsentSection.tsx', 'components/AccessibilitySettingsSection.tsx']) {
     const src = read(c);
-    assert.match(src, /readSaveError\(res\)/, `${c} reads the route's words`);
+    assert.match(src, /readSaveError\(res(?:, t\("saveFallback"\))?\)/, `${c} reads the route's words`);
     assert.match(src, /<SaveError message=/, `${c} shows them`);
     // Every write is awaited into res (reads may still fall back quietly).
     assert.doesNotMatch(src, /method: "(?:POST|PATCH)",[^}]*\}\)\.catch\(\(\) => \{\}\);/, `${c} no longer swallows a failed save`);
     assert.ok((src.match(/const res = await fetch\(/g) ?? []).length >= 1, `${c} awaits its save`);
   }
+  // ConsentPanel passes its own catalog fallback; the English must stay the shared words so a refused save reads the same.
+  assert.match(read('components/ConsentPanel.tsx'), /readSaveError\(res, t\("saveFallback"\)\)/, 'ConsentPanel falls back to its catalog words');
+  assert.equal(en('refineryAccount.consent.saveFallback'), SAVE_ERROR_FALLBACK, 'the catalog fallback is the shared save-error words');
   assert.doesNotMatch(read('components/ConsentPanel.tsx'), /return res\.ok;/, 'ConsentPanel no longer reduces the answer to ok or not');
   const a11y = read('components/AccessibilitySettingsSection.tsx');
   assert.match(a11y, /if \(!res\.ok\) \{ showPrefs\(before\);/, 'a refused display change is rolled back on screen');
@@ -140,7 +150,8 @@ test('T2: the tour route refuses every write under any impersonation, and the to
   assert.doesNotMatch(route, /impersonation\?\.mode === "view"\) return/);
   assert.match(read('components/GuidedTour.tsx'), /held=\{!!props\.held \|\| impersonating\}/);
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  assert.match(page, /impersonating \? <p[^>]*>Hidden while you view or assist as this person\.<\/p> : <SecuritySection \/>/);
+  assert.match(page, /impersonating \? <p[^>]*>\{t\("hiddenWhileViewing"\)\}<\/p> : <SecuritySection \/>/);
+  assert.equal(en('refineryAccount.settings.page.hiddenWhileViewing'), 'Hidden while you view or assist as this person.');
   assert.match(page, /\{!impersonating && <AvatarSettingsSection \/>\}/);
 });
 
@@ -234,21 +245,27 @@ test('S5: the route and the page read the allowance, not getUserDailyLimit and t
 
 test('S6: the program code copy joins a seat and promises no AI calls', () => {
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  assert.match(page, /Join a program with a code/);
-  assert.match(page, /joins you to a program&apos;s seat/);
+  // The copy moved to the catalog (accountExtras); the section reads it by key, English unchanged.
+  const extras = 'refineryAccount.settings.accountExtras';
+  assert.match(page, /id="settings-program-code"[\s\S]*t\("joinTitle"\)[\s\S]*t\("enterCodeBody"\)/, 'the program code section reads its title and body from the catalog');
+  assert.match(en(`${extras}.joinTitle`), /Join a program with a code/);
+  assert.match(en(`${extras}.enterCodeBody`), /joins you to a program's seat/);
   // SF-4: a code can change tier and AI limit, so it does not "open nothing"; it shares nothing.
-  assert.match(page, /joining shares\s+nothing by itself/);
-  assert.doesNotMatch(page, /opens\s+nothing by itself/);
+  assert.match(en(`${extras}.enterCodeBody`), /joining shares\s+nothing by itself/);
+  assert.doesNotMatch(en(`${extras}.enterCodeBody`), /opens\s+nothing by itself/);
+  assert.doesNotMatch(JSON.stringify(MESSAGES.en.refineryAccount.settings), /opens\s+nothing by itself/);
   const gate = read('lib/withRateLimit.ts');
   assert.doesNotMatch(gate, /partner code in Settings to upgrade/, 'the tier gate no longer promises an upgrade');
   assert.match(gate, /If a program gave you a code, enter it in Settings\./);
   // Phrases split so the banned-claims scan does not trip on this test.
-  for (const gone of ['unlock more ' + 'AI calls', 'daily limit has ' + 'been increased', 'PARTNER' + '123', 'calls' + '/day']) assert.ok(!page.includes(gone), gone);
+  const settingsCopy = JSON.stringify(MESSAGES.en.refineryAccount.settings);
+  for (const gone of ['unlock more ' + 'AI calls', 'daily limit has ' + 'been increased', 'PARTNER' + '123', 'calls' + '/day']) assert.ok(!page.includes(gone) && !settingsCopy.includes(gone), gone);
 });
 
 test('S7: the progress-sharing switch shows only to a program member; otherwise one plain line', () => {
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  assert.match(page, /codesLoaded && \(redeemedCodes\.length > 0\s*\? <SharingConsentSection \/>\s*: <p id="settings-share-progress"[^>]*>No program is linked to your account/);
+  assert.match(page, /codesLoaded && \(redeemedCodes\.length > 0\s*\? <SharingConsentSection \/>\s*: <p id="settings-share-progress"[^>]*>\{t\("noProgram"\)\}/);
+  assert.match(en('refineryAccount.settings.page.noProgram'), /^No program is linked to your account/);
   assert.doesNotMatch(page, /\{!isOrgStaff && <SharingConsentSection \/>\}/);
 });
 
@@ -288,7 +305,8 @@ test('S8: unticking a box says what the copy leaves out, including the full-copy
   assert.ok(out.includes('chat history with t.ROY'));
   for (const c of FULL_COPY_ONLY) assert.ok(out.includes(c.label), c.key);
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  assert.match(page, /This copy leaves out \{leftOut\.join\(", "\)\}/);
+  assert.match(page, /t\("leavesOut", \{ list: leftOut\.join\(", "\) \}\)/);
+  assert.match(en('refineryAccount.settings.data.leavesOut'), /^This copy leaves out \{list\}\./);
 });
 
 test('S8: the files carry Steel Man names on the person\'s own date', () => {
@@ -313,7 +331,10 @@ test('S8: a no-password account exports with a plain confirm, never by typing DE
 test('S8: the documents ZIP is wired, and the shared-computer warning gates both downloads', () => {
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
   assert.match(page, /fetch\("\/api\/user\/export-vault"/);
-  assert.match(page, /\{SHARED_COMPUTER_WARNING\}/);
+  // The warning now reads from the catalog; its English must stay exactly the lib constant (no drift).
+  assert.match(page, /\{t\("sharedWarning"\)\}/);
+  assert.equal(en('refineryAccount.settings.data.sharedWarning'), SHARED_COMPUTER_WARNING);
+  assert.equal(en('refineryAccount.settings.data.ownDevice'), OWN_DEVICE_LABEL);
   assert.match(page, /disabled=\{exportStatus !== "idle" \|\| !anyChecked \|\| !ownDevice\}/);
   assert.match(page, /disabled=\{docsStatus !== "idle" \|\| !ownDevice\}/);
   assert.match(read('app/(dashboard)/dashboard/documents/page.tsx'), /href="\/dashboard\/settings#settings-export"/);
@@ -338,9 +359,13 @@ test('S8 (SF-3): the documents ZIP refuses over about 4 MB with plain words, nam
   assert.doesNotMatch(route, /NON-impersonatable|non-impersonatable auth\(\) \(/, 'the header says what the route does now');
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
   assert.doesNotMatch(page, /could not be downloaded\. Try again\./);
-  assert.match(page, /setDocsMessage\(data\.error \|\| DOCUMENTS_DOWNLOAD_FAILED\)/);
+  assert.doesNotMatch(JSON.stringify(MESSAGES.en.refineryAccount.settings), /could not be downloaded\. Try again\./);
+  // The page reads the failure words from the catalog; the English must stay exactly the lib constant (no drift).
+  assert.match(page, /setDocsMessage\(data\.error \|\| t\("documentsFailed"\)\)/);
+  assert.equal(en('refineryAccount.settings.page.documentsFailed'), DOCUMENTS_DOWNLOAD_FAILED);
   assert.match(DOCUMENTS_DOWNLOAD_FAILED, /one at a time/);
-  assert.match(page, /up to about\s+4 MB at a time/);
+  assert.match(page, /t\("docsBody"\)/);
+  assert.match(en('refineryAccount.settings.data.docsBody'), /up to about\s+4 MB at a time/);
 });
 
 /* T1: the tour store keyed by tour id (the SQL runs for real in tour-store-map-pglite.test.ts) */

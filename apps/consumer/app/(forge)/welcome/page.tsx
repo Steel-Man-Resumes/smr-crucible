@@ -16,6 +16,7 @@ import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { FlowPage, CardSelect, GhostGuide, TroyLivingIcon } from "@crucible/consumer-ui";
 import { defaultDepth, planForgePath } from "@/lib/forge-path";
+import { useLocale, useTranslations } from "next-intl";
 
 type ReadinessStage =
   | "precontemplation"
@@ -23,40 +24,10 @@ type ReadinessStage =
   | "preparation"
   | "action";
 
-const READINESS_OPTIONS = [
-  {
-    id: "exploring",
-    label: "Just exploring",
-    description: "Not sure I'm ready yet, but I'm curious.",
-  },
-  {
-    id: "thinking",
-    label: "Thinking about it",
-    description: "I know I need to do something, but I don't know where to start.",
-  },
-  {
-    id: "getting-ready",
-    label: "Getting ready",
-    description: "I've decided to make a change. Show me what's next.",
-  },
-  {
-    id: "ready-now",
-    label: "Ready to go",
-    description: "I'm looking for work right now. Let's move.",
-  },
-];
+const READINESS_IDS = ["exploring", "thinking", "getting-ready", "ready-now"] as const;
 
-/** t.ROY responds differently based on what they picked */
-const TROY_RESPONSES: Record<string, string> = {
-  exploring:
-    "No pressure. Let's just see what's out there. You can stop anytime.",
-  thinking:
-    "That's where most people start. Let's figure it out together.",
-  "getting-ready":
-    "Good. You've already made the hardest decision. Let's build on it.",
-  "ready-now":
-    "Let's go. First thing: your resume.",
-};
+/** t.ROY responds differently based on what they picked (the words are in the catalog, keyed by these ids) */
+const TROY_RESPONSE_IDS = new Set<string>(READINESS_IDS);
 
 const STAGE_MAP: Record<string, ReadinessStage> = {
   exploring: "precontemplation",
@@ -70,18 +41,7 @@ const STAGE_MAP: Record<string, ReadinessStage> = {
  * everyone once they pick where they are; "Ready to go" starts on the short
  * one, everyone else on the full one. Either way it is their pick.
  */
-const PATH_OPTIONS = [
-  {
-    id: "light",
-    label: "The short path",
-    description: "The essentials only, then I build your page. You can add more on the way.",
-  },
-  {
-    id: "full",
-    label: "The full path",
-    description: "Every question, your story too. Takes longer and makes a stronger page.",
-  },
-];
+const PATH_IDS = ["light", "full"] as const;
 
 // Reverse map for demo: clinical stage → display option
 const REVERSE_STAGE_MAP: Record<string, string> = {
@@ -100,6 +60,19 @@ export default function WelcomePage() {
 }
 
 function WelcomePageInner() {
+  const t = useTranslations("refineryShell.welcome");
+  const tc = useTranslations("common");
+  const locale = useLocale();
+  const READINESS_OPTIONS = READINESS_IDS.map((id) => ({
+    id,
+    label: t(`readiness.${id}.label`),
+    description: t(`readiness.${id}.description`),
+  }));
+  const PATH_OPTIONS = PATH_IDS.map((id) => ({
+    id,
+    label: t(`path.${id}.label`),
+    description: t(`path.${id}.description`),
+  }));
   const router = useRouter();
   const searchParams = useSearchParams();
   const { session, updateSession, clearSession } = useForgeSession();
@@ -209,42 +182,42 @@ function WelcomePageInner() {
 
   return (
     <FlowPage
-      title="Where are you at right now?"
-      subtitle="This changes how much I talk. Pick what's true."
-      actionLabel={isDemo ? "Next" : "Continue"}
+      title={t("title")}
+      subtitle={t("subtitle")}
+      actionLabel={isDemo ? tc("actions.next") : tc("actions.continue")}
       actionDisabled={!isDemo && !selected}
       onAction={inProgress ? handleKeepGoing : handleContinue}
       showBack
       onBack={() => router.push("/intro")}
       footer={
         <p>
-          No employer or program sees this answer. You can change it any time.
+          {t("footer")}
         </p>
       }
     >
       {inProgress && (
         <div className="mb-4 flex flex-col gap-2 border border-t-line bg-t-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-t-white">
-            Your answers from before are saved. Change this one and keep going, or start fresh.
+            {t("savedBefore")}
           </p>
           <button
             type="button"
             onClick={handleStartOver}
             className="t-focus min-h-touch self-start px-3 text-sm font-medium text-t-amber-bright underline underline-offset-2 hover:text-t-amber sm:self-auto"
           >
-            Start over
+            {tc("actions.startOver")}
           </button>
         </div>
       )}
       <GhostGuide
-        message={getOpusMessage("welcome", audience, isDemo)}
+        message={getOpusMessage("welcome", audience, isDemo, locale)}
         pageId="welcome"
       />
 
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode: sample data pre-filled. Watch how t.ROY guides each step.
+            {t("demoNote")}
           </p>
         </div>
       )}
@@ -258,24 +231,24 @@ function WelcomePageInner() {
       {/* The path offer: plain, both choices visible, theirs to pick. */}
       {!isDemo && selected && (
         <div className="mt-6" data-testid="path-choice">
-          <p className="mb-1 font-medium text-t-white">How much do you want to do today?</p>
+          <p className="mb-1 font-medium text-t-white">{t("howMuch")}</p>
           <p className="mb-3 text-sm text-t-phos-dim">
             {selected === "ready-now" && depth === "light"
-              ? "You need work now, so the short path is set. Want the full one? Tap it."
-              : "Pick what fits. You can switch later by coming back here."}
+              ? t("shortSet")
+              : t("pickFits")}
           </p>
           <CardSelect options={PATH_OPTIONS} selected={depth} onSelect={(id) => setDepth(id as "light" | "full")} />
         </div>
       )}
 
       {/* t.ROY acknowledges the selection */}
-      {acknowledged && selected && TROY_RESPONSES[selected] && (
+      {acknowledged && selected && TROY_RESPONSE_IDS.has(selected) && (
         <div className="mt-4 bg-t-panel px-4 py-3 border border-t-line flex items-start gap-3 animate-in fade-in duration-300">
           <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center">
             <TroyLivingIcon size={26} />
           </span>
           <p className="text-sm text-t-phos leading-relaxed">
-            {TROY_RESPONSES[selected]}
+            {t(`troyResponses.${selected}`)}
           </p>
         </div>
       )}

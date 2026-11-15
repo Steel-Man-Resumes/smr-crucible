@@ -28,6 +28,10 @@ import {
   formatSummaryLabel,
 } from "../lanes";
 import { isSameOriginRequest } from "../same-origin";
+import { MESSAGES } from "../../messages";
+
+/** An English catalog value by dotted path (namespace first), for copy that moved out of the components. */
+const cat = (path: string): string => path.split(".").reduce<any>((o, k) => o?.[k], MESSAGES.en);
 import { termsGateVerdict } from "../session-policy";
 import { firstLaneTarget } from "../forge-persist";
 
@@ -109,7 +113,9 @@ describe("format and length, in plain words", () => {
     const sw = read("components/lanes/LaneSwitcher.tsx");
     assert.doesNotMatch(sw, /value="hybrid"|lane-format" value=|name="lane-format"/);
     assert.doesNotMatch(sw, /hybridUnevenHistory|hybridFieldChange|format,\s*$/m);
-    assert.match(sw, /HYBRID_COMING_COPY/);
+    // The coming-soon line now comes from the catalog (editForm.hybridComing); its English must equal the lib constant so they cannot drift.
+    assert.equal(cat("refineryResume.lanes.editForm.hybridComing"), HYBRID_COMING_COPY);
+    assert.match(sw, /data-testid="lane-hybrid-coming">\{t\("editForm\.hybridComing"\)\}/);
     assert.match(HYBRID_COMING_COPY, /coming/i);
     assert.doesNotMatch(formatSummaryLabel("hybrid"), /Skills on top/);
     assert.equal(formatSummaryLabel("chronological"), "Dates first");
@@ -225,8 +231,13 @@ describe("examples", () => {
     const lib = read("app/(dashboard)/dashboard/vault/page.tsx");
     assert.match(lib, /examples: "hide"/);
     assert.match(lib, /examples=only/);
-    assert.match(lib, /Show examples \(/);
-    assert.match(lib, /Not an example/);
+    // The toggle and button copy moved into the catalog (refineryResume.library); check the English there and that the page asks for each key.
+    assert.equal(cat("refineryResume.library.showExamples"), "Show examples ({count})");
+    assert.match(lib, /t\("showExamples", \{ count: examples\.length \}\)/);
+    assert.equal(cat("refineryResume.library.hideExamples"), "Hide examples");
+    assert.match(lib, /t\("hideExamples"\)/);
+    assert.equal(cat("refineryResume.library.notExample"), "Not an example");
+    assert.match(lib, /a\.is_demo \? t\("notExample"\)/);
     const ws = read("components/resume/ResumeWorkspace.tsx");
     assert.match(ws, /examples=hide/);
   });
@@ -239,10 +250,12 @@ describe("examples", () => {
     const lib = read("app/(dashboard)/dashboard/vault/page.tsx");
     assert.doesNotMatch(lib, /onChange=\{\(e\) => moveToLane/);
     assert.match(lib, /data-testid="move-commit"/);
-    assert.match(lib, /\(archived\)/);
+    assert.equal(cat("refineryResume.library.archivedSuffix"), "{name} (archived)");
+    assert.match(lib, /t\("archivedSuffix", \{ name: laneName\(a\.lane_id\) \}\)/);
     assert.match(lib, /role="status"/);
     const sw = read("components/lanes/LaneSwitcher.tsx");
-    assert.match(sw, /aria-label=\{`Bring back \$\{lane\.name\}`\}/);
+    assert.equal(cat("refineryResume.lanes.switcher.bringBackAria"), "Bring back {name}");
+    assert.match(sw, /aria-label=\{t\("switcher\.bringBackAria", \{ name: lane\.name \}\)\}/);
     assert.match(sw, /role="alert"/);
   });
   it("Switch lane in the editor really switches: it saves, then opens the other lane", () => {

@@ -13,17 +13,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useLocale, useTranslations } from "next-intl";
 import {
-  PREMIUM_INCLUDED_LINE,
-  PREMIUM_ASK_ORG_HEADING,
-  PREMIUM_ASK_ORG_LINE,
-  PREMIUM_ASK_SENT_LINE,
-  PREMIUM_ASK_SMR_HEADING,
-  PREMIUM_ASK_SMR_LINE,
-  PREMIUM_NEVER_PAY_LINE,
-  PREMIUM_TOOL_LABELS,
-  premiumLockedLine,
-  premiumUnavailableMessage,
+  TEXT_PRACTICE_SESSIONS_PER_DAY,
   isSponsoredTool,
   toolIsOpen,
   type PremiumStatus,
@@ -93,12 +85,15 @@ export function usePremium(): { status: PremiumStatus | null; loaded: boolean; r
   return { status, loaded, refresh };
 }
 
-function shortDate(iso: string): string {
+function shortDate(iso: string, locale: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(locale === "es" ? "es-US" : "en-US", { month: "long", day: "numeric" });
 }
 
 export function PremiumLocked({ tool, status, compact = false }: { tool: PremiumToolId; status: PremiumStatus | null; compact?: boolean }) {
+  const t = useTranslations("refineryResume.premium");
+  const locale = useLocale();
+  const toolLabel = t(`tool.${tool}`);
   const [note, setNote] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState("");
@@ -116,52 +111,52 @@ export function PremiumLocked({ tool, status, compact = false }: { tool: Premium
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         setState("error");
-        setError(data.error || "That didn't go through. Try again in a minute.");
+        setError(data.error || t("errorGeneric"));
         return;
       }
       setState("sent");
       window.dispatchEvent(new Event(PREMIUM_CHANGED_EVENT));
     } catch {
       setState("error");
-      setError("We couldn't reach the server. Try again in a minute.");
+      setError(t("errorNetwork"));
     }
   }
 
   return (
     <section
       data-testid={`premium-locked-${tool}`}
-      aria-label={`${PREMIUM_TOOL_LABELS[tool]} is locked`}
+      aria-label={t("lockedAria", { tool: toolLabel })}
       className={compact ? "border border-t-line bg-t-panel p-3" : "mx-auto max-w-2xl border border-t-line bg-t-panel p-5 sm:p-6"}
     >
       <p className={compact ? "text-sm font-semibold text-t-white" : "text-lg font-semibold text-t-white"}>
-        {PREMIUM_TOOL_LABELS[tool]} isn&apos;t open for you yet
+        {t("notOpen", { tool: toolLabel })}
       </p>
       <p className="mt-1 text-sm leading-relaxed text-t-bone-dim">
-        {premiumLockedLine(tool)} {PREMIUM_NEVER_PAY_LINE}
+        {t("lockedLine", { tool: toolLabel })} {t("neverPay")}
       </p>
       <p className="mt-2 text-sm leading-relaxed text-t-phos-dim" data-testid="premium-included">
-        {PREMIUM_INCLUDED_LINE}
+        {t("included", { count: TEXT_PRACTICE_SESSIONS_PER_DAY })}
       </p>
 
       <div className={compact ? "mt-3 space-y-3" : "mt-5 grid gap-4 sm:grid-cols-2"}>
         <div className="border border-t-line p-3">
-          <p className="text-sm font-semibold text-t-white">{PREMIUM_ASK_ORG_HEADING}</p>
-          <p className="mt-1 text-sm text-t-bone-dim">{PREMIUM_ASK_ORG_LINE}</p>
+          <p className="text-sm font-semibold text-t-white">{t("askOrgHeading")}</p>
+          <p className="mt-1 text-sm text-t-bone-dim">{t("askOrgLine")}</p>
           <Link href="/dashboard/settings" className="t-focus mt-2 inline-block min-h-touch text-sm font-medium text-t-amber-bright underline underline-offset-4">
-            Enter a code in Settings
+            {t("enterCode")}
           </Link>
         </div>
 
         <div className="border border-t-line p-3">
-          <p className="text-sm font-semibold text-t-white">{PREMIUM_ASK_SMR_HEADING}</p>
+          <p className="text-sm font-semibold text-t-white">{t("askSmrHeading")}</p>
           {state === "sent" || pending ? (
             <p role="status" className="mt-1 text-sm text-t-phos" data-testid="premium-request-sent">
-              {state === "sent" || !pending?.createdAt ? PREMIUM_ASK_SENT_LINE : `You asked on ${shortDate(pending.createdAt)}. When it's approved, this tool opens here.`}
+              {state === "sent" || !pending?.createdAt ? t("askSent") : t("askedOn", { date: shortDate(pending.createdAt, locale) })}
             </p>
           ) : (
             <>
               <label htmlFor={`premium-note-${tool}`} className="mt-1 block text-sm text-t-bone-dim">
-                {PREMIUM_ASK_SMR_LINE}
+                {t("askSmrLine")}
               </label>
               <textarea
                 id={`premium-note-${tool}`}
@@ -179,7 +174,7 @@ export function PremiumLocked({ tool, status, compact = false }: { tool: Premium
                 data-testid={`premium-ask-${tool}`}
                 className="t-focus mt-2 min-h-touch bg-t-amber px-4 text-sm font-bold text-white hover:bg-t-amber-bright disabled:opacity-60"
               >
-                {state === "sending" ? "Sending..." : "Send my request"}
+                {state === "sending" ? t("sending") : t("send")}
               </button>
               {state === "error" && <p className="mt-2 text-sm text-t-red">{error}</p>}
             </>
@@ -195,13 +190,14 @@ export function PremiumLocked({ tool, status, compact = false }: { tool: Premium
  * stays shut and says so. No "ask" form here: the request would fail too.
  */
 export function PremiumUnavailable({ tool, compact = false }: { tool: PremiumToolId; compact?: boolean }) {
+  const t = useTranslations("refineryResume.premium");
   return (
     <section
       role="status"
       data-testid={`premium-unavailable-${tool}`}
       className={compact ? "border border-t-line bg-t-panel p-3" : "mx-auto max-w-2xl border border-t-line bg-t-panel p-5 sm:p-6"}
     >
-      <p className="text-sm leading-relaxed text-t-bone-dim">{premiumUnavailableMessage(tool)}</p>
+      <p className="text-sm leading-relaxed text-t-bone-dim">{t("unavailable", { tool: t(`tool.${tool}`) })}</p>
     </section>
   );
 }
@@ -212,9 +208,10 @@ export function PremiumUnavailable({ tool, compact = false }: { tool: PremiumToo
  * interview page) instead of replacing the whole page.
  */
 export function PremiumGate({ tool, children, compact = false }: { tool: PremiumToolId; children: ReactNode; compact?: boolean }) {
+  const t = useTranslations("refineryResume.premium");
   const { status, loaded } = usePremium();
   if (!isSponsoredTool(tool)) return <>{children}</>;
-  if (!loaded) return <div className={compact ? "py-3 text-sm text-t-phos-dim" : "px-4 py-12 text-sm text-t-phos-dim"}>Loading...</div>;
+  if (!loaded) return <div className={compact ? "py-3 text-sm text-t-phos-dim" : "px-4 py-12 text-sm text-t-phos-dim"}>{t("loading")}</div>;
   // The status could not be read: show the tool; the server still checks every call.
   const open = status ? toolIsOpen(status, tool) : true;
   if (open) return <>{children}</>;

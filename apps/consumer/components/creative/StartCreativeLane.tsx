@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { CareerLane, LanePath } from "@crucible/core/src/careerLaneShared";
 import { sendJson } from "@/lib/creative";
 
@@ -21,6 +22,8 @@ export function StartCreativeLane({
   onCreated: (lane: CareerLane) => void;
   onCancel?: () => void;
 }) {
+  const t = useTranslations("refineryResume.creative.startLane");
+  const ts = useTranslations("refineryResume.creative.shared");
   const [what, setWhat] = useState("");
   const [name, setName] = useState("");
   const [path, setPath] = useState<LanePath | "none">("dream");
@@ -45,26 +48,26 @@ export function StartCreativeLane({
         });
         setBusy(false);
         if (r.ok && r.data.lane) onCreated(r.data.lane);
-        else setError(r.data.message || "That didn't save. Try again.");
+        else setError(r.data.message || ts("didntSave"));
       }}
     >
-      <h2 className="text-sm font-semibold uppercase text-t-phos">{first ? "Start your creative lane" : "Another creative lane"}</h2>
-      <p className="text-sm text-t-phos-dim">Art, music, writing, film, tattoo, design, craft. Whatever you make.</p>
+      <h2 className="text-sm font-semibold uppercase text-t-phos">{first ? t("first") : t("another")}</h2>
+      <p className="text-sm text-t-phos-dim">{t("blurb")}</p>
       <label className="block text-sm text-t-white">
-        What do you make?
-        <input className={`${inputCls} mt-1`} value={what} maxLength={120} placeholder="Murals and prints" onChange={(e) => setWhat(e.target.value)} required />
+        {t("whatLabel")}
+        <input className={`${inputCls} mt-1`} value={what} maxLength={120} placeholder={t("whatPlaceholder")} onChange={(e) => setWhat(e.target.value)} required />
       </label>
       <label className="block text-sm text-t-white">
-        Lane name <span className="text-t-phos-dim">(optional)</span>
-        <input className={`${inputCls} mt-1`} value={name} maxLength={40} placeholder="Painting" onChange={(e) => setName(e.target.value)} />
+        {t("nameLabel")} <span className="text-t-phos-dim">{t("optional")}</span>
+        <input className={`${inputCls} mt-1`} value={name} maxLength={40} placeholder={t("namePlaceholder")} onChange={(e) => setName(e.target.value)} />
       </label>
       <fieldset className="space-y-2">
-        <legend className="text-sm text-t-white">Is this your dream, or the work you do now?</legend>
+        <legend className="text-sm text-t-white">{t("dreamOrNow")}</legend>
         {(
           [
-            ["dream", "My dream", "Where I'm headed."],
-            ["realistic", "What I do now", "Work I can get today."],
-            ["none", "Not sure yet", "Skip this for now."],
+            ["dream", t("path.dream.label"), t("path.dream.body")],
+            ["realistic", t("path.realistic.label"), t("path.realistic.body")],
+            ["none", t("path.none.label"), t("path.none.body")],
           ] as const
         ).map(([v, label, body]) => (
           <label key={v} className="flex gap-3 border border-t-line p-3 cursor-pointer">
@@ -79,11 +82,11 @@ export function StartCreativeLane({
       {error && <p className="text-sm text-t-red" role="alert">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy || !what.trim()} className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50">
-          {busy ? "Saving..." : "Start this lane"}
+          {busy ? ts("saving") : t("startThis")}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="t-focus min-h-touch px-3 text-sm text-t-phos-dim hover:text-t-white">
-            Cancel
+            {ts("cancel")}
           </button>
         )}
       </div>

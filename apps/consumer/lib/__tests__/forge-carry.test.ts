@@ -10,6 +10,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { MESSAGES } from "./helpers/intl";
 import {
   FORGE_RUN_CHOICE_DEFAULT,
   FORGE_SESSION_KEY,
@@ -113,9 +114,16 @@ describe("Refinery sync: never claims silently", () => {
     const calls = src.match(/saveOwnedForgeRun\(/g)?.length;
     assert.equal(calls, 3, "definition + owned-run sync + the Yes answer");
     assert.match(src, /forgeSyncDecision\(stored, uid\)/);
-    assert.match(src, /There&apos;s a resume in progress on this computer\. Is it yours\?/);
-    assert.match(src, /`Yes, save it to \$\{sessionData\.user\.email\}`/);
-    assert.match(src, />\s*No, erase it\s*</);
+    // The card's words live in the catalog (refineryShell.shell); the shell must still show each one, and the English must be the same.
+    const card = MESSAGES.en.refineryShell.shell;
+    assert.match(src, /\{t\("resumeAsk"\)\}/);
+    assert.equal(card.resumeAsk, "There's a resume in progress on this computer. Is it yours?");
+    assert.match(src, /t\("yesSaveTo", \{ email: sessionData\.user\.email \}\)/);
+    assert.equal(card.yesSaveTo, "Yes, save it to {email}");
+    assert.match(src, /t\("yesSaveMine"\)/);
+    assert.equal(card.yesSaveMine, "Yes, save it to my account");
+    assert.match(src, />\s*\{t\("noErase"\)\}\s*</);
+    assert.equal(card.noErase, "No, erase it");
   });
 });
 
@@ -200,9 +208,14 @@ describe("the card saves only the run it asked about", () => {
     const compare = handler.indexOf("forgeRunFingerprint(stored) !== forgeRunFingerprint(askedRunRef.current)");
     const save = handler.indexOf("saveOwnedForgeRun(");
     assert.ok(compare > 0 && save > compare, "fingerprint check runs before the save");
-    assert.match(handler, /Nothing was saved\. That resume is no longer on this computer\./);
-    assert.match(handler, /Saved to your account\./);
-    assert.match(src, /The resume on this computer changed since we asked\. Nothing was saved\. Is this one yours\?/);
+    // Words now come from the catalog: the handler must show each one, and the English must be unchanged.
+    const card = MESSAGES.en.refineryShell.shell;
+    assert.match(handler, /setForgeNotice\(t\("notSavedGone"\)\)/);
+    assert.equal(card.notSavedGone, "Nothing was saved. That resume is no longer on this computer.");
+    assert.match(handler, /setForgeNotice\(t\("savedToAccount"\)\)/);
+    assert.equal(card.savedToAccount, "Saved to your account.");
+    assert.match(src, /\{t\("resumeChanged"\)\}/);
+    assert.equal(card.resumeChanged, "The resume on this computer changed since we asked. Nothing was saved. Is this one yours?");
     assert.match(read("app", "(dashboard)", "dashboard", "page.tsx"), /addEventListener\("forge-synced", loadData\)/);
   });
 });

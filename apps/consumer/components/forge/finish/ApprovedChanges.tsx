@@ -8,6 +8,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { changeListEntry, type DefendAnswer } from "@/lib/finish-gate";
+import { useServerText } from "@/components/ServerTextProvider";
 
 export function ApprovedChanges({
   answers,
@@ -20,6 +21,7 @@ export function ApprovedChanges({
   changeNotes: Record<string, string>;
 }) {
   const t = useTranslations("forgeFinish.approved");
+  const ts = useServerText();
   const shown = answers.filter((a) => a.replaced || a.verdict === "cut");
   if (!shown.length) return null;
   return (
@@ -34,9 +36,9 @@ export function ApprovedChanges({
               <p className="text-xs text-t-phos-dim">{t("before")}</p>
               <p>{a.replaced || a.line}</p>
               <p className="mt-2 text-xs text-t-phos-dim">{t("after")}</p>
-              <p className="text-t-white">{entry.after}</p>
-              {why && <p className="mt-2 text-xs"><strong>{t("addresses")}</strong> {why}</p>}
-              <p className="mt-2 text-xs" data-testid="change-note">{entry.note}</p>
+              <p className="text-t-white">{a.verdict === "cut" ? ts(entry.after) : entry.after}</p>
+              {why && <p className="mt-2 text-xs"><strong>{t("addresses")}</strong> {ts(why)}</p>}
+              <p className="mt-2 text-xs" data-testid="change-note">{ts(entry.note)}</p>
             </li>
           );
         })}

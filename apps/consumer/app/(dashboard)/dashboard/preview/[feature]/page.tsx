@@ -15,11 +15,15 @@
 
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useOnboarding } from "@/lib/useOnboarding";
+import { useServerText } from "@/components/ServerTextProvider";
 import { getFeaturePreview } from "@/lib/featurePreviews";
 import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
 
 export default function FeaturePreviewPage() {
+  const t = useTranslations("refineryResume.preview");
+  const ts = useServerText();
   const params = useParams<{ feature: string }>();
   const feature = getFeaturePreview(params?.feature);
   const { state, gate } = useOnboarding();
@@ -32,37 +36,37 @@ export default function FeaturePreviewPage() {
 
   // The correct current unlock path comes from the server gate decision. If the
   // gate hasn't answered yet, fall back to the tailor step (the common unlock).
-  const unlock = gate?.unlockAction ?? { label: "Tailor my resume", href: "/dashboard/application-tailor" };
+  const unlock = gate?.unlockAction ?? { label: t("fallbackUnlock"), href: "/dashboard/application-tailor" };
   const unlockIsExternal = unlock.href.startsWith("http");
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
       <div>
-        <p className="text-xs font-medium uppercase text-t-phos-dim mb-1">Preview</p>
-        <h1 className="text-2xl font-bold text-t-white">{feature.title}</h1>
+        <p className="text-xs font-medium uppercase text-t-phos-dim mb-1">{t("kicker")}</p>
+        <h1 className="text-2xl font-bold text-t-white">{ts(feature.title)}</h1>
       </div>
 
       {/* What it does */}
       <section className="border border-t-line bg-t-panel p-5">
-        <h2 className="text-sm font-bold text-t-white mb-2">What it does</h2>
-        <p className="text-sm text-t-phos-dim leading-relaxed">{feature.whatItDoes}</p>
+        <h2 className="text-sm font-bold text-t-white mb-2">{t("whatItDoes")}</h2>
+        <p className="text-sm text-t-phos-dim leading-relaxed">{ts(feature.whatItDoes)}</p>
       </section>
 
       {/* Sample output -- obviously fake, labeled Sample */}
       <section className="border border-t-line bg-t-panel-2 p-5">
         <div className="flex items-center gap-2 mb-2">
-          <h2 className="text-sm font-bold text-t-white">Example output</h2>
+          <h2 className="text-sm font-bold text-t-white">{t("example")}</h2>
           <span className="text-[10px] font-bold uppercase tracking-wide text-t-amber-bright border border-t-amber px-1.5 py-0.5">
-            Sample
+            {t("sample")}
           </span>
         </div>
-        <p className="text-sm text-t-phos-dim leading-relaxed">{feature.sampleOutput}</p>
+        <p className="text-sm text-t-phos-dim leading-relaxed">{ts(feature.sampleOutput)}</p>
       </section>
 
       {/* Trial taste */}
       <section className="border border-t-amber bg-t-panel p-5">
-        <h2 className="text-sm font-bold text-t-amber-bright mb-2">Try a taste</h2>
-        <p className="text-sm text-t-phos leading-relaxed">{feature.trialTaste}</p>
+        <h2 className="text-sm font-bold text-t-amber-bright mb-2">{t("taste")}</h2>
+        <p className="text-sm text-t-phos leading-relaxed">{ts(feature.trialTaste)}</p>
       </section>
 
       {/* Unlock path + actions */}
@@ -70,29 +74,29 @@ export default function FeaturePreviewPage() {
         {alreadyUnlocked ? (
           <>
             <p className="text-sm text-t-phos-dim mb-4 leading-relaxed">
-              Good news. This tool is already unlocked for you. Open it whenever you are ready.
+              {t("unlocked")}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link
                 href={feature.href}
                 className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright transition-colors text-center"
               >
-                Open {feature.title}
+                {t("open", { title: ts(feature.title) })}
               </Link>
               <Link
                 href="/dashboard"
                 className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors text-center"
               >
-                Back to dashboard
+                {t("back")}
               </Link>
             </div>
           </>
         ) : (
           <>
-            <h2 className="text-sm font-bold text-t-white mb-2">How to unlock it</h2>
+            <h2 className="text-sm font-bold text-t-white mb-2">{t("howTitle")}</h2>
             <p className="text-sm text-t-phos-dim mb-4 leading-relaxed">
-              {gate?.reason ??
-                "Finish your profile and tailor a resume to a target job. That unlocks this and the rest of your tools."}
+              {gate?.reason ? ts(gate.reason) :
+                t("fallbackReason")}
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               {unlockIsExternal ? (
@@ -100,21 +104,21 @@ export default function FeaturePreviewPage() {
                   href={unlock.href}
                   className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright transition-colors text-center"
                 >
-                  {unlock.label}
+                  {ts(unlock.label)}
                 </a>
               ) : (
                 <Link
                   href={unlock.href}
                   className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright transition-colors text-center"
                 >
-                  {unlock.label}
+                  {ts(unlock.label)}
                 </Link>
               )}
               <Link
                 href="/dashboard"
                 className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors text-center"
               >
-                Back to dashboard
+                {t("back")}
               </Link>
             </div>
           </>

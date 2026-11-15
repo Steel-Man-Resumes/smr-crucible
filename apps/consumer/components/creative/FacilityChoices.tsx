@@ -10,7 +10,7 @@
 
 import { TITLE_MODES, yearsOf, type PracticeEntry, type TitleMode } from "@crucible/core/src/practiceRecordShared";
 import type { CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
-import { TITLE_MODE_COPY, TITLE_MODE_WHY } from "@/lib/creative";
+import { useTranslations } from "next-intl";
 
 export function FacilityChoices({
   entries,
@@ -25,12 +25,14 @@ export function FacilityChoices({
   /** Limit to works ("works") or everything but works ("pages"). */
   only?: "works" | "pages";
 }) {
+  const t = useTranslations("refineryResume.creative.facility");
+  const ts = useTranslations("refineryResume.creative.shared");
   const facility = entries.filter((e) => e.names_facility && (only === "works" ? e.section === "work" : only === "pages" ? e.section !== "work" : true));
   if (!facility.length) return null;
   return (
     <section className="border border-t-line bg-t-panel p-4 space-y-3" data-testid="title-modes">
-      <h3 className="text-sm font-semibold uppercase text-t-phos">On this lane</h3>
-      <p className="text-sm text-t-phos-dim">{TITLE_MODE_WHY}</p>
+      <h3 className="text-sm font-semibold uppercase text-t-phos">{t("heading")}</h3>
+      <p className="text-sm text-t-phos-dim">{ts("titleWhy")}</p>
       {facility.map((e) => {
         const cur = settings.titleModes?.[e.id];
         const modes: TitleMode[] = e.section === "work" ? ["true_title", "leave_out"] : [...TITLE_MODES];
@@ -53,8 +55,8 @@ export function FacilityChoices({
                     className="mt-1"
                   />
                   <span>
-                    <span className="block text-sm font-semibold text-t-white">{TITLE_MODE_COPY[m].label}</span>
-                    <span className="block text-xs text-t-phos-dim">{TITLE_MODE_COPY[m].body}</span>
+                    <span className="block text-sm font-semibold text-t-white">{ts(`titleMode.${m}.label`)}</span>
+                    <span className="block text-xs text-t-phos-dim">{ts(`titleMode.${m}.body`)}</span>
                   </span>
                 </label>
               ))}
@@ -62,7 +64,7 @@ export function FacilityChoices({
           </fieldset>
         );
       })}
-      <p className="text-xs text-t-phos-dim">One choice per entry. Every page on this lane follows it.</p>
+      <p className="text-xs text-t-phos-dim">{t("footer")}</p>
     </section>
   );
 }

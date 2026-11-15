@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 const PAGE_PX = 816;
 
@@ -21,6 +22,7 @@ export function CreativePage({
   /** Shown plainly if the layout is unavailable, so nothing is hidden. */
   fallbackText: string;
 }) {
+  const t = useTranslations("refineryResume.creative.page");
   const [screen, setScreen] = useState<{ css: string; pagesHtml: string } | null>(null);
   const [failed, setFailed] = useState(false);
   const [scale, setScale] = useState(1);
@@ -32,7 +34,7 @@ export function CreativePage({
 
   useEffect(() => {
     const mine = ++seq.current;
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const res = await fetch("/api/creative/layout", { method: "POST", headers: { "Content-Type": "application/json" }, body: key });
         if (!res.ok) throw new Error("layout");
@@ -47,7 +49,7 @@ export function CreativePage({
         if (mine === seq.current) setFailed(true);
       }
     }, 250);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [key, onPages]);
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export function CreativePage({
           />
         </div>
       ) : (
-        <p className="text-sm text-t-phos-dim">Laying out your page...</p>
+        <p className="text-sm text-t-phos-dim">{t("laying")}</p>
       )}
     </div>
   );

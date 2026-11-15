@@ -13,10 +13,12 @@ import { SavedPackagePreview } from "./SavedPackagePreview";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { hasBaseContact, tailoredContact } from "@/lib/document-contact";
 import { tailorStartNotice } from "@/lib/tailor-readiness";
+import { useServerText } from "@/components/ServerTextProvider";
 import { useProgression } from "@/components/progression/ProgressionProvider";
 import { boardHandoff, loadJobHandoff, singleTailorCost, type PendingTailor } from "@/lib/tailor-handoff";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   type ResumeDocument,
   createEmptyResume,
@@ -28,7 +30,7 @@ import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
 import { PageFitCheck } from "./PageFitCheck";
 import { printResumePdf } from "./resumePrint";
-import { RECHECK_HREF, RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
+import { RECHECK_HREF, needsRecheck } from "@/lib/recheck-copy";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
 import { useSession } from "next-auth/react";
@@ -36,7 +38,7 @@ import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useLanes } from "@/components/lanes/useLanes";
 import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
 import { LaneIntro } from "@/components/lanes/LaneIntro";
-import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, FACTS_CARRY_COPY } from "@/lib/lanes";
+import { laneFilterParam, laneIdForSave } from "@/lib/lanes";
 import { EDIT_RESUME_HREF } from "@/lib/refinery-guards";
 
 interface SavedResume {
@@ -53,6 +55,8 @@ interface SavedResume {
 export function ResumeWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const t = useTranslations("refineryResume.resume.workspace");
+  const ts = useServerText();
   // The local Forge run is read only when it is marked as this user's
   // (shared-computer rule, lib/forge-carry.ts readOwnForgeSession).
   const ownerUid = useSession().data?.user?.id;
@@ -146,18 +150,18 @@ export function ResumeWorkspace() {
         setJdFetchMeta({ url, fetchedAt: new Date().toISOString() });
         setFetchPostingMsg({
           kind: "ok",
-          text: "Read the posting. Check it below and edit if anything is missing, then tailor.",
+          text: t("postingRead"),
         });
       } else {
         setFetchPostingMsg({
           kind: "warn",
-          text: data.message || "Could not read that link automatically. Paste the job description below instead.",
+          text: data.message || t("postingFail"),
         });
       }
     } catch {
       setFetchPostingMsg({
         kind: "warn",
-        text: "Could not read that link automatically. Paste the job description below instead.",
+        text: t("postingFail"),
       });
     } finally {
       setFetchingPosting(false);
@@ -393,7 +397,7 @@ export function ResumeWorkspace() {
         setShowSetup(false);
         if (forked) router.replace(`/dashboard/application-tailor?id=${artifact.id}`, {scroll: false});
       } catch {
-        if (!cancelled && epoch === packageEpoch.current) setGenError("This resume could not be opened. Your saved work has not changed. Try opening it again.");
+        if (!cancelled && epoch === packageEpoch.current) setGenError(t("openFail"));
       } finally {
         if (!cancelled && epoch === packageEpoch.current) { hydratingRef.current = false; setHydrating(false); }
       }
@@ -507,7 +511,7 @@ export function ResumeWorkspace() {
     sessionStorage.removeItem("resume_target_job");
     const pending = boardHandoff(jobData);
     if (pending) setPendingTailor(pending);
-    else setGenError("Could not read the selected job. Try importing from Forge instead.");
+    else setGenError(t("jobFail"));
   }, [searchParams, lanes.loaded]);
 
   // --- Updater function passed to section editors ---
@@ -764,7 +768,7 @@ export function ResumeWorkspace() {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw Object.assign(new Error(errData.error || "Generation failed"), { code: typeof errData.code === "string" ? errData.code : null });
+          throw Object.assign(new Error(errData.error || t("generationFailed")), { code: typeof errData.code === "string" ? errData.code : null });
         }
 
         const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes, grounding, finalizationBlocked, verificationNotice } = await res.json();
@@ -825,7 +829,7 @@ export function ResumeWorkspace() {
       } catch (err: any) {
         if(epoch !== packageEpoch.current) return;
         console.error("Career-package generation error:", err);
-        setGenError(err.message || "Could not generate resume. Try importing from Forge instead.");
+        setGenError(err.message || t("generateFail"));
         setGenErrorCode(typeof err?.code === "string" ? err.code : null);
         setShowSetup(true);
         setGeneratingFull(false);
@@ -1038,7 +1042,7 @@ export function ResumeWorkspace() {
     const id = await save(false);
     if (!current()) return null;
     if (!id) {
-      setExportError("Save your resume first, then download it.");
+      setExportError(t("saveFirst"));
       return null;
     }
     try {
@@ -1053,7 +1057,7 @@ export function ResumeWorkspace() {
       setExportRev({ id: data.revision.id, number: data.revision.number, status: data.revision.status, recheck: needsRecheck(data.revision.openItems) });
       return data.revision.id as string;
     } catch {
-      if (current()) setExportError("This version could not be prepared. Save your work and try again.");
+      if (current()) setExportError(t("versionFail"));
       return null;
     }
   }
@@ -1164,7 +1168,7 @@ export function ResumeWorkspace() {
       setSavedResumes((prev) => [fork, ...prev]);
       loadResume(fork.id);
     } catch {
-      setLaneStartError("That didn't work. Try again in a moment.");
+      setLaneStartError(t("didntWork"));
     } finally {
       setStartingLane(false);
     }
@@ -1206,10 +1210,10 @@ export function ResumeWorkspace() {
           return (
             <section data-testid="tailor-pending" className="mb-5 border border-t-amber bg-t-panel p-4">
               <h2 className="font-bold text-t-white">
-                Tailor for {pendingTailor.job.title || "this job"}{pendingTailor.job.company ? ` at ${pendingTailor.job.company}` : ""}
+                {pendingTailor.job.company ? t("tailorForAt", { title: pendingTailor.job.title || t("thisJob"), company: pendingTailor.job.company }) : t("tailorFor", { title: pendingTailor.job.title || t("thisJob") })}
               </h2>
-              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{cost.line}</p>
-              <p className="mt-1 text-xs text-t-phos-dim">Nothing runs until you press the button.</p>
+              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{ts(cost.line)}</p>
+              <p className="mt-1 text-xs text-t-phos-dim">{t("nothingRuns")}</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <button
                   type="button"
@@ -1218,14 +1222,14 @@ export function ResumeWorkspace() {
                   disabled={!cost.canRun || !lanes.loaded || lanes.switching}
                   className="t-focus min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
                 >
-                  Tailor now
+                  {t("tailorNow")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPendingTailor(null)}
                   className="t-focus min-h-touch px-4 text-sm text-t-phos-dim underline underline-offset-2 hover:text-t-white"
                 >
-                  Not now
+                  {t("notNow")}
                 </button>
               </div>
             </section>
@@ -1233,21 +1237,20 @@ export function ResumeWorkspace() {
   })() : null;
 
   // --- Full resume generation loading state ---
-  if (hydrating) return <p role="status" className="p-6 font-mono text-purple-300">Opening your saved work…</p>;
+  if (hydrating) return <p role="status" className="p-6 font-mono text-purple-300">{t("opening")}</p>;
   if (generatingFull) {
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Building Your Career Package
+          {t("packageTitle")}
         </h1>
         <div className="bg-t-panel p-8 border border-t-line text-center mt-6">
-          <div className="mx-auto mb-4 flex justify-center"><TroyWork topic="resume" label="Preparing your resume and cover letter" /></div>
+          <div className="mx-auto mb-4 flex justify-center"><TroyWork topic="resume" label={t("packageLabel")} /></div>
           <p className="font-mono text-sm font-medium text-purple-300">
-            Building your package for {doc.meta.targetJob || "this job"}
-            {doc.meta.targetCompany ? ` at ${doc.meta.targetCompany}` : ""}...
+            {doc.meta.targetCompany ? t("buildingForAt", { job: doc.meta.targetJob || t("thisJob"), company: doc.meta.targetCompany }) : t("buildingFor", { job: doc.meta.targetJob || t("thisJob") })}
           </p>
           <p className="text-xs text-t-phos-dim mt-2">
-            Preparing your job-specific resume and cover letter, then checking the wording against your source facts. This can take a little time.
+            {t("packageBody")}
           </p>
         </div>
       </div>
@@ -1259,10 +1262,10 @@ export function ResumeWorkspace() {
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Application Tailor
+          {t("tailorTitle")}
         </h1>
         <div className="bg-t-panel p-6 border border-t-red text-center mt-6">
-          <p className="text-sm text-t-phos mb-4">{genError}</p>
+          <p className="text-sm text-t-phos mb-4">{ts(genError)}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => {
@@ -1271,7 +1274,7 @@ export function ResumeWorkspace() {
               }}
               className="t-focus px-6 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
-              Start Manually
+              {t("startManually")}
             </button>
           </div>
         </div>
@@ -1294,8 +1297,8 @@ export function ResumeWorkspace() {
         data-kind={notice.kind}
         className="border border-t-amber bg-t-panel p-4 text-left"
       >
-        <p className="text-sm font-semibold text-t-white">{notice.heading}</p>
-        <p className="mt-1 text-sm text-t-phos">{notice.body}</p>
+        <p className="text-sm font-semibold text-t-white">{notice.kind === "error" ? t("notice.errorHeading") : t("notice.lockedHeading")}</p>
+        <p className="mt-1 text-sm text-t-phos">{notice.kind === "error" ? (/^[a-z0-9]+(_[a-z0-9]+)+$/.test((genError ?? "").trim()) || !(genError ?? "").trim() ? t("notice.errorBody") : ts(notice.body)) : ts(notice.body)}</p>
         {notice.kind === "locked" && tailorStep && progression ? (
           <>
             <button
@@ -1305,19 +1308,19 @@ export function ResumeWorkspace() {
               data-testid="tailor-ask-early"
               className="t-focus mt-3 min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
             >
-              {notice.action}
+              {ts(notice.action ?? "")}
             </button>
-            <p className="mt-1 text-xs text-t-phos-dim">{notice.hint}</p>
+            <p className="mt-1 text-xs text-t-phos-dim">{ts(notice.hint ?? "")}</p>
           </>
         ) : notice.kind === "locked" ? (
-          <p className="mt-2 text-xs text-t-phos-dim">{`${notice.action} from the path on the left. ${notice.hint}`}</p>
+          <p className="mt-2 text-xs text-t-phos-dim">{t("fromPath", { action: ts(notice.action ?? ""), hint: ts(notice.hint ?? "") })}</p>
         ) : null}
       </div>
     ) : null;
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Application Tailor
+          {t("tailorTitle")}
         </h1>
         {/* Career lanes (074): which lane this tool is working in. */}
         <div className="mb-4 space-y-3">
@@ -1326,9 +1329,9 @@ export function ResumeWorkspace() {
           {lanes.activeLane && savedLoaded && savedResumes.length === 0 && baseResume && (
             <div data-testid="lane-empty" className="border border-t-amber bg-t-panel p-4 space-y-2">
               <p className="text-sm font-semibold text-t-white">
-                No resume in your {lanes.activeLane.name} lane yet.
+                {t("noResumeInLane", { lane: lanes.activeLane.name })}
               </p>
-              <p className="text-xs text-t-phos-dim">{FACTS_CARRY_COPY}</p>
+              <p className="text-xs text-t-phos-dim">{t("factsCarry")}</p>
               <button
                 type="button"
                 data-testid="lane-start-from-base"
@@ -1336,7 +1339,7 @@ export function ResumeWorkspace() {
                 disabled={startingLane}
                 className="t-focus w-full sm:w-auto min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
               >
-                {startingLane ? "Starting..." : "Start it from my base resume"}
+                {startingLane ? t("starting") : t("startFromBase")}
               </button>
               {laneStartError && <p className="text-xs text-t-red" role="alert">{laneStartError}</p>}
             </div>
@@ -1344,20 +1347,16 @@ export function ResumeWorkspace() {
         </div>
         {pendingCard}
         <p className="text-base text-t-phos-dim mb-2">
-          Aim your base resume at a specific job. We use your Forge profile to
-          tailor your resume, cover letter, and disclosure plan to the exact
-          posting.
+          {t("aim")}
         </p>
         <p className="text-sm text-t-phos-dim mb-4">
-          Tailor one job here, or pick up to 3 on the Job Board and tailor them
-          together. Each job still gets its own resume and its own AI action.
-          Saved jobs wait for you under your saved jobs.
+          {t("aim2")}
         </p>
         <section className="mb-5 border border-purple-400/40 bg-t-panel p-4">
-          <h2 className="font-bold text-t-white">Start with a real opening</h2>
-          <p className="mt-2 text-sm text-t-phos">Find a job in this lane, then bring it here. We will use the posting to prepare your resume and cover letter together. For a different career direction, switch lanes first.</p>
-          <a href={`/dashboard/jobs?laneId=${encodeURIComponent(lanes.active || "main")}`} className="t-focus mt-3 inline-flex min-h-touch items-center bg-purple-700 px-4 py-2 font-bold text-white">Find a job in this lane</a>
-          <p className="mt-2 text-xs text-t-phos-dim">Already found the job? Enter its details below. Open a saved resume below when you want to continue an existing package.</p>
+          <h2 className="font-bold text-t-white">{t("openingTitle")}</h2>
+          <p className="mt-2 text-sm text-t-phos">{t("openingBody")}</p>
+          <a href={`/dashboard/jobs?laneId=${encodeURIComponent(lanes.active || "main")}`} className="t-focus mt-3 inline-flex min-h-touch items-center bg-purple-700 px-4 py-2 font-bold text-white">{t("findJobLane")}</a>
+          <p className="mt-2 text-xs text-t-phos-dim">{t("alreadyFound")}</p>
         </section>
         {/* R6: which approved baseline this tailoring restructures. Tailoring
             within a lane sharpens that baseline without downgrading it. */}
@@ -1370,13 +1369,13 @@ export function ResumeWorkspace() {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-medium text-t-white">
-                My Resumes
+                {t("myResumes")}
               </h2>
               <button
                 onClick={startNewResume}
                 className="text-sm text-t-amber-bright hover:text-t-amber font-medium"
               >
-                + New Resume
+                {t("newResume")}
               </button>
             </div>
             <div className="space-y-2">
@@ -1388,8 +1387,8 @@ export function ResumeWorkspace() {
                   (r.target_context as any)?.source === "forge" ||
                   r.target_context?.targetJob === "General";
                 const label = isBase
-                  ? "Base resume"
-                  : r.target_context?.targetJob || "Untitled resume";
+                  ? t("baseResume")
+                  : r.target_context?.targetJob || t("untitled");
                 return (
                   <div
                     key={r.id}
@@ -1397,20 +1396,20 @@ export function ResumeWorkspace() {
                   >
                     {confirmDeleteId === r.id ? (
                       <div className="px-4 py-3 flex items-center justify-between gap-3">
-                        <span className="text-sm text-t-white">Delete this resume?</span>
+                        <span className="text-sm text-t-white">{t("deleteAsk")}</span>
                         <div className="flex gap-2">
                           <button
                             onClick={() => deleteResume(r.id)}
                             disabled={deletingId === r.id}
                             className="t-focus text-xs font-medium text-white bg-t-red px-3 py-1.5 hover:opacity-90 disabled:opacity-50 transition-colors"
                           >
-                            {deletingId === r.id ? "Deleting..." : "Delete"}
+                            {deletingId === r.id ? t("deleting") : t("delete")}
                           </button>
                           <button
                             onClick={() => setConfirmDeleteId(null)}
                             className="text-xs text-t-phos-dim hover:text-t-white px-2"
                           >
-                            Cancel
+                            {t("cancel")}
                           </button>
                         </div>
                       </div>
@@ -1425,12 +1424,12 @@ export function ResumeWorkspace() {
                           </span>
                           {isBase && (
                             <span className="text-xs text-t-phos-dim ml-2">
-                              your starting point from The Forge
+                              {t("startingPoint")}
                             </span>
                           )}
                           {r.target_context?.targetCompany && (
                             <span className="text-xs text-t-phos-dim ml-2">
-                              at {r.target_context.targetCompany}
+                              {t("atCompany", { company: r.target_context.targetCompany })}
                             </span>
                           )}
                         </button>
@@ -1441,7 +1440,7 @@ export function ResumeWorkspace() {
                               setConfirmDeleteId(r.id);
                             }}
                             className="px-3 py-3 text-t-phos-dim hover:text-t-red transition-colors flex-shrink-0"
-                            title="Delete resume"
+                            title={t("deleteResume")}
                           >
                             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                               <path d="M3 3l8 8M11 3l-8 8" />
@@ -1461,7 +1460,7 @@ export function ResumeWorkspace() {
         <div className="space-y-4 mb-6">
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Already have a job posting?
+              {t("haveJob")}
             </label>
             <input
               value={doc.meta.targetJob}
@@ -1471,15 +1470,15 @@ export function ResumeWorkspace() {
                   meta: { ...d.meta, targetJob: e.target.value },
                 }))
               }
-              placeholder="e.g., Warehouse Associate, CNA, Forklift Operator"
+              placeholder={t("jobPh")}
               data-tour="tailor-target-job"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Which company?{" "}
-              <span className="font-normal text-t-phos-dim">(required so we can tailor to a specific employer)</span>
+              {t("whichCompany")}{" "}
+              <span className="font-normal text-t-phos-dim">{t("companyRequired")}</span>
             </label>
             <input
               value={doc.meta.targetCompany}
@@ -1489,14 +1488,14 @@ export function ResumeWorkspace() {
                   meta: { ...d.meta, targetCompany: e.target.value },
                 }))
               }
-              placeholder="e.g., Amazon, local hospital, specific company"
+              placeholder={t("companyPh")}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Job listing link{" "}
-              <span className="font-normal text-t-phos-dim">(optional)</span>
+              {t("listingLink")}{" "}
+              <span className="font-normal text-t-phos-dim">{t("optional")}</span>
             </label>
             <input
               value={doc.meta.jobListingUrl}
@@ -1506,7 +1505,7 @@ export function ResumeWorkspace() {
                   meta: { ...d.meta, jobListingUrl: e.target.value },
                 }))
               }
-              placeholder="Paste the URL from Indeed, LinkedIn, or any job board"
+              placeholder={t("linkPh")}
               type="url"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
@@ -1518,11 +1517,10 @@ export function ResumeWorkspace() {
                   disabled={fetchingPosting}
                   className="t-focus text-sm font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-50"
                 >
-                  {fetchingPosting ? "Reading the posting..." : "Read the posting from this link"}
+                  {fetchingPosting ? t("reading") : t("readPosting")}
                 </button>
                 <p className="text-xs text-t-phos-dim mt-1">
-                  We try to pull the description so we can tailor to it. Some sites block
-                  automatic reading. If that happens, just paste the text below.
+                  {t("readNote")}
                 </p>
                 {fetchPostingMsg && (
                   <p
@@ -1538,13 +1536,13 @@ export function ResumeWorkspace() {
           </div>
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              Paste the job description{" "}
-              <span className="font-normal text-t-phos-dim">(optional, but it makes the tailoring sharper)</span>
+              {t("pasteJd")}{" "}
+              <span className="font-normal text-t-phos-dim">{t("pasteJdOptional")}</span>
             </label>
             <textarea
               value={jobDescription}
               onChange={(e) => { setJobDescription(e.target.value); setJdFetchMeta(null); }}
-              placeholder="Paste the posting's duties and requirements here. We tailor your resume to what this employer actually asks for, using only what's true about you."
+              placeholder={t("jdPh")}
               rows={5}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[120px]"
             />
@@ -1575,21 +1573,21 @@ export function ResumeWorkspace() {
                     data-tour="tailor-generate"
                     className="t-focus w-full px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
                   >
-                    Tailor my resume for this job
+                    {t("tailorBtn")}
                   </button>
                   <p className="text-xs text-t-phos-dim text-center">
                     {!canTailor
-                      ? "Add the job title and the company to tailor your resume to a specific posting."
+                      ? t("needTitle")
                       : jobDescription.trim()
-                        ? "Uses your base resume and the job description you pasted. Only what's true about you, aimed at this posting."
-                        : "Uses your base resume. Paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
+                        ? t("usesWithJd")
+                        : t("usesNoJd")}
                   </p>
                   {tailorNotice}
                   <a
                     href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
                   >
-                    Rebuild my base resume in the Forge
+                    {t("rebuildBase")}
                   </a>
                 </>
               ) : (
@@ -1598,7 +1596,7 @@ export function ResumeWorkspace() {
                     href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
                   >
-                    Build your base resume in the Forge first
+                    {t("buildBaseFirst")}
                   </a>
                   <button
                     onClick={startFresh}
@@ -1606,7 +1604,7 @@ export function ResumeWorkspace() {
                     data-tour="tailor-generate"
                     className="t-focus w-full px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 disabled:opacity-40 transition-colors min-h-touch"
                   >
-                    Or start a blank resume here
+                    {t("blank")}
                   </button>
                   {tailorNotice}
                 </>
@@ -1626,13 +1624,13 @@ export function ResumeWorkspace() {
       <div className="flex items-center justify-between mb-4">
         <div className="min-w-0">
           <h1 className="text-lg font-bold text-t-white truncate">
-            {doc.meta.targetJob || "Resume"}
+            {doc.meta.targetJob || t("resume")}
           </h1>
           {doc.meta.targetCompany && (
-            <p className="text-xs text-t-phos-dim">at {doc.meta.targetCompany}</p>
+            <p className="text-xs text-t-phos-dim">{t("at", { company: doc.meta.targetCompany })}</p>
           )}
           <p className="text-xs text-t-phos-dim" data-testid="workspace-lane">
-            Lane: <span className="font-semibold text-t-phos">{lanes.activeLane?.name ?? MAIN_LANE_LABEL}</span>
+            {t("lane")} <span className="font-semibold text-t-phos">{lanes.activeLane?.name ?? t("main")}</span>
             {" "}
             <button
               type="button"
@@ -1641,24 +1639,24 @@ export function ResumeWorkspace() {
               onClick={() => setShowLanePicker((v) => !v)}
               className="t-focus underline hover:text-t-white"
             >
-              Switch lane
+              {t("switchLane")}
             </button>
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {saveStatus === "error" && (
-            <span className="text-xs text-t-red">Save failed</span>
+            <span className="text-xs text-t-red">{t("saveFailed")}</span>
           )}
           {saveStatus === "locked" && (
             <span className="text-xs text-t-amber-bright">
-              Locked baseline. Edits are not saved. Unlock it in My resumes to change it.
+              {t("locked")}
             </span>
           )}
           <button
             onClick={startNewResume}
             className="text-xs text-t-phos-dim hover:text-t-white"
           >
-            + New
+            {t("new")}
           </button>
         </div>
       </div>
@@ -1683,15 +1681,15 @@ export function ResumeWorkspace() {
       {truthCheck && (
         <div className="mb-4 bg-t-panel border border-t-amber px-4 py-3">
           <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
-            Check these before you send
+            {t("checkBefore")}
           </p>
           {truthCheck.blocked && truthCheck.notice && (
-            <p className="text-xs text-t-phos leading-relaxed mb-1">{truthCheck.notice}</p>
+            <p className="text-xs text-t-phos leading-relaxed mb-1">{ts(truthCheck.notice)}</p>
           )}
           {truthCheck.flags.length > 0 ? (
             <>
               <p className="text-xs text-t-phos leading-relaxed">
-                The truth check found {truthCheck.flags.length === 1 ? "something" : "some things"} we could not match to what you told us. Look for each one and make sure it is true before you send this:
+                {truthCheck.flags.length === 1 ? t("truthOne") : t("truthSome")}
               </p>
               <ul className="mt-1.5 space-y-1">
                 {truthCheck.flags.map((claim, i) => (
@@ -1702,7 +1700,7 @@ export function ResumeWorkspace() {
           ) : (
             !truthCheck.blocked && (
               <p className="text-xs text-t-phos leading-relaxed">
-                The truth check found something in this version it could not match to what you told us, but could not point to the exact words. Read every line before you send it.
+                {t("truthNoWords")}
               </p>
             )
           )}
@@ -1717,7 +1715,7 @@ export function ResumeWorkspace() {
               <path d="M8 1l2 4.5H15l-4 3 1.5 5L8 11 3.5 13.5 5 8.5 1 5.5h5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
             </svg>
             <span className="text-xs font-bold text-t-amber-bright uppercaser">
-              What we tailored for this job
+              {t("tailoredTitle")}
             </span>
           </div>
           <ul className="space-y-1">
@@ -1729,7 +1727,7 @@ export function ResumeWorkspace() {
             ))}
           </ul>
           <p className="text-[10px] text-t-phos-dim mt-2 italic">
-            Use these points in your disclosure and interview prep. They are where your profile and this job connect.
+            {t("tailoredNote")}
           </p>
         </div>
       )}
@@ -1743,7 +1741,7 @@ export function ResumeWorkspace() {
               packageTab === "resume" ? "bg-t-amber text-white" : "text-t-phos-dim"
             }`}
           >
-            Resume
+            {t("tabResume")}
           </button>
           {coverLetterText && (
             <button
@@ -1752,7 +1750,7 @@ export function ResumeWorkspace() {
                 packageTab === "cover-letter" ? "bg-t-amber text-white" : "text-t-phos-dim"
               }`}
             >
-              Cover Letter
+              {t("tabCover")}
             </button>
           )}
           {disclosureBrief && (
@@ -1762,7 +1760,7 @@ export function ResumeWorkspace() {
                 packageTab === "disclosure" ? "bg-t-amber text-white" : "text-t-phos-dim"
               }`}
             >
-              Disclosure
+              {t("tabDisclosure")}
             </button>
           )}
         </div>
@@ -1773,7 +1771,7 @@ export function ResumeWorkspace() {
         <div className="bg-t-panel border border-t-line overflow-hidden mb-6">
           <div className="flex items-center justify-between px-5 py-3 bg-t-panel-2 border-b border-t-line">
             <h3 className="font-semibold text-t-white text-sm">
-              Cover Letter for {doc.meta.targetCompany || doc.meta.targetJob}
+              {t("coverFor", { name: doc.meta.targetCompany || doc.meta.targetJob })}
             </h3>
             <div className="flex gap-2">
               <button
@@ -1784,13 +1782,13 @@ export function ResumeWorkspace() {
                 }}
                 className="t-focus px-3 py-1.5 text-xs font-medium text-t-phos bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
               >
-                {coverLetterCopied ? "Copied!" : "Copy"}
+                {coverLetterCopied ? t("copied") : t("copy")}
               </button>
               <button
                 onClick={() => downloadDocx("cover_letter", coverLetterText)}
                 className="t-focus px-3 py-1.5 text-xs font-bold text-white bg-t-amber hover:bg-t-amber-bright transition-colors"
               >
-                Download .docx
+                {t("downloadDocx")}
               </button>
             </div>
           </div>
@@ -1801,11 +1799,8 @@ export function ResumeWorkspace() {
           </div>
           <div className="px-6 pb-5">
             <p className="text-xs text-t-phos-dim bg-t-panel-2 border border-t-line px-3 py-2 leading-relaxed">
-              <span className="font-semibold text-t-white">Make it yours before you send.</span>{" "}
-              Download the .docx and personalize it. Confirm the hiring manager&rsquo;s
-              name, drop in any specific details about the company, and adjust the
-              opening if you want. A cover letter usually goes in your email body, so
-              keep it editable. Save a PDF later, once it reads exactly how you want.
+              <span className="font-semibold text-t-white">{t("makeYours")}</span>{" "}
+              {t("makeYoursBody")}
             </p>
           </div>
         </div>
@@ -1816,16 +1811,15 @@ export function ResumeWorkspace() {
         <div className="space-y-4 mb-6">
           {!disclosureBrief.hasRecord && (
             <div className="bg-t-panel p-6 border border-t-line text-center">
-              <h3 className="font-semibold text-t-white mb-2">Disclosure Planner</h3>
+              <h3 className="font-semibold text-t-white mb-2">{t("disclosurePlanner")}</h3>
               <p className="text-sm text-t-phos-dim mb-4">
-                No criminal record was detected from your Forge session.
-                If you need help preparing a disclosure strategy, the full Disclosure Planner can help.
+                {t("noRecord")}
               </p>
               <a
                 href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
                 className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
-                Open Disclosure Planner
+                {t("openPlanner")}
               </a>
             </div>
           )}
@@ -1833,7 +1827,7 @@ export function ResumeWorkspace() {
           {/* Confidence meter */}
           <div className="bg-t-panel p-6 border border-t-line">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-t-white">Disclosure Readiness</h3>
+              <h3 className="font-semibold text-t-white">{t("readiness")}</h3>
               <span className={`text-sm font-medium ${
                 disclosureBrief.confidenceLevel === "high" ? "text-t-amber-bright" :
                 disclosureBrief.confidenceLevel === "medium" ? "text-t-steel" : "text-t-red"
@@ -1854,7 +1848,7 @@ export function ResumeWorkspace() {
             {disclosureBrief.briefScript && (
               <div className="bg-t-panel-2 p-4 border border-t-line mb-4">
                 <p className="text-xs font-medium text-t-amber-bright uppercase mb-2">
-                  Starting script
+                  {t("startingScript")}
                 </p>
                 <p className="text-sm text-t-white leading-relaxed italic">
                   &ldquo;{disclosureBrief.briefScript}&rdquo;
@@ -1873,15 +1867,15 @@ export function ResumeWorkspace() {
             </p>
 
             <p className="text-xs text-t-phos bg-t-panel-2 border border-t-line px-3 py-2 mb-4">
-              <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
-              For legal guidance, contact a reentry attorney or free legal aid in your area.
+              <span className="font-semibold text-t-white">{t("coaching")}</span>{" "}
+              {t("legalHelp")}
             </p>
 
             <a
               href={`/dashboard/disclosure?company=${encodeURIComponent(disclosureBrief.targetCompany || "")}&job=${encodeURIComponent(disclosureBrief.targetJob || "")}`}
               className="t-focus inline-flex items-center px-5 py-3 bg-t-amber text-white text-sm font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
             >
-              Open Disclosure Planner for {disclosureBrief.targetCompany || "this role"}
+              {t("openPlannerFor", { company: disclosureBrief.targetCompany || t("thisRole") })}
             </a>
           </div>
           </>}
@@ -1908,19 +1902,19 @@ export function ResumeWorkspace() {
                 onClick={() => save(false)}
                 className="t-focus px-5 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
-                {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Save"}
+                {saveStatus === "saving" ? t("saving") : saveStatus === "saved" ? t("saved") : t("save")}
               </button>
               <button
                 onClick={() => downloadDocx("resume", formatResumeDownload(doc))}
                 className="t-focus px-4 py-3 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors min-h-touch text-sm"
               >
-                Download .docx
+                {t("downloadDocx")}
               </button>
               <button
                 onClick={() => targetApplicationId ? void downloadDocx("resume", formatResumeDownload(doc), "pdf") : printResumePdf(doc, { prepare: exportRevision })}
                 className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
               >
-                Save as PDF
+                {t("savePdf")}
               </button>
               {/* Phase 2.5: page-fit estimate of the exact .docx the Download
                   button produces -- same content-derivation (formatResumeDownload). */}
@@ -1930,10 +1924,10 @@ export function ResumeWorkspace() {
                   {exportError
                     ? exportError
                     : exportRev!.status === "finished"
-                      ? `Version ${exportRev!.number}, finished. Downloads use this exact version.`
+                      ? t("versionFinished", { number: exportRev!.number })
                       : exportRev!.recheck
-                        ? <>{RECHECK_LINE} <a href={RECHECK_HREF} className="underline underline-offset-2" data-testid="workspace-recheck">Check it again</a></>
-                        : "Draft: check it before you send it."}
+                        ? <>{t("recheckLine")} <a href={RECHECK_HREF} className="underline underline-offset-2" data-testid="workspace-recheck">{t("checkAgain")}</a></>
+                        : t("draftNote")}
                 </p>
               )}
               {/* Phase 5 R2: the way out of DRAFT for a Tailor result: the same cards, saved as a revision of this resume. */}
@@ -1948,7 +1942,7 @@ export function ResumeWorkspace() {
               )}
             </>
           }
-          actionsHint=".docx = editable in Word. PDF = keeps the formatting exactly. Save both."
+          actionsHint={t("actionsHint")}
         />
       )}
       {/* Ready to apply -- the Apply ladder (R8) plus what's next (R7). Appears
@@ -1960,19 +1954,19 @@ export function ResumeWorkspace() {
               <path d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
             </svg>
             <span className="text-sm font-bold text-t-amber-bright">
-              {applyInfo.applied ? "Applied, nice work" : "Your next step: send this application"}
+              {applyInfo.applied ? t("applied") : t("nextStep")}
             </span>
           </div>
           <p className="text-xs text-t-phos-dim mb-3">
             {applyInfo.applied
-              ? `You applied to ${doc.meta.targetCompany || "this job"}. Keep the momentum going.`
-              : "Review your saved pages, then use the employer link below. We recommend working through each line with t.ROY; you can return to refine your Master Draft as you learn more."}
+              ? t("youApplied", { company: doc.meta.targetCompany || t("thisJobShort") })
+              : t("reviewPages")}
           </p>
           <div className="mb-4 flex flex-wrap gap-3">
-            <button disabled={packageBusy || emailBusy} onClick={async()=>{const epoch=packageEpoch.current;setPackageBusy(true);try{await exportRevision();}finally{if(epoch===packageEpoch.current)setPackageBusy(false);}}} className="t-focus min-h-touch bg-purple-700 px-4 text-white disabled:opacity-50">{packageBusy ? "Saving your package…" : "Save package & review PDF"}</button>
-            <button disabled={emailBusy || packageBusy} onClick={async()=>{const epoch=packageEpoch.current;const applicationId=targetApplicationId;setEmailBusy(true);setEmailState("");try{const revisionId=await exportRevision();if(!revisionId||epoch!==packageEpoch.current)return;const r=await fetch("/api/applications/email-package",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({applicationId,revisionId})});const result=await r.json();if(epoch!==packageEpoch.current)return;setEmailState(result.message||result.error||"Email could not be prepared.");}catch{if(epoch===packageEpoch.current)setEmailState("Email could not be prepared. Your saved files remain available.");}finally{if(epoch===packageEpoch.current)setEmailBusy(false);}}} className="t-focus min-h-touch border border-purple-400 px-4 text-purple-300 disabled:opacity-50">{emailBusy ? "Preparing your email…" : "Save & email this job package"}</button>
+            <button disabled={packageBusy || emailBusy} onClick={async()=>{const epoch=packageEpoch.current;setPackageBusy(true);try{await exportRevision();}finally{if(epoch===packageEpoch.current)setPackageBusy(false);}}} className="t-focus min-h-touch bg-purple-700 px-4 text-white disabled:opacity-50">{packageBusy ? t("savingPackage") : t("savePackage")}</button>
+            <button disabled={emailBusy || packageBusy} onClick={async()=>{const epoch=packageEpoch.current;const applicationId=targetApplicationId;setEmailBusy(true);setEmailState("");try{const revisionId=await exportRevision();if(!revisionId||epoch!==packageEpoch.current)return;const r=await fetch("/api/applications/email-package",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({applicationId,revisionId})});const result=await r.json();if(epoch!==packageEpoch.current)return;setEmailState(result.message||result.error||t("emailNotPrepared"));}catch{if(epoch===packageEpoch.current)setEmailState(t("emailFilesRemain"));}finally{if(epoch===packageEpoch.current)setEmailBusy(false);}}} className="t-focus min-h-touch border border-purple-400 px-4 text-purple-300 disabled:opacity-50">{emailBusy ? t("preparingEmail") : t("emailPackage")}</button>
           </div>
-          <p className="mb-3 text-xs text-t-phos-dim">Email includes this saved resume and cover letter, when present, with filenames and next steps for this job. Private disclosure notes stay in Refinery. Up to three package emails a day; downloads remain available.</p>
+          <p className="mb-3 text-xs text-t-phos-dim">{t("emailNote")}</p>
           {emailState && <p role="status" className="mb-3 text-sm text-t-phos">{emailState}</p>}
           {exportRev && <SavedPackagePreview revisionId={exportRev.id} applicationId={targetApplicationId} />}
           <ApplyActions
@@ -1986,9 +1980,9 @@ export function ResumeWorkspace() {
             candidateName={doc.contact.name}
             resumeArtifactId={artifactId}
           />
-          <p className="mt-4 text-sm text-t-phos-dim">For a very similar role, reuse the useful wording and check it against the new posting. For a different role, find the job first and tailor from this lane’s baseline. A new career direction belongs in its own lane.</p>
-          <a href={`/dashboard/jobs?laneId=${encodeURIComponent(laneIdRef.current || "main")}`} className="t-focus mt-2 inline-flex min-h-touch items-center text-purple-300 underline">Find another job in this lane</a>
-          <a href="/dashboard/master" className="t-focus ml-4 inline-flex min-h-touch items-center text-purple-300 underline">Build my Master Draft</a>
+          <p className="mt-4 text-sm text-t-phos-dim">{t("similarRole")}</p>
+          <a href={`/dashboard/jobs?laneId=${encodeURIComponent(laneIdRef.current || "main")}`} className="t-focus mt-2 inline-flex min-h-touch items-center text-purple-300 underline">{t("findAnother")}</a>
+          <a href="/dashboard/master" className="t-focus ml-4 inline-flex min-h-touch items-center text-purple-300 underline">{t("buildMaster")}</a>
           {/* What's next: the next saved job that still needs a tailored resume. */}
           <div className="mt-3 pt-3 border-t border-t-line">
             {nextJob ? (
@@ -1996,14 +1990,14 @@ export function ResumeWorkspace() {
                 href={`/dashboard/application-tailor?job=${nextJob.id}`}
                 className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
               >
-                Next: tailor your resume for {nextJob.title} &rarr;
+                {t("nextTailor", { title: nextJob.title })}
               </a>
             ) : (
               <a
                 href="/dashboard/applications"
                 className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
               >
-                See all your saved jobs &rarr;
+                {t("seeAll")}
               </a>
             )}
           </div>

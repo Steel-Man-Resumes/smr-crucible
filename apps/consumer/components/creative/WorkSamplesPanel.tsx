@@ -3,10 +3,11 @@
 /** The work-sample list: the person's works, strongest first. Every field is what they typed. */
 
 import { useEffect, useState } from "react";
-import { NEEDS_PROOF_NOTE, stillNeedsProof, type WorkSampleRow } from "@crucible/core/src/creativeLaneShared";
+import { useTranslations } from "next-intl";
+import { stillNeedsProof, type WorkSampleRow } from "@crucible/core/src/creativeLaneShared";
 import type { TitleMode } from "@crucible/core/src/practiceRecordShared";
 import type { CreativeStatus } from "@crucible/core/src/creativeChecks";
-import { SAMPLES_HOW, sendJson } from "@/lib/creative";
+import { sendJson } from "@/lib/creative";
 import { OpenItems } from "./OpenItems";
 import { FacilityChoices } from "./FacilityChoices";
 import type { CreativeCtx } from "./CreativeLaneView";
@@ -26,6 +27,8 @@ export function WorkSamplesPanel({
   onTitleMode: (entryId: string, mode: TitleMode) => Promise<boolean>;
   onSaved: () => void;
 }) {
+  const t = useTranslations("refineryResume.creative.samples");
+  const ts = useTranslations("refineryResume.creative.shared");
   const [order, setOrder] = useState(rows);
   const [msg, setMsg] = useState("");
   useEffect(() => setOrder(rows), [rows]);
@@ -43,7 +46,7 @@ export function WorkSamplesPanel({
       <div className="space-y-4">
         {choices}
         <p className="border border-t-line bg-t-panel p-3 text-sm text-t-phos-dim" data-testid="samples-empty">
-          No works on this list yet. On Your record, add one with &quot;A work (for your sample list)&quot;.
+          {t("empty")}
         </p>
         <OpenItems status={status} doc="work_samples" testId="samples-open-items" />
       </div>
@@ -51,7 +54,7 @@ export function WorkSamplesPanel({
   }
   return (
     <div className="space-y-4" data-testid="samples-panel">
-      <p className="text-sm text-t-phos-dim">{SAMPLES_HOW}</p>
+      <p className="text-sm text-t-phos-dim">{ts("samplesHow")}</p>
       {choices}
       <ol className="space-y-2">
         {order.map((r, i) => (
@@ -63,21 +66,21 @@ export function WorkSamplesPanel({
               </p>
               <p className="text-t-phos-dim">{[r.medium, r.size].filter(Boolean).join(", ")}</p>
               {r.description && <p className="text-t-white">{r.description}</p>}
-              {r.fileName && <p className="text-xs text-t-phos-dim">File: {r.fileName}</p>}
+              {r.fileName && <p className="text-xs text-t-phos-dim">{t("file", { name: r.fileName })}</p>}
             </div>
             <div className="flex flex-col gap-1">
-              <button type="button" className="t-focus min-h-touch px-2 border border-t-line text-t-white disabled:opacity-40" disabled={i === 0} aria-label={`Move ${r.title} up`} onClick={() => move(i, -1)}>
-                Up
+              <button type="button" className="t-focus min-h-touch px-2 border border-t-line text-t-white disabled:opacity-40" disabled={i === 0} aria-label={t("moveUp", { title: r.title })} onClick={() => move(i, -1)}>
+                {t("up")}
               </button>
-              <button type="button" className="t-focus min-h-touch px-2 border border-t-line text-t-white disabled:opacity-40" disabled={i === order.length - 1} aria-label={`Move ${r.title} down`} onClick={() => move(i, 1)}>
-                Down
+              <button type="button" className="t-focus min-h-touch px-2 border border-t-line text-t-white disabled:opacity-40" disabled={i === order.length - 1} aria-label={t("moveDown", { title: r.title })} onClick={() => move(i, 1)}>
+                {t("down")}
               </button>
             </div>
           </li>
         ))}
       </ol>
       {stillNeedsProof(ctx.entries, order.map((x) => x.entryId)) > 0 && (
-        <p className="text-sm text-t-phos" data-testid="samples-needs-proof">{NEEDS_PROOF_NOTE}</p>
+        <p className="text-sm text-t-phos" data-testid="samples-needs-proof">{ts("needsProof")}</p>
       )}
       <div className="flex flex-wrap gap-2">
         <button
@@ -86,14 +89,14 @@ export function WorkSamplesPanel({
           className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright"
           onClick={async () => {
             const r = await sendJson(`/api/creative/${laneId}/docs`, "PUT", { type: "work_sample_list", order: order.map((x) => x.entryId), rev: ctx.sampleRev });
-            setMsg(r.ok ? "Order saved." : r.data.message || "That didn't save. Try again.");
+            setMsg(r.ok ? t("orderSaved") : r.data.message || ts("didntSave"));
             if (r.ok) onSaved();
           }}
         >
-          Save this order
+          {t("saveOrder")}
         </button>
-        <a href={`/api/creative/${laneId}/export?doc=work_samples&format=txt`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">Plain text</a>
-        <a href={`/api/creative/${laneId}/export?doc=work_samples&format=csv`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">Spreadsheet (CSV)</a>
+        <a href={`/api/creative/${laneId}/export?doc=work_samples&format=txt`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">{t("plainText")}</a>
+        <a href={`/api/creative/${laneId}/export?doc=work_samples&format=csv`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white">{t("csv")}</a>
       </div>
       <p aria-live="polite" className="text-sm text-t-phos">{msg}</p>
       <OpenItems status={status} doc="work_samples" testId="samples-open-items" />

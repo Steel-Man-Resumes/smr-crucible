@@ -97,5 +97,18 @@
       "notYet": "Todavía no",
       "start": "Listo, borrar mis datos de esta computadora"
     }
+  },
+  "betaNotice": {
+    "pill": "Beta en español",
+    "openAria": "Beta en español: lee esto y dinos qué suena mal",
+    "intro": "Esta versión en español es nueva. Una computadora ayudó a escribirla y todavía no la ha revisado una persona, así que algunas frases pueden sonar raras o estar mal. Tu currículum sigue en inglés, para los empleadores de Estados Unidos.",
+    "label": "¿Qué sonó mal o fue difícil de entender?",
+    "placeholder": "Escribe la frase y dónde la viste.",
+    "send": "Enviar",
+    "sending": "Enviando...",
+    "close": "Cerrar",
+    "sent": "Gracias. Lo recibimos.",
+    "signIn": "Inicia sesión para enviarlo.",
+    "error": "No se pudo enviar. Inténtalo de nuevo en un momento."
   }
 }

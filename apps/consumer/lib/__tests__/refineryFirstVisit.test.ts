@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MESSAGES } from "./helpers/intl";
 import {
   JOURNEY_STAGES,
   JOURNEY_STEP_COUNT,
@@ -28,6 +29,8 @@ import {
 } from "../guidedTour";
 
 const ROOT = join(import.meta.dirname, "..", "..");
+/** Every English string under a catalog subtree. */
+const catalogLeaves = (o: unknown): string[] => typeof o === "string" ? [o] : o && typeof o === "object" ? Object.values(o).flatMap(catalogLeaves) : [];
 const DASH = join(ROOT, "app", "(dashboard)", "dashboard");
 
 const OLD_JARGON = ["Foundation", "Target", "Materials", "Approach", "Orientation"];
@@ -122,7 +125,10 @@ test("the Settings picks are real: each named feature is in the source", () => {
   assert.ok(TOUR_SETTINGS_PICKS.length >= 2 && TOUR_SETTINGS_PICKS.length <= 3);
   for (const p of TOUR_SETTINGS_PICKS) {
     const src = readFileSync(join(ROOT, p.proofFile), "utf8");
-    assert.ok(src.includes(p.proofText), `${p.name}: "${p.proofText}" not found in ${p.proofFile}`);
+    // A converted component's words live in the catalog: count the English under any namespace the file reads with useTranslations("...").
+    const namespaces = [...src.matchAll(/useTranslations\(\s*["']([\w.]+)["']\s*\)/g)].map((m) => m[1]);
+    const catalogText = namespaces.flatMap((ns) => catalogLeaves(ns.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], MESSAGES.en)));
+    assert.ok(src.includes(p.proofText) || catalogText.some((v) => v.includes(p.proofText)), `${p.name}: "${p.proofText}" not found in ${p.proofFile} or in the catalog it reads`);
   }
   // And the Settings page actually mounts those sections.
   const settings = readFileSync(join(DASH, "settings", "page.tsx"), "utf8");

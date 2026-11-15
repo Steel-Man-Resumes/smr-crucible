@@ -8,9 +8,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { HANDOFFS_EMPTY, HANDOFFS_LOAD_FAILED, HANDOFFS_RETRY, HANDOFFS_UNAVAILABLE, loadMyHandoffs } from "../my-handoffs-load";
 import { HandoffsLoadFailed } from "../../components/MyHandoffs";
+import { intlMarkup, MESSAGES } from "./helpers/intl";
 
 (globalThis as { React?: typeof React }).React = React;
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
@@ -41,13 +41,18 @@ test("the route answers a failed read with 503 and the plain code, and never 200
 });
 
 test("the screens: failed shows the message and Retry; empty keeps 'Nothing new'", () => {
-  const html = renderToStaticMarkup(React.createElement(HandoffsLoadFailed, { onRetry: () => {} }));
+  const html = intlMarkup(React.createElement(HandoffsLoadFailed, { onRetry: () => {} }));
   assert.match(html, /role="alert"/);
   assert.ok(html.includes("Could not load what your case manager sent. Try again."));
   assert.match(html, /<button type="button"[^>]*>Retry<\/button>/);
   assert.equal(HANDOFFS_LOAD_FAILED, "Could not load what your case manager sent. Try again.");
   assert.equal(HANDOFFS_RETRY, "Retry");
   assert.equal(HANDOFFS_EMPTY, "Nothing new from your case manager in the last 30 days.");
+  // The screen's words now live in the English catalog; they must stay the same words.
+  const mh = (MESSAGES.en as any).refineryHome.myHandoffs;
+  assert.equal(mh.loadFailed, HANDOFFS_LOAD_FAILED);
+  assert.equal(mh.retry, HANDOFFS_RETRY);
+  assert.equal(mh.empty, HANDOFFS_EMPTY);
   const ui = read("../../components/MyHandoffs.tsx");
   assert.doesNotMatch(ui, /setHandoffs\(\[\]\)/, "a failure is never turned into an empty list");
   assert.doesNotMatch(ui, /r\.ok \? r\.json\(\) : \{ handoffs: \[\] \}/);

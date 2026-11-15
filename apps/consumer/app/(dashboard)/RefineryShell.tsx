@@ -7,6 +7,7 @@ import { PolicyAckBanner } from "@/components/PolicyAckBanner";
 import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useSession } from "next-auth/react";
 import { confirmedSignOut } from "@/lib/confirmed-sign-out";
 import { AssistantDrawer } from "@crucible/consumer-ui";
@@ -104,23 +105,24 @@ const TIER_RANK: Record<string, number> = {
 // sidebar for org leaders instead of the career board.
 interface OrgNavItem {
   href: string;
-  label: string;
+  /** The catalog key (refineryShell.shell.orgNav) the label is read from. */
+  key: string;
 }
 const ORG_ADMIN_NAV: OrgNavItem[] = [
-  { href: "/dashboard", label: "Organization overview" },
-  { href: "/dashboard#team", label: "Team & seats" },
-  { href: "/dashboard#add", label: "Add participants" },
+  { href: "/dashboard", key: "overview" },
+  { href: "/dashboard#team", key: "team" },
+  { href: "/dashboard#add", key: "add" },
   // The person who has to answer for this internally should not have to ask
   // us for it, or find it in a PDF attached to an email six months ago.
-  { href: "/dashboard/org-security", label: "Security & privacy" },
+  { href: "/dashboard/org-security", key: "security" },
 ];
 // The staff workspace (crm_v2 orgs) nav lives in lib/org-nav.ts: grouped by
 // the job (Work, Records, Organization), capability-gated, testable per role.
 
 const ORG_STAFF_NAV: OrgNavItem[] = [
-  { href: "/dashboard", label: "My clients" },
-  { href: "/dashboard#add", label: "Add participants" },
-  { href: "/dashboard/org-security", label: "Security & privacy" },
+  { href: "/dashboard", key: "clients" },
+  { href: "/dashboard#add", key: "add" },
+  { href: "/dashboard/org-security", key: "security" },
 ];
 
 // Personal, account-scoped data cached in localStorage. Cleared on sign-out so
@@ -238,6 +240,7 @@ function isNavUnlocked(
  * (AdminTestModeBanner) marks client view; this control lives in the top nav.
  */
 function ViewAsToggle() {
+  const t = useTranslations("refineryShell.shell");
   const realTier = useRealTier();
   const effectiveRole = useEffectiveRole();
   const [asClient, setAsClient] = useState(false);
@@ -260,8 +263,8 @@ function ViewAsToggle() {
     window.location.href = "/dashboard";
   }
 
-  const label = asClient ? "Partner view" : "Client view";
-  const title = asClient ? "Return to your partner view" : "Experience the platform exactly as a client";
+  const label = asClient ? t("partnerView") : t("clientView");
+  const title = asClient ? t("returnPartner") : t("experienceClient");
 
   return (
     <button
@@ -275,10 +278,12 @@ function ViewAsToggle() {
 }
 
 export function RefineryShell({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<p className="p-6 text-sm text-t-phos-dim">Loading your workspace...</p>}><ProgressionProvider><RefineryShellContent>{children}</RefineryShellContent></ProgressionProvider></Suspense>;
+  const t = useTranslations("refineryShell.shell");
+  return <Suspense fallback={<p className="p-6 text-sm text-t-phos-dim">{t("loadingWorkspace")}</p>}><ProgressionProvider><RefineryShellContent>{children}</RefineryShellContent></ProgressionProvider></Suspense>;
 }
 
 function RefineryShellContent({ children }: { children: ReactNode }) {
+  const t = useTranslations("refineryShell.shell");
   const progression = useProgression();
   const serverSwitches = useServerSwitches();
   const userTier = useUserTier();
@@ -304,7 +309,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       clearPersonalLocalStorage();
       window.location.replace("/login");
     } catch {
-      setSignOutError("We couldn't confirm sign-out. Stay here and try again before leaving this computer.");
+      setSignOutError(t("signOutFailed"));
       setSigningOut(false);
     }
   }
@@ -602,7 +607,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         askedRunRef.current = null;
         setForgeRunChanged(false);
         setForgePrompt("none");
-        if (now !== "owned") setForgeNotice("Nothing was saved. That resume is no longer on this computer.");
+        if (now !== "owned") setForgeNotice(t("notSavedGone"));
         setForgeSyncTick((t) => t + 1);
       }
       return;
@@ -615,7 +620,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         setForgeRunChanged(false);
         setSavedAtLoads(onboarding.loads);
         setForgePrompt("saved");
-        setForgeNotice("Saved to your account.");
+        setForgeNotice(t("savedToAccount"));
         setForgeSyncTick((t) => t + 1);
       } else {
         setForgePrompt("failed");
@@ -701,6 +706,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
     return item.label;
   }
 
+  const legacyNavItems = (isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV).map((i) => ({ href: i.href, label: t(`orgNav.${i.key}`) }));
+
   function renderNavItems(onItemClick?: () => void, mobile = false) {
     return (
       <RefineryBoard
@@ -730,7 +737,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         orgName={effectiveRole?.orgName ?? null}
         capabilities={effectiveRole?.capabilities ?? []}
         workspace={!!effectiveRole?.crmV2}
-        legacyItems={isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV}
+        legacyItems={legacyNavItems}
         onItemClick={onItemClick}
       />
     );
@@ -748,7 +755,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         orgRole={orgRole}
         capabilities={effectiveRole?.capabilities ?? []}
         workspace={!!effectiveRole?.crmV2}
-        legacyItems={isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV}
+        legacyItems={legacyNavItems}
         pathname={pathname}
         orgId={brand?.orgId ?? null}
         hasLogo={!!brand?.orgBrand?.hasLogo}
@@ -766,7 +773,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[4px] focus:bg-t-panel focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-t-white focus:shadow-xl"
       >
-        Skip to content
+        {t("skip")}
       </a>
       <AdminTestModeBanner />
       <HighlightHost />
@@ -780,7 +787,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
                 ref={navTrigger}
                 onClick={() => setDrawerOpen(true)}
                 className="t-focus -ml-2 flex h-11 w-11 items-center justify-center rounded-[4px] text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white md:hidden"
-                aria-label="Open navigation"
+                aria-label={t("openNav")}
                 aria-expanded={drawerOpen}
                 aria-controls="refinery-mobile-navigation"
               >
@@ -796,26 +803,26 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               {!isOrgPartner && effectiveRole?.coBrand ? <MemberCoBrandChip orgId={effectiveRole.coBrand.orgId} name={effectiveRole.coBrand.name} hasLogo={effectiveRole.coBrand.hasLogo} className="hidden lg:flex" /> : null}
               <Link
                 href="/dashboard/settings"
-                aria-label="Settings"
+                aria-label={t("settings")}
                 className="t-focus flex min-h-touch items-center gap-2 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
               >
                 <NavAvatar size={28} />
-                <span className="hidden sm:inline">Settings</span>
+                <span className="hidden sm:inline">{t("settings")}</span>
               </Link>
               <button
                 onClick={leaveAccount}
                 disabled={signingOut}
-                aria-label={signingOut ? "Signing out" : "Sign out"}
+                aria-label={signingOut ? t("signingOutAria") : t("signOut")}
                 className="t-focus flex min-h-touch items-center gap-1.5 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
               >
                 <LogOut size={15} aria-hidden="true" />
-                <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
+                <span className="hidden sm:inline">{signingOut ? t("signingOut") : t("signOut")}</span>
               </button>
             </div>
           </div>
         </div>
       </nav>
-      {signOutError && !drawerOpen && <p role="alert" className="border-b border-t-red bg-t-panel px-4 py-3 text-sm text-t-red">{signOutError} <button type="button" onClick={leaveAccount} disabled={signingOut} className="t-focus min-h-touch underline">Try again</button></p>}
+      {signOutError && !drawerOpen && <p role="alert" className="border-b border-t-red bg-t-panel px-4 py-3 text-sm text-t-red">{signOutError} <button type="button" onClick={leaveAccount} disabled={signingOut} className="t-focus min-h-touch underline">{t("tryAgain")}</button></p>}
 
       {/* Body: sidebar + content */}
       <div className="flex min-h-[calc(100vh-72px)]">
@@ -823,7 +830,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         {/* Left sidebar -- desktop only */}
         <aside className="forge-workshop hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block">
           <div id="refinery-desktop-navigation" className="sticky top-[72px] h-[calc(100vh-72px)] space-y-1 overflow-y-auto px-3 py-5">
-            {adminMode ? renderAdminNav() : isOrgPartner ? renderOrgNav() : <nav aria-label="Career workspace">{renderNavItems()}</nav>}
+            {adminMode ? renderAdminNav() : isOrgPartner ? renderOrgNav() : <nav aria-label={t("careerWorkspace")}>{renderNavItems()}</nav>}
           </div>
         </aside>
 
@@ -836,9 +843,9 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
           {staffInvite && pathname !== "/dashboard/invites" && (
             <p role="status" className="mb-6 border border-t-amber/40 bg-t-panel px-4 py-3 text-sm text-t-white">
               {staffInvite.count === 1 && staffInvite.orgName
-                ? `${staffInvite.orgName} invited you to join their team.`
-                : `You have ${staffInvite.count} invitations to join a team.`}{" "}
-              <Link href="/dashboard/invites" className="t-focus underline">Review the invitation</Link>
+                ? t("inviteOne", { org: staffInvite.orgName })
+                : t("inviteMany", { count: staffInvite.count })}{" "}
+              <Link href="/dashboard/invites" className="t-focus underline">{t("reviewInvite")}</Link>
             </p>
           )}
           {forgeNotice && (
@@ -847,17 +854,17 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
             </p>
           )}
           {(forgePrompt === "ask" || forgePrompt === "saving" || forgePrompt === "failed") && !effectiveRole?.impersonating && (
-            <div role="region" aria-label="Resume on this computer" className="mb-6 border border-t-amber bg-t-panel px-4 py-4">
+            <div role="region" aria-label={t("resumeRegion")} className="mb-6 border border-t-amber bg-t-panel px-4 py-4">
               <p className="text-base font-semibold text-t-white">
-                There&apos;s a resume in progress on this computer. Is it yours?
+                {t("resumeAsk")}
               </p>
               {forgeRunChanged && (
                 <p className="mt-1 text-sm text-t-bone-dim">
-                  The resume on this computer changed since we asked. Nothing was saved. Is this one yours?
+                  {t("resumeChanged")}
                 </p>
               )}
               {forgePrompt === "failed" && (
-                <p className="mt-1 text-sm text-t-red">It did not save. Try again.</p>
+                <p className="mt-1 text-sm text-t-red">{t("didNotSave")}</p>
               )}
               <div className="mt-3 flex flex-wrap gap-3">
                 <button
@@ -867,10 +874,10 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
                   className="t-focus min-h-touch rounded-[4px] border border-[#4f6b57] bg-[#4f6b57] px-4 text-sm font-medium text-white hover:bg-[#3d5745] disabled:opacity-60"
                 >
                   {forgePrompt === "saving"
-                    ? "Saving..."
+                    ? t("saving")
                     : sessionData?.user?.email
-                      ? `Yes, save it to ${sessionData.user.email}`
-                      : "Yes, save it to my account"}
+                      ? t("yesSaveTo", { email: sessionData.user.email })
+                      : t("yesSaveMine")}
                 </button>
                 <button
                   type="button"
@@ -878,15 +885,15 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
                   disabled={forgePrompt === "saving"}
                   className="t-focus min-h-touch rounded-[4px] border border-t-line px-4 text-sm font-medium text-t-white hover:border-t-line-strong disabled:opacity-60"
                 >
-                  No, erase it
+                  {t("noErase")}
                 </button>
               </div>
             </div>
           )}
           {adminNeeds2fa && (
             <div className="mb-6 border border-t-amber bg-t-panel px-4 py-3 text-sm text-t-amber-bright">
-              <span className="font-semibold">Two-step verification is required for admin accounts.</span>{" "}
-              Admin tools stay locked until you turn it on under <span className="font-semibold">Security</span> below.
+              <span className="font-semibold">{t("admin2faTitle")}</span>{" "}
+              {t.rich("admin2faBody", { b: (chunks) => <span className="font-semibold">{chunks}</span> })}
             </div>
           )}
           {/* The client journey banner is participant chrome -- org leaders run
@@ -951,7 +958,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         ref={navPanel}
         id="refinery-mobile-navigation"
         role="dialog"
-        aria-label={adminMode ? "Platform admin navigation" : isOrgPartner ? "Organization workspace navigation" : "Career workspace navigation"}
+        aria-label={adminMode ? t("navAdmin") : isOrgPartner ? t("navOrg") : t("navCareer")}
         aria-modal={drawerOpen ? true : undefined}
         aria-hidden={!drawerOpen}
         inert={!drawerOpen}
@@ -965,13 +972,13 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
           <button
             onClick={() => setDrawerOpen(false)}
             className="t-focus flex h-11 w-11 items-center justify-center rounded-[4px] text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
-            aria-label="Close navigation"
+            aria-label={t("closeNav")}
           >
             <X size={20} aria-hidden="true" />
           </button>
         </div>
         <div className="px-2 py-4 space-y-1">
-          {adminMode ? renderAdminNav(() => setDrawerOpen(false)) : isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : <nav aria-label="Career workspace">{renderNavItems(() => setDrawerOpen(false), true)}</nav>}
+          {adminMode ? renderAdminNav(() => setDrawerOpen(false)) : isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : <nav aria-label={t("careerWorkspace")}>{renderNavItems(() => setDrawerOpen(false), true)}</nav>}
           <div className="mt-3 pt-3 border-t border-t-line space-y-1">
             {signOutError && <p role="alert" className="px-3 text-sm text-t-red">{signOutError}</p>}
             <button
@@ -979,7 +986,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               disabled={signingOut}
               className="flex min-h-touch w-full items-center gap-1.5 rounded-[4px] px-3 py-2 text-left text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
             >
-              <LogOut size={14} aria-hidden="true" /> {signingOut ? "Signing out..." : signOutError ? "Try sign-out again" : "Sign out"}
+              <LogOut size={14} aria-hidden="true" /> {signingOut ? t("signingOut") : signOutError ? t("trySignOutAgain") : t("signOut")}
             </button>
           </div>
         </div>
@@ -987,11 +994,11 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
 
       {/* AI Assistant */}
       <AssistantDrawer
-        title={isOrgPartner ? "t.ROY, for your work with people" : undefined}
-        triggerSubLabel={isOrgPartner ? "for your work with people" : undefined}
+        title={isOrgPartner ? t("assistantTitle") : undefined}
+        triggerSubLabel={isOrgPartner ? t("assistantSub") : undefined}
       >
         {!shellUid || authStatus !== "authenticated" || effectiveRole === null ? (
-          <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
+          <p role="status" className="p-5 text-sm text-t-bone-dim">{t("checkingAccount")}</p>
         ) : (
           <AssistantChat
             key={JSON.stringify([shellUid, effectiveRole.accountId, effectiveRole.tier, effectiveRole.orgRole, effectiveRole.impersonating?.mode ?? null, isOrgPartner])}

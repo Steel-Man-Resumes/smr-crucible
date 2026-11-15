@@ -17,6 +17,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
 // Deep, runtime-pure import: the one shared gate-state ordering, no db/pg pulled
 // into the client bundle (see @crucible/core/src/gateRank).
@@ -36,6 +37,7 @@ export function OnboardingGate({
   previewFeature?: string;
   children: ReactNode;
 }) {
+  const t = useTranslations("refineryInterview.gate");
   const { state } = useOnboarding();
 
   // Optimistic: never lock while we don't yet know (loading) -- avoids a flash and
@@ -47,11 +49,11 @@ export function OnboardingGate({
   return (
     <div className="max-w-2xl mx-auto px-4 py-16">
       <div className="border border-t-line bg-t-panel p-8 text-center">
-        <p className="text-lg font-bold text-t-white mb-2">{toolName} unlocks after your resume</p>
+        <p className="text-lg font-bold text-t-white mb-2">{t("title", { tool: toolName })}</p>
         <p className="text-sm text-t-phos-dim mb-6 leading-relaxed">
           {needsProfile
-            ? "First, finish your profile in The Forge. Then tailor a resume to a specific job. That unlocks this and the rest of the toolset."
-            : `${toolName} is built around a specific job. Tailor a resume to the job you're aiming at first, and this unlocks right away. You can paste the job description. No live search needed.`}
+            ? t("needsProfile")
+            : t("needsResume", { tool: toolName })}
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           {needsProfile ? (
@@ -59,14 +61,14 @@ export function OnboardingGate({
               href="https://forge.steelmanresumes.com"
               className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright transition-colors"
             >
-              Finish in The Forge
+              {t("finishForge")}
             </a>
           ) : (
             <Link
               href="/dashboard/application-tailor"
               className="t-focus px-6 py-3 bg-t-amber text-white font-bold hover:bg-t-amber-bright transition-colors"
             >
-              Tailor my resume
+              {t("tailor")}
             </Link>
           )}
           {previewFeature && (
@@ -74,14 +76,14 @@ export function OnboardingGate({
               href={`/dashboard/preview/${previewFeature}`}
               className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors"
             >
-              See a preview
+              {t("preview")}
             </Link>
           )}
           <Link
             href="/dashboard"
             className="t-focus px-6 py-3 bg-transparent text-t-amber-bright border border-t-amber font-bold hover:bg-t-amber/10 transition-colors"
           >
-            Back to dashboard
+            {t("backToDashboard")}
           </Link>
         </div>
       </div>

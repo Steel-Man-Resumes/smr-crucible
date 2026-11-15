@@ -27,6 +27,7 @@ import { ProgressOverview } from "@/components/progression/ProgressOverview";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { routeHref } from "@/lib/lane-task";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useUserTier } from "@/lib/useUserTier";
 import { useOnboarding, type UserContact } from "@/lib/useOnboarding";
@@ -37,7 +38,7 @@ import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole, useWorkspace } from "@/components/RoleProvider";
 import { orgLanding } from "@/lib/org-nav";
 import { TBtn } from "@crucible/consumer-ui";
-import { CONTACT_NUDGE, profileAsNudge } from "@/lib/profile-nudge";
+import { profileAsNudge } from "@/lib/profile-nudge";
 
 // Shared fact-history snapshot for a compact progress recap.
 
@@ -52,13 +53,8 @@ interface DashboardData {
   }>;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  resume: "resumes",
-  cover_letter: "cover letters",
-  disclosure_plan: "disclosure plans",
-  hurdle_plan: "hurdle plans",
-  interview_prep: "interview sessions",
-};
+// The saved-work type names are said through the catalog (dashboard.types); an unknown type shows its own name.
+const TYPE_KEYS = ["resume", "cover_letter", "disclosure_plan", "hurdle_plan", "interview_prep"];
 
 // ─── Org workspace landing ──────────────────────────────────────────────────
 // /dashboard for a workspace staff member is a doorway, not a page: it reads
@@ -94,6 +90,7 @@ function OrgLanding() {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const t = useTranslations("refineryHome.dashboard");
   const sessionTier = useUserTier();
   const effectiveRole = useEffectiveRole();
   // Prefer the database-resolved tier. The session claim is minted at sign-in
@@ -237,13 +234,13 @@ export default function DashboardPage() {
             current={focus.task}
             busy={picking}
             helpHref="/dashboard/resources#support"
-            onPick={async (t) => {
+            onPick={async (task) => {
               setPicking(true);
               setPickError("");
-              const saved = await focus.save(t);
+              const saved = await focus.save(task);
               setPicking(false);
-              if (!saved) { setPickError("Your choice wasn't saved. Try again."); return; }
-              router.push(routeHref(t, { signedIn: true, hasResume: onboarding.state === "full_access" }));
+              if (!saved) { setPickError(t("choiceNotSaved")); return; }
+              router.push(routeHref(task, { signedIn: true, hasResume: onboarding.state === "full_access" }));
             }}
           />
         </div>
@@ -275,34 +272,34 @@ export default function DashboardPage() {
     <div className="space-y-7">
       <MiniForgeBanner />
       <ProgressOverview />
-      {focus.task ? <LaneHome laneId={focus.laneId} task={focus.task} hidePrimaryAction /> : <h1 className="text-2xl font-bold text-t-white">Overview</h1>}
+      {focus.task ? <LaneHome laneId={focus.laneId} task={focus.task} hidePrimaryAction /> : <h1 className="text-2xl font-bold text-t-white">{t("overview")}</h1>}
       {contactNudge && (
         <details id="profile-setup" className="scroll-mt-48 border border-t-line bg-t-panel p-4" data-testid="contact-nudge">
-          <summary className="t-focus cursor-pointer text-sm font-medium text-t-white">{CONTACT_NUDGE.summary}</summary>
-          <p className="mt-1 text-xs text-t-phos-dim">{CONTACT_NUDGE.hint}</p>
+          <summary className="t-focus cursor-pointer text-sm font-medium text-t-white">{t("nudge.summary")}</summary>
+          <p className="mt-1 text-xs text-t-phos-dim">{t("nudge.hint")}</p>
           <div className="mt-4"><ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} quiet /></div>
         </details>
       )}
       <MySharedTasks />
       <MySuggestions />
-      <SavedJobsPanel heading="Applications to keep moving" limit={3} />
+      <SavedJobsPanel heading={t("applicationsHeading")} limit={3} />
       {(forgeData.narrative?.summary || forgeData.skills?.length || totalArtifacts > 0) && (
         <section aria-labelledby="your-foundation-heading" className="border border-t-line bg-t-panel p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="your-foundation-heading" className="text-base font-semibold text-t-white">The work you can build on</h2>
-            <Link href="/dashboard/progress" className="t-focus inline-flex min-h-touch items-center text-sm text-t-amber-bright underline underline-offset-2">Your progress</Link>
+            <h2 id="your-foundation-heading" className="text-base font-semibold text-t-white">{t("foundationHeading")}</h2>
+            <Link href="/dashboard/progress" className="t-focus inline-flex min-h-touch items-center text-sm text-t-amber-bright underline underline-offset-2">{t("yourProgress")}</Link>
           </div>
           {forgeData.narrative?.headline && <p className="mt-1 font-medium text-t-white">{forgeData.narrative.headline}</p>}
           {forgeData.narrative?.summary && <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-t-phos-dim">{forgeData.narrative.summary}</p>}
           {!!forgeData.skills?.length && (
-            <div className="mt-3 flex flex-wrap gap-2" aria-label="Skills from your shared history">
+            <div className="mt-3 flex flex-wrap gap-2" aria-label={t("skillsAria")}>
               {forgeData.skills.slice(0, 6).map((skill, index) => <span key={`${skill.name}:${index}`} className="border border-t-line bg-t-panel-2 px-2 py-1 text-xs text-t-phos">{skill.name}</span>)}
             </div>
           )}
-          {totalArtifacts > 0 && <p className="mt-3 text-xs text-t-bone-dim">Saved across all lanes: {Object.entries(artifactCounts).filter(([, count]) => count > 0).map(([type, count]) => `${count} ${TYPE_LABELS[type] || type.replaceAll("_", " ")}`).join(" · ")}.</p>}
+          {totalArtifacts > 0 && <p className="mt-3 text-xs text-t-bone-dim">{t("savedAcross", { list: Object.entries(artifactCounts).filter(([, count]) => count > 0).map(([type, count]) => (TYPE_KEYS.includes(type) ? t(`types.${type}`, { count }) : `${count} ${type.replaceAll("_", " ")}`)).join(" · ") })}</p>}
         </section>
       )}
-      <p className="text-sm text-t-phos-dim">Aiming at another kind of work? <Link href="/dashboard/vault" className="t-focus text-t-amber-bright underline underline-offset-2">Start a lane in My resumes</Link>. Your work history stays together while each goal keeps its own documents.</p>
+      <p className="text-sm text-t-phos-dim">{t.rich("anotherLane", { link: (chunks) => <Link href="/dashboard/vault" className="t-focus text-t-amber-bright underline underline-offset-2">{chunks}</Link> })}</p>
     </div>
   );
 }
@@ -429,6 +426,7 @@ function ProfileSetup({
   /** The optional nudge for someone with saved work: no "required", no welcome page. */
   quiet?: boolean;
 }) {
+  const t = useTranslations("refineryHome.dashboard.profile");
   const [name, setName] = useState(contact?.name || "");
   const [email, setEmail] = useState(contact?.email || "");
   const [phone, setPhone] = useState(contact?.phone || "");
@@ -440,7 +438,7 @@ function ProfileSetup({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) {
-      setError(quiet ? CONTACT_NUDGE.needBoth : "Name and phone number are required for your resume.");
+      setError(quiet ? t("needBoth") : t("required"));
       return;
     }
 
@@ -458,11 +456,11 @@ function ProfileSetup({
         onComplete();
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Could not save. Please try again.");
+        setError(data.error || t("couldNotSave"));
         setSaving(false);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("wentWrong"));
       setSaving(false);
     }
   }
@@ -471,36 +469,35 @@ function ProfileSetup({
     <div className="max-w-lg mx-auto">
       {quiet ? (
         <>
-          <h2 className="text-lg font-semibold text-t-white mb-1">{CONTACT_NUDGE.title}</h2>
-          <p className="text-sm text-t-phos-dim mb-4">{CONTACT_NUDGE.intro}</p>
+          <h2 className="text-lg font-semibold text-t-white mb-1">{t("nudgeTitle")}</h2>
+          <p className="text-sm text-t-phos-dim mb-4">{t("nudgeIntro")}</p>
         </>
       ) : (
         <>
           <h1 className="text-2xl font-bold text-t-white mb-2">
-            {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
+            {name ? t("welcomeName", { name: name.split(" ")[0] }) : t("welcome")}
           </h1>
           <p className="text-base text-t-phos-dim mb-4">
-            I analyzed your background in The Forge. Now we put it to work.
-            These details go on your resume header. Nothing else.
+            {t("analyzed")}
           </p>
         </>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="text-sm font-medium text-t-white block mb-1">{quiet ? "Full name" : "Full Name *"}</label>
+          <label className="text-sm font-medium text-t-white block mb-1">{quiet ? t("fullNameQuiet") : t("fullName")}</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Your full name (as it appears on a resume)"
+            placeholder={t("namePlaceholder")}
             className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             required={!quiet}
           />
-          <p className="text-xs text-t-phos-dim mt-1">Top of every resume we build for you.</p>
+          <p className="text-xs text-t-phos-dim mt-1">{t("nameHint")}</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium text-t-white block mb-1">Email</label>
+          <label className="text-sm font-medium text-t-white block mb-1">{t("email")}</label>
           <input
             type="email"
             value={email}
@@ -508,11 +505,11 @@ function ProfileSetup({
             placeholder="you@example.com"
             className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
-          <p className="text-xs text-t-phos-dim mt-1">Resume header + how employers reach you.</p>
+          <p className="text-xs text-t-phos-dim mt-1">{t("emailHint")}</p>
         </div>
 
         <div>
-          <label className="text-sm font-medium text-t-white block mb-1">{quiet ? "Phone number" : "Phone Number *"}</label>
+          <label className="text-sm font-medium text-t-white block mb-1">{quiet ? t("phoneQuiet") : t("phone")}</label>
           <input
             type="tel"
             value={phone}
@@ -521,12 +518,12 @@ function ProfileSetup({
             className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             required={!quiet}
           />
-          <p className="text-xs text-t-phos-dim mt-1">{quiet ? "Employers call this number." : "Required on resumes. Employers call this number."}</p>
+          <p className="text-xs text-t-phos-dim mt-1">{quiet ? t("phoneHintQuiet") : t("phoneHint")}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-sm font-medium text-t-white block mb-1">City</label>
+            <label className="text-sm font-medium text-t-white block mb-1">{t("city")}</label>
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
@@ -535,7 +532,7 @@ function ProfileSetup({
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-t-white block mb-1">State</label>
+            <label className="text-sm font-medium text-t-white block mb-1">{t("state")}</label>
             <input
               value={state}
               onChange={(e) => setState(e.target.value)}
@@ -544,20 +541,19 @@ function ProfileSetup({
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
             />
           </div>
-          <p className="text-xs text-t-phos-dim col-span-2">For local job matching.</p>
+          <p className="text-xs text-t-phos-dim col-span-2">{t("localMatching")}</p>
         </div>
 
         {error && <p className="text-sm text-t-red">{error}</p>}
 
         <div className="bg-t-panel p-4 border border-t-line">
           <p className="text-xs text-t-phos leading-relaxed">
-            Your contact details are saved in your account and used on your documents. Your location also helps match local jobs and support. You choose what to share with your program.
-            You can update or delete everything anytime in Settings.
+            {t("privacy")}
           </p>
         </div>
 
         <TBtn type="submit" disabled={saving || !name.trim() || !phone.trim()} className="w-full">
-          {saving ? "saving..." : quiet ? CONTACT_NUDGE.save : "save & continue"}
+          {saving ? t("saving") : quiet ? t("saveQuiet") : t("saveContinue")}
         </TBtn>
       </form>
     </div>
@@ -567,6 +563,7 @@ function ProfileSetup({
 // ─── Mini Forge welcome banner ────────────────────────────────────────────
 
 function MiniForgeBanner() {
+  const t = useTranslations("refineryHome.dashboard.miniForge");
   const searchParams = useSearchParams();
   const [dismissed, setDismissed] = useState(false);
 
@@ -575,17 +572,17 @@ function MiniForgeBanner() {
   return (
     <div className="bg-t-panel border border-t-line p-5 flex items-start gap-4">
       <div className="flex-1">
-        <p className="font-semibold text-t-white">Welcome. You started this inside.</p>
+        <p className="font-semibold text-t-white">{t("welcome")}</p>
         <p className="text-sm text-t-phos-dim mt-1">
-          Your career plan from The Mini Forge is loaded. Your tools are ready.
+          {t("loaded")}
         </p>
       </div>
       <button
         onClick={() => setDismissed(true)}
         className="text-t-phos-dim hover:text-t-white text-sm shrink-0"
-        aria-label="Dismiss"
+        aria-label={t("dismissAria")}
       >
-        Done
+        {t("done")}
       </button>
     </div>
   );

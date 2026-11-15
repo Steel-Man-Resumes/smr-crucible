@@ -1,0 +1,1675 @@
+{
+  "applications": {
+    "stage": {
+      "saved": "Saved",
+      "applied": "Applied",
+      "heard_back": "Heard Back",
+      "interviewing": "Interviewing",
+      "offered": "Offered"
+    },
+    "suggestion": {
+      "saved": "Build a targeted resume for this job",
+      "applied": "Prep your disclosure plan",
+      "heard_back": "Practice interviewing for this role",
+      "interviewing": "Review your disclosure script"
+    },
+    "readiness": {
+      "finished": "Your tailored resume is finished. Apply when you are:",
+      "unknown": "Apply when you are:",
+      "draft": "Your tailored resume is still a draft. Check and finish it before you send it."
+    },
+    "interviewReady": "You got the interview. Let’s prepare with the job and documents you saved.",
+    "updated": "Application updated.",
+    "updateFailed": "That update did not save. Your application is unchanged. Try again.",
+    "failure": {
+      "401": "Sign in again, then try the draft again.",
+      "allowance": "Your AI allowance for today is used. Your saved work is still available.",
+      "404": "This application could not be found. Reload the page.",
+      "other": "The follow-up could not be drafted. Your application is unchanged. Try again in a moment."
+    },
+    "cost": {
+      "base": "Drafting uses 1 AI action.",
+      "paused": "This tool is paused. Your saved work is still available.",
+      "none": "You have none left today. Ask t.ROY through the progress bar for more, or come back after midnight UTC.",
+      "left": "You have {left} left today."
+    },
+    "followUpSubject": "Subject: {subject}",
+    "loading": "Loading applications...",
+    "title": "Application Tracker",
+    "intro": "Track your job applications from saved to offered. Each step has tools to help you prepare.",
+    "prepInterview": "Prepare for this interview with t.ROY",
+    "practiceAnytime": "You can <link>practice an interview anytime</link>. An invitation moves that job straight to preparation.",
+    "empty": "No applications yet. Save jobs from the Job Board to start tracking.",
+    "findJobs": "Find Jobs →",
+    "gotInterview": "I got an interview",
+    "moveTo": "Move to {stage}",
+    "remove": "Remove",
+    "suggestionFor": "{text} for {company}",
+    "drafting": "Drafting your follow-up...",
+    "draftFollowUp": "Draft a follow-up message",
+    "copied": "Copied",
+    "copy": "Copy",
+    "redraft": "Redraft",
+    "savedMaterials": "Saved to your materials. Review before sending.",
+    "offer": {
+      "title": "You have an offer. Confirm the terms and your next step.",
+      "1": "Ask your contact which conditions remain and which documents to bring.",
+      "2": "Confirm your start date, time, location and transportation.",
+      "3": "After you actually start, tell your program contact if you choose to share.",
+      "4": "Set your own check-in for your first week. An offer alone is not a confirmed start.",
+      "help": "Get help with the next step"
+    },
+    "archived": "Archived ({count})",
+    "archivedStatus": {
+      "declined": "declined",
+      "rejected": "rejected"
+    },
+    "ago": {
+      "now": "just now",
+      "mins": "{n}m ago",
+      "hours": "{n}h ago",
+      "days": "{n}d ago"
+    }
+  },
+  "apply": {
+    "rec": {
+      "as_is": "Your resume already covers this job well. You can send it as-is.",
+      "fine_tune": "Your resume mostly fits. A light fine-tune moves the best parts to the top.",
+      "full_tailor": "This job asks for a lot your resume does not show yet. A full tailor is worth it."
+    },
+    "ageToday": "saved today",
+    "ageYesterday": "saved yesterday",
+    "ageDays": "saved {days} days ago",
+    "basedOn": "Based on the job posting we {age}.",
+    "trimmed": "The saved posting was trimmed, so a long job may have more than we checked.",
+    "draftEmailError": "Could not draft the email. Try again in a moment.",
+    "noPosting": "We do not have the job posting saved for this job, so we cannot check the fit yet.",
+    "resumeNotFound": "We could not find that resume.",
+    "fitError": "Could not check the fit. Try again in a moment.",
+    "draftStill": "This resume is still a draft.",
+    "attachError": "Could not attach your resume. Try again in a moment.",
+    "applied": "Applied",
+    "drafting": "Drafting with t.ROY...",
+    "draftEmail": "Draft an application email",
+    "iApplied": "I applied",
+    "hidePrep": "Hide what to have ready",
+    "showPrep": "What to have ready",
+    "unreadable": "We could not read this job's direct application link, so we did not open it.",
+    "useSite": "Use the employer's site above instead.",
+    "useEmail": "Use the email option below instead.",
+    "noLinkSaved": "No application link was saved for this job. t.ROY can draft an email you can send with your resume and cover letter, and show you how to find the employer's address.",
+    "checkingFit": "Checking fit...",
+    "checkFit": "Check fit",
+    "attachedFinished": "Your finished resume (version {number}) is attached to this job.",
+    "attachedDraft": "Your draft resume (version {number}) is attached to this job, marked as a draft.",
+    "attachedCurrent": "Your current resume is attached to this job.",
+    "attachDraft": "Attach it marked as a draft",
+    "oneClickLocked": "{tool} opens through your organization or SMR.",
+    "howToGet": "How to get it",
+    "youCanStill": "You can still <link>tailor your resume for this job</link>.",
+    "attaching": "Attaching...",
+    "applyAsIs": "Apply with my current resume as-is",
+    "linesUp": "What lines up",
+    "gaps": "What the job asks for that your resume does not clearly show",
+    "partlyThere": "(partly there: “{evidence}”)",
+    "useAsIs": "Use this resume as-is",
+    "fineTune": "Fine-tune my resume",
+    "tailor": "Tailor my resume",
+    "subject": "Subject: {subject}",
+    "copied": "Copied",
+    "copy": "Copy",
+    "copyEmail": "Copy email",
+    "redraft": "Redraft",
+    "whereToSend": "Where to send it:",
+    "attachNote": "Attach your resume (PDF) and cover letter (DOCX), send it yourself, then mark it applied here.",
+    "dest": {
+      "employer_ats": {
+        "label": "Opens the employer's application system",
+        "expectation": "This is a real application form. Your resume upload usually goes straight to the employer.",
+        "prep": {
+          "0": "Have your resume file ready to upload",
+          "1": "Set aside 10 to 20 minutes to fill it out",
+          "2": "Save any account login somewhere safe"
+        }
+      },
+      "job_board": {
+        "label": "Opens on {host} (an account may be required)",
+        "default": "the job board",
+        "expectation": "You may need to sign in or make an account. Budget 20 to 40 minutes to re-enter your work history.",
+        "prep": {
+          "0": "Have your resume file ready to upload",
+          "1": "Expect to re-enter your work history",
+          "2": "Save your login somewhere safe"
+        }
+      },
+      "aggregator": {
+        "label": "Opens on {host}, one click from the real posting",
+        "default": "a search site",
+        "expectation": "This link may bounce you through a search page. The real employer posting is one more click in.",
+        "prep": {
+          "0": "Look for the employer's name and click through to their posting",
+          "1": "Confirm the posting is still open before you apply"
+        }
+      },
+      "google_jobs": {
+        "label": "Opens a Google jobs search, one click from the real posting",
+        "expectation": "This link may bounce you through a search page. The real employer posting is one more click in.",
+        "prep": {
+          "0": "Look for the employer's name and click through to their posting",
+          "1": "Confirm the posting is still open before you apply"
+        }
+      },
+      "employer_site": {
+        "label": "Opens {host}",
+        "default": "the employer's site",
+        "expectation": "This opens the employer's own site. Look for a Careers or Jobs page, then find this posting.",
+        "prep": {
+          "0": "Look for a Careers or Jobs page",
+          "1": "Confirm the posting is still open before you apply"
+        }
+      },
+      "unknown": {
+        "label": "Opens an outside link",
+        "expectation": "We could not tell where this link goes. Open it carefully and confirm it is the real employer.",
+        "prep": {
+          "0": "Confirm the site is the real employer before entering anything",
+          "1": "Do not enter payment details. Real jobs never ask for that"
+        }
+      }
+    }
+  },
+  "creative": {
+    "openItems": {
+      "facilityYes": "Yes, take it out",
+      "facilityNo": "No, that's something else",
+      "yes": "Yes",
+      "no": "No",
+      "nothingOpen": "Nothing open. Every line traces to your record.",
+      "ariaLabel": "Left to answer",
+      "draftHeading": "{count, plural, =1 {Draft: 1 to answer before it's finished} other {Draft: # to answer before it's finished}}",
+      "lookAt": "A few things to look at"
+    },
+    "facility": {
+      "heading": "On this lane",
+      "footer": "One choice per entry. Every page on this lane follows it."
+    },
+    "startLane": {
+      "first": "Start your creative lane",
+      "another": "Another creative lane",
+      "blurb": "Art, music, writing, film, tattoo, design, craft. Whatever you make.",
+      "whatLabel": "What do you make?",
+      "whatPlaceholder": "Murals and prints",
+      "nameLabel": "Lane name",
+      "optional": "(optional)",
+      "namePlaceholder": "Painting",
+      "dreamOrNow": "Is this your dream, or the work you do now?",
+      "path": {
+        "dream": {
+          "label": "My dream",
+          "body": "Where I'm headed."
+        },
+        "realistic": {
+          "label": "What I do now",
+          "body": "Work I can get today."
+        },
+        "none": {
+          "label": "Not sure yet",
+          "body": "Skip this for now."
+        }
+      },
+      "startThis": "Start this lane"
+    },
+    "page": {
+      "laying": "Laying out your page..."
+    },
+    "plainText": {
+      "artistResume": "Artist resume",
+      "bioShort": "Short bio",
+      "bioMedium": "Medium bio",
+      "bioLong": "Long bio",
+      "statement": "Statement",
+      "workSamples": "Work samples",
+      "boxLimit": "Box limit",
+      "limitAria": "Character limit for {label}",
+      "showDraft": "Show the draft text",
+      "draftMark": "DRAFT",
+      "count": "{chars} characters with spaces, {words} words",
+      "over": "{over} over the limit.",
+      "empty": "Nothing saved yet."
+    },
+    "bio": {
+      "addName": "Add your name on the Artist resume tab first. Your bio uses it.",
+      "refer": "How should your bio refer to you?",
+      "lengthAria": "Bio length",
+      "length": {
+        "short": "Short",
+        "medium": "Medium",
+        "long": "Long"
+      },
+      "counts": "{words} of {max} words",
+      "countsChars": ", {chars} of {max} characters",
+      "countsCharsOnly": ", {chars} characters",
+      "built": "{count} sentences built from your record. Keep or cut each one.",
+      "notEnough": "Not enough in your record to build from yet. Add a few entries first.",
+      "didntWork": "That didn't work. Try again in a moment.",
+      "building": "Building...",
+      "buildDraft": "Build a draft from my record",
+      "sentenceAria": "Your sentence",
+      "useMine": "Use my words",
+      "originPerson": "Your words.",
+      "originKept": "Built from your record. You kept it.",
+      "originNot": "Built from your record. Not in your bio yet.",
+      "keep": "Keep",
+      "cut": "Cut",
+      "sayMyWay": "Say it my way",
+      "addOwn": "Add a sentence in your own words",
+      "add": "Add it",
+      "saved": "Bio saved.",
+      "save": "Save bio"
+    },
+    "artist": {
+      "top": {
+        "displayName": {
+          "label": "Your name, as you want it printed",
+          "ph": "Ray Example"
+        },
+        "discipline": {
+          "label": "What you make",
+          "ph": "Painter and printmaker"
+        },
+        "basedIn": {
+          "label": "Where you're based",
+          "ph": "Toledo, OH"
+        },
+        "email": {
+          "label": "Email",
+          "ph": "you@example.com"
+        },
+        "phone": {
+          "label": "Phone (optional)"
+        },
+        "website": {
+          "label": "Website (optional)"
+        }
+      },
+      "saved": "Saved.",
+      "topTitle": "Top of the page",
+      "save": "Save",
+      "rightNow": "Right now: up to {cap} pages.",
+      "donePicking": "Done picking",
+      "pick": "Pick what goes on (for a call that wants your strongest work)",
+      "useEverything": "Use everything"
+    },
+    "laneView": {
+      "ariaLane": "{name} creative lane",
+      "pathDream": "Dream",
+      "pathRealistic": "Realistic",
+      "toolsAria": "Creative lane tools"
+    },
+    "cvView": {
+      "ariaLane": "{name} CV lane",
+      "troyLine": "Every line comes from your record, dated, newest first. Nothing gets added.",
+      "toolsAria": "CV tools",
+      "kindLegend": "Kind of CV",
+      "saved": "Saved.",
+      "topTitle": "Top of the page",
+      "topNote": "No photo, birth date, age, family status or nationality. A CV here never asks for them.",
+      "top": {
+        "displayName": {
+          "label": "Your name, as you want it printed",
+          "ph": "Ray Example"
+        },
+        "discipline": {
+          "label": "Your field (optional)",
+          "ph": "Adult education"
+        },
+        "basedIn": {
+          "label": "Where you're based",
+          "ph": "Toledo, OH"
+        },
+        "email": {
+          "label": "Email",
+          "ph": "you@example.com"
+        },
+        "phone": {
+          "label": "Phone (optional)"
+        },
+        "website": {
+          "label": "Website (optional)"
+        }
+      },
+      "interests": "Interests, in your words (optional)",
+      "languages": "Languages and skills, in your words (optional)",
+      "save": "Save",
+      "leadReference": "Your first reference",
+      "leadNote": "You pick who leads. A teacher, supervisor or colleague who knows your work is the strongest start.",
+      "lengthCap": "Up to {cap} pages, like a resume. Never padded.",
+      "lengthFree": "As long as your real record. Never padded.",
+      "rightNow": "Right now: {count, plural, =1 {1 page} other {# pages}}."
+    },
+    "practice": {
+      "kind": {
+        "solo": "Solo show",
+        "two_person": "Two-person show",
+        "group": "Group show",
+        "performance": "Performance",
+        "screening": "Screening",
+        "reading": "Reading",
+        "published": "Published",
+        "in_press": "In press",
+        "accepted": "Accepted",
+        "submitted": "Submitted",
+        "award": "Award",
+        "grant": "Grant",
+        "fellowship": "Fellowship",
+        "conferred": "Degree conferred",
+        "completed": "Completed",
+        "in_progress": "In progress",
+        "talk": "Talk",
+        "poster": "Poster",
+        "panel": "Panel",
+        "workshop": "Workshop",
+        "license": "License",
+        "certification": "Certification",
+        "certificate": "Certificate",
+        "card": "Card",
+        "training": "Training",
+        "active": "Active",
+        "inactive": "Inactive",
+        "expired": "Expired",
+        "eligible": "Eligible to test",
+        "toward_degree": "Classes toward a degree",
+        "coursework": "Classes in a subject",
+        "other_study": "A certificate or training"
+      },
+      "medium": {
+        "theater": "Theater",
+        "film": "Film",
+        "tv": "TV",
+        "voice": "Voice",
+        "music": "Music",
+        "other": "Other"
+      },
+      "billing": {
+        "lead": "Lead",
+        "supporting": "Supporting",
+        "series_regular": "Series regular",
+        "recurring": "Recurring",
+        "guest_star": "Guest star",
+        "co_star": "Co-star",
+        "featured": "Featured",
+        "ensemble": "Ensemble",
+        "understudy": "Understudy",
+        "swing": "Swing",
+        "background": "Background"
+      },
+      "union": {
+        "member": "Member",
+        "eligible": "Eligible to join",
+        "candidate": "Membership candidate"
+      },
+      "holder": {
+        "public": "public",
+        "private": "private"
+      },
+      "section": {
+        "exhibition": {
+          "label": "Exhibition",
+          "title": "Show title",
+          "venue": "Gallery or venue",
+          "example": "Night Shift"
+        },
+        "performance": {
+          "label": "Performance, screening or reading",
+          "title": "Name of the show, film or reading",
+          "venue": "Venue",
+          "example": "Open Mic Series"
+        },
+        "residency": {
+          "label": "Residency",
+          "title": "Residency name",
+          "venue": "Host organization",
+          "example": "Summer Print Residency"
+        },
+        "commission": {
+          "label": "Commission",
+          "title": "Name of the work",
+          "venue": "Who commissioned it",
+          "example": "Corner Store Mural"
+        },
+        "publication": {
+          "label": "Publication (your work)",
+          "title": "Title of your piece",
+          "venue": "Where it ran (magazine, book, site)",
+          "example": "Two Poems"
+        },
+        "press": {
+          "label": "Press about you",
+          "title": "Headline",
+          "venue": "Outlet",
+          "example": "Local Artist Opens Studio"
+        },
+        "collection": {
+          "label": "Collection",
+          "title": "Name of the work",
+          "venue": "Who holds it",
+          "example": "Untitled (Blue)"
+        },
+        "teaching": {
+          "label": "Teaching",
+          "title": "Your title, exactly as it was",
+          "venue": "Organization",
+          "example": "Teaching Artist"
+        },
+        "arts_program": {
+          "label": "Arts program",
+          "title": "Program name",
+          "venue": "Who ran it (sponsor)",
+          "example": "Community Print Workshop"
+        },
+        "award": {
+          "label": "Award, grant or fellowship",
+          "title": "Name of the award",
+          "venue": "Who gave it",
+          "example": "Emerging Artist Grant"
+        },
+        "education": {
+          "label": "Education or training",
+          "title": "Degree or study, exactly as on the paper",
+          "venue": "School (the one that gave it)",
+          "example": "Certificate in Printmaking"
+        },
+        "work": {
+          "label": "A work (for your sample list)",
+          "title": "Title of the work",
+          "example": "Shift Change"
+        },
+        "appointment": {
+          "label": "Job or appointment (for a CV)",
+          "title": "Your title, exactly as it was",
+          "venue": "Where (school, clinic, employer)",
+          "example": "Research Assistant"
+        },
+        "research": {
+          "label": "Research experience",
+          "title": "Project or role",
+          "venue": "Lab, team or organization",
+          "example": "Reentry Housing Study"
+        },
+        "presentation": {
+          "label": "Presentation or talk",
+          "title": "Title of the talk or poster",
+          "venue": "Conference or event",
+          "example": "Learning Behind the Wall"
+        },
+        "clinical": {
+          "label": "Clinical rotation or placement",
+          "title": "Your role, exactly as it was",
+          "venue": "Site",
+          "example": "Nursing Student Rotation"
+        },
+        "license": {
+          "label": "License or certification",
+          "title": "Name, exactly as on the card or license",
+          "venue": "Who issued it",
+          "example": "Certified Peer Recovery Specialist"
+        },
+        "service": {
+          "label": "Service",
+          "title": "Your role",
+          "venue": "Organization or committee",
+          "example": "Student Advisory Board Member"
+        },
+        "membership": {
+          "label": "Membership",
+          "title": "Organization",
+          "example": "State Arts Educators Association"
+        },
+        "reference": {
+          "label": "Reference",
+          "title": "Their name",
+          "venue": "Where they work",
+          "example": "J. Sample"
+        },
+        "credit": {
+          "label": "Acting or performing credit",
+          "title": "Production (the play, film, show or recording)",
+          "venue": "Company, theater or studio",
+          "example": "Our Town"
+        },
+        "training": {
+          "label": "Training (acting, voice, dance, music)",
+          "title": "What you studied",
+          "venue": "Where (school, studio or program)",
+          "example": "Scene Study"
+        },
+        "union": {
+          "label": "Union",
+          "title": "Union name, exactly",
+          "example": "SAG-AFTRA"
+        }
+      },
+      "sectionPick": "What are you adding?",
+      "exKind": "Was it a solo show, two-person, or group?",
+      "pfKind": "Was it a performance, a screening, or a reading?",
+      "pubStatus": "Where does it stand?",
+      "awKind": "Award, grant, or fellowship?",
+      "crMedium": "Theater, film, TV, voice, music, or something else?",
+      "unStatus": "Where do you stand, exactly?",
+      "prKind": "Was it a talk, a poster, a panel, or a workshop?",
+      "degreeTitle": "Which degree were the classes toward? (exactly as the school names it)",
+      "courseTitle": "What subject were the classes in?",
+      "city": "City",
+      "state": "State",
+      "yearReference": "Since what year do they know you?",
+      "yearUnion": "What year did you join, or become eligible?",
+      "year": "What year?",
+      "until": "Until (optional)",
+      "juried": "It was juried",
+      "invitational": "It was invitational",
+      "curator": "Curator (only if there was one)",
+      "roleOptional": "Your role (optional)",
+      "toured": "It toured",
+      "paid": "They paid me for it",
+      "consentCommission": "OK to name who commissioned it",
+      "submittedWhen": "When did you submit it?",
+      "submittedWhenPh": "March 2026",
+      "pressAuthor": "Who wrote it (optional)",
+      "pressDate": "Date it ran",
+      "pressDatePh": "May 4, 2024",
+      "pressQuote": "A quote from it (optional, word for word)",
+      "holderLegend": "Who holds it?",
+      "holderConsent": "They said OK to name them",
+      "levelLabel": "Ages or level (optional)",
+      "levelPh": "Adults, ages 12 to 16",
+      "instructor": "I was the instructor of record",
+      "programRole": "What you did there (optional)",
+      "programRolePh": "Printmaker, peer facilitator",
+      "degreeCheck": "This is a degree the school gave me (not a certificate or classes)",
+      "notDegree": "Not a degree? Then what was it? Classes print as coursework, never as a degree.",
+      "edStatus": "Where does it stand?",
+      "expected": "What year do you expect to finish?",
+      "authors": "Authors, the way the piece lists them (optional)",
+      "authorsPh": "R. Example and J. Sample",
+      "invited": "I was invited to give it",
+      "researchRolePh": "Research assistant",
+      "hours": "Hours (optional, your own count)",
+      "credKind": "What kind is it? (You pick; nothing is guessed.)",
+      "credStatus": "Where does it stand now?",
+      "noLicenseNumber": "Never put a license number here.",
+      "creditRole": "Your role, exactly as credited (optional)",
+      "creditRolePh": "Emily Webb",
+      "billingLegend": "Billing, as credited (only if you know it)",
+      "director": "Director (only if you want them named)",
+      "creditYearNote": "The year stays in your record. Your performer page hides credit years unless you turn them on.",
+      "teacher": "Who taught it (optional)",
+      "duration": "How long (optional)",
+      "durationPh": "2 years",
+      "refRole": "How they know you (their role)",
+      "refRolePh": "Course instructor",
+      "refContact": "How to reach them (as they agreed)",
+      "refConsent": "They said OK to be listed",
+      "madeOf": "What is it made of?",
+      "madeOfPh": "Acrylic on panel",
+      "size": "Size",
+      "sizePh": "24 x 36 in",
+      "length": "Or length",
+      "lengthPh": "4 min",
+      "oneLine": "One line about it, in your words (optional)",
+      "fileName": "File name (optional)",
+      "backUp": "Can you back it up?",
+      "namesFacility": "The title or the place names a prison, jail or other facility",
+      "namesFacilityNote": "You'll choose how it shows on each lane: the real title, just the venue, or not at all.",
+      "otherNames": "Other names people use for it (optional)",
+      "otherNamesHint": "Short names or nicknames, split with commas. Wherever you keep the place off, these stay off too.",
+      "save": "Save",
+      "add": "Add it",
+      "intro": "Shows, gigs, programs, awards, classes you taught, and the work itself. Your words, your years.",
+      "addToRecord": "+ Add to your record",
+      "namesFacilityTag": " Names a facility.",
+      "edit": "Edit",
+      "remove": "Remove",
+      "removeAria": "Remove {title}",
+      "confirmRemove": "Remove \"{title}\" from your record?",
+      "removed": "Removed.",
+      "didntWork": "That didn't work. Try again."
+    },
+    "shared": {
+      "tab": {
+        "record": "Your record",
+        "resume": "Artist resume",
+        "bio": "Bio",
+        "statement": "Statement",
+        "samples": "Work samples",
+        "text": "Plain text",
+        "plan": "Two paths",
+        "cv": "CV",
+        "page": "Performer page"
+      },
+      "intro": {
+        "creative": "Your shows, gigs, programs and work, in one record. Your artist resume, bio and sample list are built from it. Your statement stays yours.",
+        "cv": "Your schooling, teaching, research, talks, clinical work and licenses, in one record. Your CV is built from it, dated line by line.",
+        "performer": "Your shows, films, readings, training and skills, in one record. Your one-page performer resume is built from it, ready for the back of your headshot."
+      },
+      "troyLine": "Put in what you've done, the way you'd say it. I build the pages from that and nothing else.",
+      "proof": {
+        "checked": {
+          "label": "Checked",
+          "body": "I have something that shows it: a flyer, a program, a letter, a link."
+        },
+        "remembered": {
+          "label": "Remembered",
+          "body": "I remember it well. No paper on hand."
+        },
+        "need_to_find": {
+          "label": "Still finding proof",
+          "body": "It happened. I'm tracking down the paper."
+        }
+      },
+      "titleMode": {
+        "true_title": {
+          "label": "Show the real title",
+          "body": "Exactly as it was. Some people want it seen."
+        },
+        "venue_only": {
+          "label": "Just the venue",
+          "body": "Only the kind of entry and the venue, like \"Teaching, the venue\". The title stays off every page on this lane."
+        },
+        "leave_out": {
+          "label": "Leave it off",
+          "body": "Not on any page in this lane. It stays in your record."
+        }
+      },
+      "titleWhy": "This one names a facility. You pick how it shows on this lane. We never rename it or soften it.",
+      "pronoun": {
+        "name": "Use my name",
+        "they": "They / them",
+        "she": "She / her",
+        "he": "He / him"
+      },
+      "bioHow": "t.ROY builds sentences from your record, one entry at a time. Nothing gets in until you keep it. Rewrite any of them, or write your own.",
+      "statementHow": "This one is yours. t.ROY asks questions and points out spelling. It never writes a word of it, and nothing you write here goes to an AI.",
+      "spellingHow": "Tap Fix to change that one word. Nothing else moves.",
+      "spellingCapped": "That's a lot of words to check at once. Spelling was checked on the first part only. Fix those, then check again.",
+      "samplesHow": "Put your strongest work first. Every line is what you typed in your record.",
+      "plainTextHow": "For application boxes. The count includes spaces, the way most forms count.",
+      "plainTextDraft": "Still a draft. Something on this one needs your answer first. You can look at the text, but answer the open items before you paste it anywhere.",
+      "pageCap": {
+        "label": "This call allows up to 4 pages",
+        "body": "Leave it off unless the call says so. Most want 1 to 2 pages."
+      },
+      "pairOffer": "Want a realistic lane next to your dream? A job you can get now, while you build toward this. Same facts underneath.",
+      "planHow": "Just for you. This card never goes on any page.",
+      "didntSave": "That didn't save. Try again.",
+      "loadFailed": "Couldn't load your creative lane. Refresh the page.",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "cvType": {
+        "academic": {
+          "label": "Academic or research",
+          "body": "For colleges, research groups, fellowships. As long as your real record."
+        },
+        "teaching": {
+          "label": "Teaching",
+          "body": "Teaching first. As long as your real record."
+        },
+        "clinical": {
+          "label": "Clinical",
+          "body": "Licenses and clinical placements up front. As long as your real record."
+        },
+        "international": {
+          "label": "International",
+          "body": "For jobs outside the US. Two pages at most, like a resume."
+        }
+      },
+      "needsProof": "Some entries still need proof. You can download now; keep the proof handy.",
+      "draftPrefix": "Draft ",
+      "word": "Word",
+      "plainTextLink": "Plain text"
+    },
+    "statement": {
+      "fixed": "Fixed \"{word}\".",
+      "saved": "Saved. It's yours.",
+      "label": "Your statement",
+      "placeholder": "Start anywhere. What you make, how you make it, why.",
+      "counts": "{chars} characters with spaces, {words} words",
+      "over": "{over} over the limit.",
+      "boxLimit": "Box limit",
+      "limitAria": "Character limit for the application box",
+      "saveWords": "Save my words",
+      "noSpelling": "No spelling to fix.",
+      "didntWork": "That didn't work. Try again in a moment.",
+      "checkSpelling": "Check spelling and read it back",
+      "plainText": "Plain text",
+      "asideAria": "t.ROY's questions",
+      "questionsTitle": "Questions to write from",
+      "coach": {
+        "0": "What do you make, and what is it made of?",
+        "1": "Where do your ideas come from?",
+        "2": "What do you keep coming back to in your work?",
+        "3": "How do you make it, step by step?",
+        "4": "Who or what has shaped how you work?",
+        "5": "What from your own life shows up in the work, if anything?",
+        "6": "What do you want someone to notice first?"
+      },
+      "spelling": "Spelling",
+      "saveFirst": "Save your words first, then fix spelling.",
+      "to": "to",
+      "fix": "Fix",
+      "ignore": "Ignore",
+      "versions": "Saved versions ({count})",
+      "versionFixed": "fixed \"{word}\"",
+      "versionWords": "{count} words"
+    },
+    "samples": {
+      "empty": "No works on this list yet. On Your record, add one with \"A work (for your sample list)\".",
+      "file": "File: {name}",
+      "moveUp": "Move {title} up",
+      "moveDown": "Move {title} down",
+      "up": "Up",
+      "down": "Down",
+      "orderSaved": "Order saved.",
+      "saveOrder": "Save this order",
+      "plainText": "Plain text",
+      "csv": "Spreadsheet (CSV)"
+    },
+    "twoPaths": {
+      "cantPair": "Those two lanes can't be paired.",
+      "startRealistic": "Start a realistic lane",
+      "startDream": "Start a dream lane",
+      "askRealistic": "What job could you go after now?",
+      "askDream": "What's the dream?",
+      "fillLater": "(you can fill this in later)",
+      "nameLabel": "Lane name",
+      "optional": "(optional)",
+      "startPair": "Start it and pair them",
+      "pairExisting": "Or pair with a lane you already have",
+      "kindCreative": "creative",
+      "kindPerformer": "performer",
+      "kindCv": "CV",
+      "pairAsRealistic": "Pair as my realistic lane",
+      "pairAsDream": "Pair as my dream lane",
+      "realistic": "Realistic",
+      "dream": "Dream",
+      "planSaved": "Plan saved.",
+      "goal": "The goal, in your words",
+      "nextSteps": "Next steps on the realistic lane",
+      "remove": "Remove",
+      "stepPlaceholder": "Apply at two sign shops this week",
+      "stepAria": "A next step",
+      "add": "Add",
+      "hurdlesAria": "Hurdles",
+      "hurdles": "Hurdles to know about",
+      "helpAria": "Where to get help",
+      "helpTitle": "Where to get help",
+      "helpNotes": "People or programs helping you (optional)",
+      "savePlan": "Save plan",
+      "unpaired": "Unpaired. Your plan stays with the dream lane.",
+      "didntWork": "That didn't work.",
+      "unpair": "Unpair"
+    },
+    "performerLane": {
+      "badge": "Performer",
+      "pathDream": "Dream",
+      "pathNow": "Now",
+      "ariaLane": "{name} performer lane",
+      "troyLine": "One page, built from your record. Roles and billing exactly as credited. Nothing gets added.",
+      "toolsAria": "Performer tools",
+      "top": {
+        "displayName": {
+          "label": "Your name, as you work under it",
+          "ph": "Ray Example"
+        },
+        "discipline": {
+          "label": "What you do",
+          "ph": "Actor / Singer"
+        },
+        "agent": {
+          "label": "Agent or manager (optional, as they want it listed)"
+        },
+        "basedIn": {
+          "label": "Where you're based (optional)",
+          "ph": "Chicago, IL"
+        },
+        "email": {
+          "label": "Email",
+          "ph": "you@example.com"
+        },
+        "phone": {
+          "label": "Phone (optional)"
+        },
+        "website": {
+          "label": "Website or reel (optional)"
+        }
+      },
+      "look": {
+        "height": {
+          "label": "Height",
+          "ph": "5'10\""
+        },
+        "hair": {
+          "label": "Hair",
+          "ph": "Brown"
+        },
+        "eyes": {
+          "label": "Eyes",
+          "ph": "Green"
+        },
+        "voice": {
+          "label": "Voice or vocal range (optional)",
+          "ph": "Baritone"
+        },
+        "ageRange": {
+          "label": "Age range you play (like 25-35). Never your age.",
+          "ph": "25-35"
+        }
+      },
+      "saved": "Saved.",
+      "topTitle": "Top of the page",
+      "lookTitle": "How you look and sound",
+      "lookNote": "Only what you want casting to see. No weight, no birth date, no age: a range you play, if you want one.",
+      "save": "Save",
+      "skillsTitle": "Special skills",
+      "skillsNote": "Casting can ask you to show any of these on the spot. Only the ones you tick go on the page.",
+      "skillOk": "I can do this on request today",
+      "removeAria": "Remove {text}",
+      "remove": "Remove",
+      "skillPlaceholder": "Stage combat",
+      "addSkill": "Add skill",
+      "showYears": "Show the year on each credit. Your training always shows its years.",
+      "selectionTitle": "What goes on this page",
+      "selectionNote": "One page, always. If it runs over, untick what you can leave off. Everything stays in your record.",
+      "pageSizeAria": "Page size",
+      "preview": "Preview:",
+      "size8x10": "8x10 (headshot back)",
+      "sizeLetter": "US Letter",
+      "dl": {
+        "pdf810": "PDF 8x10",
+        "pdfLetter": "PDF Letter",
+        "docx810": "Word 8x10",
+        "docxLetter": "Word Letter",
+        "html": "Web page",
+        "txt": "Plain text"
+      }
+    },
+    "cvPage": {
+      "startFirst": "Start your CV",
+      "startAnother": "Another CV",
+      "whatKind": "What kind of CV?",
+      "aimLabel": "What is it for?",
+      "optional": "(optional)",
+      "aimPlaceholder": "Peer educator programs",
+      "nameLabel": "Lane name",
+      "namePlaceholder": "Teaching CV",
+      "startThis": "Start this CV",
+      "title": "CV",
+      "laneLabel": "CV lane",
+      "newCv": "New CV",
+      "loading": "Loading..."
+    },
+    "performerPage": {
+      "startFirst": "Start your performer page",
+      "startAnother": "Another performer lane",
+      "blurb": "Theater, film, TV, voice, music. One page, the way casting reads it.",
+      "whatLabel": "What do you perform?",
+      "whatPlaceholder": "Stage and screen acting",
+      "nameLabel": "Lane name",
+      "optional": "(optional)",
+      "namePlaceholder": "Acting",
+      "dreamOrNow": "Is this your dream, or the work you do now?",
+      "path": {
+        "dream": {
+          "label": "My dream",
+          "body": "Where I'm headed. You can pair it with work you can get now."
+        },
+        "realistic": {
+          "label": "What I do now",
+          "body": "Work I can get today."
+        },
+        "none": {
+          "label": "Not sure yet",
+          "body": "Skip this for now."
+        }
+      },
+      "startThis": "Start this lane",
+      "title": "Performer",
+      "laneLabel": "Performer lane",
+      "newLane": "New performer lane",
+      "loading": "Loading..."
+    }
+  },
+  "documents": {
+    "cat": {
+      "id": {
+        "label": "Government or personal ID",
+        "help": "A photo of your state ID or birth certificate that you keep for your own records. Not your Social Security card."
+      },
+      "certificate": {
+        "label": "Certificates and credentials",
+        "help": "Trade certificates, OSHA cards, CDL, forklift, food handler, diplomas, program completion."
+      },
+      "reference_letter": {
+        "label": "Reference letters",
+        "help": "Letters from employers, case managers, mentors, or program staff who will speak for you."
+      },
+      "record": {
+        "label": "Records and legal documents",
+        "help": "Court paperwork, release documents, parole or probation letters, expungement records."
+      },
+      "note": {
+        "label": "Notes to yourself",
+        "help": "A written note you want to keep, like a phone number, a plan, or a reminder."
+      },
+      "other": {
+        "label": "Anything else",
+        "help": "Any document that matters to you and does not fit the categories above."
+      }
+    },
+    "jobAt": "{job} at {company}",
+    "chooseFile": "Choose a file to add.",
+    "tooBig": "That file is over the 25 MB limit. Try a smaller photo or PDF.",
+    "pickCategory": "Pick a category so you can find this later.",
+    "needName": "Give this document a short name.",
+    "added": "Added \"{label}\" to your vault.",
+    "addFailed": "Could not add that document. Please try again.",
+    "saved": "Saved your changes.",
+    "saveFailed": "Could not save. Please try again.",
+    "deleted": "Document deleted.",
+    "deleteFailed": "Could not delete that document.",
+    "deleteFailedRetry": "Could not delete that document. Please try again.",
+    "loading": "Loading your vault...",
+    "title": "Private documents",
+    "intro": "A safe home for the documents that prove who you are and what you have earned: your ID, certificates, reference letters, records, and notes. It is encrypted and stays in your account until you delete it. Only you can open it here. Programs and employers can't, even if you share other things with them.",
+    "lanesNote": "One Vault for every lane. Your proof is the same whatever job you aim at.",
+    "notPassword": "This is not a password keeper.",
+    "notPasswordBody": "Do not put passwords, your Social Security card, or bank logins here. Keep those somewhere built for secrets. This vault is for documents.",
+    "addTitle": "Add a document",
+    "fileLabel": "Choose a file (PDF, photo, Word document, or text, up to 25 MB)",
+    "kindLabel": "What kind of document is this?",
+    "pickCat": "Pick a category",
+    "nameLabel": "Short name (so you can find it later)",
+    "namePlaceholder": "e.g. State ID, OSHA-10 card, Letter from Mr. Reyes",
+    "noteLabel": "Note to yourself (optional)",
+    "jobLabel": "Tie this to a saved job (optional)",
+    "noJob": "Not tied to a job",
+    "adding": "Adding...",
+    "addToVault": "Add to vault",
+    "empty": "Your vault is empty. Add your ID, a certificate, or a reference letter above, and it will be here whenever you need it for a job, a landlord, or a program.",
+    "show": "Show",
+    "hide": "Hide",
+    "notePlaceholder": "Note to yourself (optional)",
+    "saving": "Saving...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "added2": "{size} · Added {date}",
+    "tiedTo": "Tied to: {job}",
+    "download": "Download",
+    "edit": "Edit",
+    "delete": "Delete",
+    "footer": "Everything here is encrypted and private to your account. To download every file at once, or to remove all of your data, go to <link>Settings, Data</link>."
+  },
+  "evidence": {
+    "titlePartner": "Evidence Deck",
+    "titleClient": "The Evidence",
+    "subtitlePartner": "The research, data, and architecture behind Steel Man Resumes.",
+    "subtitleClient": "The research and data that powers your results.",
+    "observer": "You're seeing a summary. The full evidence deck with citations, competitive analysis, and architecture decisions is available to partner organizations.",
+    "tryForge": "try The Forge",
+    "partnerCode": "enter partner code",
+    "numbers": "The Numbers",
+    "n1": "Americans with criminal records",
+    "n2": "Employed in year 1 post-release",
+    "n3": "Median earnings, first year",
+    "citations": "Research Citations",
+    "moreResearch": "More research",
+    "moreCitations": "{count} more citations",
+    "gapPartner": "The Gap: What No Other Tool Does",
+    "gapClient": "Why This Tool Is Different",
+    "finding": {
+      "0": "fMRI study showing that putting feelings into words reduces amygdala reactivity by up to 50%.",
+      "1": "Affect labeling outperforms cognitive reappraisal and distraction in reducing emotional reactivity.",
+      "2": "Self-efficacy is built through mastery experiences (real accomplishments), not encouragement or verbal persuasion.",
+      "3": "The Transtheoretical Model describes five stages of change. Intervention effectiveness depends on matching the user’s current stage.",
+      "4": "Redemption sequences (bad→good narrative arcs) predict higher well-being and generativity.",
+      "5": "Desistance from crime correlates with constructing a ‘generative identity’: seeing oneself as someone who can contribute positively.",
+      "6": "Autonomy, competence, and relatedness are core psychological needs. Autonomy-supportive environments produce better outcomes.",
+      "7": "Scaffolding: provide structure that fades as competence grows. More support early, less later.",
+      "8": "Process praise (‘You worked hard on that’) builds growth mindset. Person praise (‘You’re smart’) builds fixed mindset."
+    },
+    "gap": {
+      "0": "No integrated AI + legal navigation for justice-impacted populations",
+      "1": "No research-grounded behavioral framework for career AI",
+      "2": "No decision observability in career tools",
+      "3": "No scaffolded career exploration for low-digital-literacy users"
+    }
+  },
+  "lanes": {
+    "earlier": {
+      "didntWork": "That didn't work. Try again.",
+      "back": "Version {number} is back. It's now the newest version.",
+      "summary": "Earlier versions",
+      "loading": "Loading...",
+      "none": "No earlier versions yet.",
+      "versionFinished": "Version {number}, finished",
+      "versionDraft": "Version {number}, draft",
+      "bringing": "Bringing it back...",
+      "bringBack": "Bring this one back"
+    },
+    "switcher": {
+      "failed": "That didn't save. Try again.",
+      "ariaLanes": "Career lanes",
+      "reload": "Reload",
+      "created": "The lane was created.",
+      "tryAgain": "Try opening it again",
+      "opening": "Opening your lane...",
+      "workingIn": "Working in",
+      "allLanes": "All lanes",
+      "main": "Main",
+      "newLane": "New lane",
+      "settings": "Lane settings",
+      "aiming": "Aiming at {role}.",
+      "formatSummary": "{format}. {length}.",
+      "hybridSaved": "Hybrid saved for when it's ready",
+      "laneSummary": "{kind} lane.",
+      "documents": "Documents",
+      "archived": "Archived lanes ({count})",
+      "bringBackAria": "Bring back {name}",
+      "bringBack": "Bring back"
+    },
+    "goal": {
+      "employment": {
+        "label": "Employment",
+        "name": "Employment",
+        "example": "Production supervisor",
+        "description": "Aim a resume and job versions at the work you want."
+      },
+      "self-employment": {
+        "label": "Self-employment or a business",
+        "name": "Self-employment",
+        "example": "Housecleaning business",
+        "description": "Gather your work experience and evidence for working for yourself. Start with what you know, what you need to find out, and local support. This lane uses the existing resume tools."
+      },
+      "freelance": {
+        "label": "Freelance, contract or consulting",
+        "name": "Freelance & consulting",
+        "example": "Freelance bookkeeping",
+        "description": "Show the projects, services and work you can back up. This lane uses the existing resume and letter tools."
+      },
+      "apprenticeship": {
+        "label": "Trade or apprenticeship",
+        "name": "Trade & apprenticeship",
+        "example": "Electrical apprenticeship",
+        "description": "Bring together real work, training and credentials for a trade or apprenticeship application."
+      },
+      "creative": {
+        "label": "Creative work",
+        "name": "Creative work",
+        "example": "Visual art",
+        "description": "Keep a practice record for an artist resume, bio and work samples. Your artist statement stays yours."
+      },
+      "cv": {
+        "label": "Academic or professional CV",
+        "name": "Professional CV",
+        "example": "Teaching or clinical work",
+        "description": "Build a dated CV from your education, teaching, research or clinical work."
+      },
+      "performer": {
+        "label": "Performer",
+        "name": "Performer",
+        "example": "Acting or music",
+        "description": "Keep credits, training and skills for a performer page."
+      }
+    },
+    "newForm": {
+      "title": "What are you working toward?",
+      "intro": "Your facts carry over: same jobs, same dates. Only the aim changes. A lane holds one goal and its documents. Format stays inside the lane.",
+      "goal": "Your goal",
+      "cvType": "CV type",
+      "aiming": "What work are you aiming at?",
+      "optional": "(optional)",
+      "laneName": "Lane name",
+      "leaveBlank": "Leave blank to use “{name}”.",
+      "caregiving": "Caregiving, returning to work and gaps in work can be part of a conversation with t.ROY. Use the goal you choose for your lane name.",
+      "saving": "Saving...",
+      "create": "Create lane",
+      "cancel": "Cancel"
+    },
+    "editForm": {
+      "laneName": "Lane name",
+      "aiming": "What work are you aiming at?",
+      "formatTitle": "Resume format",
+      "formatChrono": {
+        "label": "Dates first",
+        "body": "Your jobs in order, newest first, with the years on each one. Employers and background checks look for dates, so this fits almost everyone."
+      },
+      "hybridComing": "Hybrid layout is coming: a short skills list on top, then every job with its years. When it's ready, you'll pick it here.",
+      "noFunctional": "Why not a skills-only page with no dates? A background check shows your dates anyway, and a page that hides them reads like you're hiding something. We don't build that one.",
+      "length": "Length",
+      "docsIn": "This lane’s document choices are in <link>its own workspace</link>.",
+      "saving": "Saving...",
+      "save": "Save",
+      "cancel": "Cancel",
+      "archiveAsk": "Archive this lane? Its resumes stay in My resumes. You can bring it back.",
+      "archiveIt": "Archive it",
+      "keepIt": "Keep it",
+      "archive": "Archive this lane"
+    },
+    "length": {
+      "auto": {
+        "label": "Let my history decide",
+        "body": "One page, or two when your real history fills them. Never filler, never more than two."
+      },
+      "one_page": {
+        "label": "One page",
+        "body": "Your strongest lines lead. Nothing gets padded and nothing gets made up to fill space."
+      },
+      "two_pages": {
+        "label": "Up to two pages",
+        "body": "Two pages only when your history fills them. If it fits on one, it stays on one."
+      }
+    },
+    "cvType": {
+      "academic": "Academic or research",
+      "teaching": "Teaching",
+      "clinical": "Clinical",
+      "international": "International"
+    }
+  },
+  "library": {
+    "group": {
+      "resume": "Resumes",
+      "cover_letter": "Cover Letters",
+      "follow_up": "Follow-up Messages",
+      "disclosure_plan": "Disclosure Plans",
+      "hurdle_plan": "Hurdle Plans",
+      "interview_prep": "Interview Practice"
+    },
+    "jobAt": "{job} at {company}",
+    "baseResume": "Base resume",
+    "loadError": "Your saved work could not be loaded. Please try again.",
+    "movedTo": "Moved to {name}.",
+    "main": "Main",
+    "moveFailed": "Could not move that. Try again.",
+    "movedExamples": "Moved to examples.",
+    "backInResumes": "Back in My resumes.",
+    "changeFailed": "Could not change that. Try again.",
+    "currentFailed": "Your current resume choice did not save. Try again.",
+    "deleted": "Item deleted.",
+    "deleteFailed": "Could not delete that item.",
+    "deleteFailedRetry": "Could not delete that item. Please try again.",
+    "current": "Current",
+    "baseline": "Baseline",
+    "example": "Example",
+    "lane": "Lane: {name}",
+    "updated": "Updated {date}",
+    "hide": "Hide",
+    "view": "View",
+    "show": "Show",
+    "tailorToJob": "Tailor to a job",
+    "openBuilder": "Open in builder",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "unpin": "Unpin as current",
+    "setCurrent": "Set as my current resume",
+    "unlock": "Unlock baseline",
+    "lanePlaceholder": "Lane, e.g. Manufacturing",
+    "lock": "Lock",
+    "lockAsBaseline": "Lock as a baseline",
+    "lockTitle": "Lock this as an approved baseline for a career lane",
+    "moveTo": "Move to",
+    "laneFor": "Lane for {title}",
+    "archivedSuffix": "{name} (archived)",
+    "move": "Move",
+    "unlockFirst": "Unlock the baseline first",
+    "notExample": "Not an example",
+    "moveToExamples": "Move to examples",
+    "savePdf": "Save PDF",
+    "downloadDocx": "Download .docx",
+    "docxNote": ".docx opens in Word to edit. PDF keeps the formatting exactly.",
+    "loading": "Loading your library...",
+    "title": "My resumes",
+    "intro": "Start with your first resume, then follow the versions you create for each job. Your currently selected resume is labeled on its card. Change lanes to see work for another goal. Uploaded evidence and certificates stay in <link>Private documents</link>.",
+    "showing": "Showing",
+    "resumesOnly": "Show resumes only",
+    "showRelated": "Show related letters, plans and practice",
+    "tryAgain": "Try again",
+    "emptyAll": "Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it will show up here.",
+    "emptyLane": "Nothing in this lane yet. Tailor a resume while you're working in this lane and it shows up here.",
+    "searchPlaceholder": "Search your library by job or company",
+    "noMatch": "Nothing matches “{query}”.",
+    "clearSearch": "Clear search",
+    "firstMatching": "First matching resume",
+    "startingResume": "Starting resume",
+    "laterResumes": "Later resumes, in the order you made them",
+    "loadMore": "Load more ({count} more)",
+    "hideExamples": "Hide examples",
+    "showExamples": "Show examples ({count})",
+    "examplesNote": "Sample and test resumes, kept out of your way. Tap Not an example to bring one back."
+  },
+  "master": {
+    "loadFailed": "Your Master Draft could not load. Refresh to try again.",
+    "saved": "Saved to your Master Draft. Future tailoring can use details you confirmed. Existing application files stay unchanged.",
+    "couldNotSave": "Could not save.",
+    "kicker": "t.ROY // your working record",
+    "title": "Master Draft",
+    "intro": "Your work history keeps growing. Keep the facts here so every lane starts from what you actually did, rather than a chain of rewritten resumes.",
+    "foundationTitle": "Your foundation",
+    "foundationBody": "Your original resume supplies the foundation. Add tools, responsibilities, projects and examples as you remember them. Confirm a detail before t.ROY uses it in future tailoring. A job-specific resume stays with its application.",
+    "reviewFoundation": "Review your foundation resume",
+    "buildFoundation": "Build your foundation resume",
+    "steelTitle": "Build the Steel Man version with t.ROY",
+    "steelBody1": "We recommend reviewing every line together. Explain it in your own words, add a real example, and ask t.ROY to help make it clearer. That work gives him better material and helps you stand behind what you send.",
+    "steelBody2": "Details that come up in interview practice can go here after you confirm them. Private record details belong in your Disclosure Planner, not this employer-facing work history.",
+    "openDisclosure": "Open your private Disclosure Planner",
+    "addTitle": "Add a work detail",
+    "addLabel": "What did you do, where, and when? Include the example or source you remember.",
+    "confirmBox": "I confirm this describes my actual work and may be used in future drafts.",
+    "saving": "Saving…",
+    "saveConfirmed": "Save confirmed detail",
+    "saveToCheck": "Save as a detail to check",
+    "count": "{count} of 40 details saved.",
+    "countFull": "Remove a detail you no longer need before adding another.",
+    "countRoom": "Keep the examples that add something useful to your foundation resume.",
+    "growingTitle": "Your growing work record",
+    "empty": "Start with one useful detail. You can return whenever something comes back to you.",
+    "confirmedBy": "Confirmed by you",
+    "needsConfirm": "Needs your confirmation",
+    "confirmAccurate": "I confirm this is accurate",
+    "remove": "Remove detail",
+    "findJob": "Find a job to put this to work"
+  },
+  "premium": {
+    "tool": {
+      "resources": "Support search",
+      "interview_coaching": "Voice interview coaching",
+      "one_click_apply": "One-click apply"
+    },
+    "included": "With your account, your resume, support search and text interview practice ({count} a day) are yours to use. Voice interview coaching and one-click apply open through an organization that works with Steel Man Resumes, or SMR can open them for you.",
+    "lockedLine": "{tool} opens through an organization that works with Steel Man Resumes, or SMR can open it for you.",
+    "neverPay": "You never pay for it.",
+    "askOrgHeading": "Ask your organization",
+    "askOrgLine": "If a program, reentry center or case manager works with you, ask them for their SMR code. Then enter it in Settings.",
+    "askSmrHeading": "Ask SMR for access",
+    "askSmrLine": "Tell us a little about your search if you want. It's optional.",
+    "askSent": "Your request is in. When it's approved, this tool opens here.",
+    "askedOn": "You asked on {date}. When it's approved, this tool opens here.",
+    "lockedAria": "{tool} is locked",
+    "notOpen": "{tool} isn't open for you yet",
+    "enterCode": "Enter a code in Settings",
+    "sending": "Sending...",
+    "send": "Send my request",
+    "errorGeneric": "That didn't go through. Try again in a minute.",
+    "errorNetwork": "We couldn't reach the server. Try again in a minute.",
+    "unavailable": "{tool} isn't available right now. The problem is on our side, and your account is fine. Try again later.",
+    "loading": "Loading..."
+  },
+  "resume": {
+    "batch": {
+      "notFound": "The jobs you picked were not found. Pick them again on the job board.",
+      "unreadable": "The jobs you picked could not be read. Pick them again on the job board.",
+      "gone": "This batch is no longer on this device. Your saved resumes are in your Library and under Applications.",
+      "allowanceError": "Your allowance could not be checked. Try again before running.",
+      "answerUnreadable": "The answer for this job could not be read. Retry this one.",
+      "stopped": "The batch stopped before it finished. Saved jobs stay saved. Retry the rest.",
+      "ariaJobs": "Jobs to tailor",
+      "title": "Tailor for {count, plural, =1 {1 job} other {# jobs}}",
+      "intro": "Your base resume and facts are read once for all of them. Each job gets its own posting read and its own tailored resume, so each one is its own AI action.",
+      "jobAt": "{title} at {company}",
+      "phase": {
+        "queued": "Waiting",
+        "reading": "Reading the posting",
+        "tailoring": "Tailoring and checking each line against your facts",
+        "checking": "Making sure it saved",
+        "saved": "Saved",
+        "failed": "Did not finish",
+        "skipped": "Not run"
+      },
+      "openNow": ". Open now",
+      "truthOne": "The truth check could not match this line to what you told us. Make sure each one is true, or take it out, before you send this:",
+      "truthMany": "The truth check could not match these lines to what you told us. Make sure each one is true, or take it out, before you send this:",
+      "needsCheck": "Some lines need your check before this is finished.",
+      "notLinked": "This job is already marked {status} in Applications, so it keeps the resume it has. The new one is in your Library.",
+      "statusHeardBack": "heard back",
+      "statusPast": "past saved",
+      "letterNotSaved": "The cover letter did not save. The resume did. You can write a letter from the resume.",
+      "reviewThis": "Review this one",
+      "retrySave": "Retry the save",
+      "retryJob": "Retry this job",
+      "used": "{count, plural, =1 {1 AI action} other {# AI actions}} used by this batch so far.",
+      "checkAgain": "Check again",
+      "checkingAllowance": "Checking your allowance...",
+      "cost": "{count, plural, =1 {1 job = 1 AI action} other {# jobs = # AI actions}} from your allowance.",
+      "costUnlimited": "{count, plural, =1 {1 job = 1 AI action} other {# jobs = # AI actions}}. Each job gets its own resume. If a daily limit stops one, that job uses nothing and the rest stay saved.",
+      "costNone": "You have no AI actions left today. Ask t.ROY through the progress bar for more, or come back after midnight UTC. Your picks stay here.",
+      "costSome": "You have {left} left today, so {left, plural, =1 {one job} other {# jobs}} can run now. Pick {left, plural, =1 {the one} other {which ones}} to run first. The rest stay here for later.",
+      "costAll": "You have {left} left today.",
+      "runLeft": "Run the {count, plural, =1 {1 job} other {# jobs}} left",
+      "tailorFor": "{count, plural, =1 {Tailor for this job} other {Tailor for these # jobs}}",
+      "runOne": "Run one now",
+      "runMany": "Run {count} now",
+      "working": "Working one job at a time. You can stay on this page.",
+      "encrypted": "If a resume is made but does not save, we keep it encrypted for up to 7 days so a retry can save it. Then it is deleted.",
+      "linked": "Each saved resume is linked to its job in Applications, unless that job was already marked applied or further along. Mark it applied after you send it.",
+      "draftNote": "A tailored resume starts as a draft. Use Check and finish on each one. Finishing is what queues its package to your email, once your email is confirmed. Nothing is emailed before you finish it.",
+      "nextJob": "Next job: {title}"
+    },
+    "bullet": {
+      "oftenChip": {
+        "0": "every shift",
+        "1": "daily",
+        "2": "several times a week",
+        "3": "weekly",
+        "4": "during peak season"
+      },
+      "improvedChip": {
+        "0": "fewer mistakes",
+        "1": "faster",
+        "2": "safer",
+        "3": "kept the schedule",
+        "4": "trained others",
+        "5": "less waste",
+        "6": "saved money"
+      },
+      "why": {
+        "did": "Employers are scanning for what you handled, not what the job description said. Your own plain words are the raw material. They do not need to be polished.",
+        "tools": "Naming the equipment or system is the fastest proof you have actually done the work, and tools are exactly what employer software searches for.",
+        "often": "Frequency turns a duty into a scale. \"Ran the crusher pit\" and \"ran the crusher pit every shift\" are two different claims, and only one of them is specific.",
+        "quantity": "One real number does more than a page of description, and it is the thing almost no resume has. It does not need to be impressive. It needs to be true and yours.",
+        "improved": "This is the line between what you were assigned and what you changed. It is the hardest question here and usually the most valuable answer."
+      },
+      "stage": {
+        "precontemplation": "No pressure here. Answer whatever comes easily and skip the rest. Even one answer is enough to work with.",
+        "contemplation": "Answer what you can, in your own words. Even one answer is enough to start, and you can come back to the others.",
+        "preparation": "Answer in your own words. We use only what you tell us, and nothing gets invented.",
+        "action": "The more specific you get here, the harder this lands with an employer. Numbers especially."
+      },
+      "ph": {
+        "did": "e.g., loaded trucks and kept track of inventory",
+        "tools": "e.g., forklift, RF scanner, Excel",
+        "often": "e.g., every shift, daily, during peak season",
+        "quantity": "How many people, orders or loads? Only if you know.",
+        "improved": "e.g., fewer mistakes, faster loading, kept the team on schedule"
+      },
+      "noWrite": "Could not write that yet. Add a little more and try again.",
+      "wrong": "Something went wrong. Try again.",
+      "dialogAria": "Make this stronger",
+      "title": "Make this stronger",
+      "close": "Close",
+      "forRole": "For your {job} role.",
+      "progress0": "Tap an answer below or type your own.",
+      "progress1": "That is enough to write something. Add more if you want it sharper.",
+      "progress4": "That is a lot to work with. This one is going to be strong.",
+      "progressN": "{answered} of 5 answered. That is more than most people give us.",
+      "q": {
+        "did": "What did you actually do?",
+        "tools": "What tools, equipment, or systems did you use?",
+        "often": "How often?",
+        "quantity": "How many?",
+        "improved": "What got better because of you?"
+      },
+      "commonTools": "Common for this role. Tap if it fits:",
+      "proofTitle": "Two quick ones that make this line stronger",
+      "proofNote": "Optional. Tap an answer or type one. Only say what you know is true. Skip anything you are not sure about.",
+      "countGroup": "What could you count here?",
+      "countNote": "What could you count here? Type a number only if you know it.",
+      "countAria": "How many {prompt}",
+      "notSure": "I'm not sure",
+      "leaveOut": "That's fine. We'll leave the number out. A true line with no number still works.",
+      "attention": "Pick something you counted and type the number you know is true.",
+      "yourBullet": "Your stronger bullet",
+      "stale": "Your answers changed after this was written. Tap Rewrite, or fix the line yourself.",
+      "editNote": "Edit it to sound like you. Check every number. If one isn't right, fix it.",
+      "writing": "Writing...",
+      "rewrite": "Rewrite",
+      "write": "Write a strong bullet",
+      "use": "Use this bullet",
+      "saved": "Your answers are saved. Close anytime and pick up where you left off.",
+      "optional": "(optional)",
+      "hide": "hide",
+      "whyThis": "why this?"
+    },
+    "sections": {
+      "contact": {
+        "name": "Full Name",
+        "namePh": "Marcus D. Tillman",
+        "phone": "Phone",
+        "email": "Email",
+        "emailPh": "you@email.com",
+        "city": "City",
+        "cityPh": "Milwaukee",
+        "state": "State"
+      },
+      "summary": {
+        "placeholder": "2-3 sentences about what you bring to this role. Focus on your strongest, most relevant experience.",
+        "thinking": "Thinking...",
+        "help": "Help me write this"
+      },
+      "exp": {
+        "addPosition": "+ Add Position",
+        "position": "Position {number}",
+        "remove": "Remove",
+        "jobTitle": "Job Title",
+        "jobTitlePh": "Forklift Operator",
+        "company": "Company",
+        "companyPh": "Midwest Distribution",
+        "start": "Start Date",
+        "end": "End Date",
+        "endPh": "Present",
+        "whatYouDid": "What you did (start with action verbs)",
+        "firstBullet": "What you did, and what came of it. Add a number only if you know it is true.",
+        "otherBullet": "Describe what you accomplished...",
+        "strengthen": "Strengthen with help",
+        "removeBullet": "Remove bullet",
+        "addBullet": "+ Add bullet"
+      },
+      "edu": {
+        "credentialPh": "GED, Welding Certificate, Associate's Degree...",
+        "schoolPh": "School or program (optional)",
+        "yearPh": "Year (optional)",
+        "add": "+ Add Education or Certification"
+      },
+      "tray": {
+        "title": "Lines we could not sort automatically",
+        "note": "Move them where they belong or delete them. These stay off your finished resume until you sort them.",
+        "placeholder": "Edit or clear this line...",
+        "delete": "Delete line"
+      },
+      "skills": {
+        "placeholder": "Type a skill and press Enter (or separate with commas)",
+        "add": "Add"
+      }
+    },
+    "pageFit": {
+      "error": "Could not check page fit right now. Please try again.",
+      "checking": "Checking...",
+      "check": "Check page fit",
+      "decide": "You decide what to cut or tighten. Nothing is removed for you, and nothing should be added just to fill space.",
+      "counted": "Counted from the same page layout your PDF and Word file are made from."
+    },
+    "editor": {
+      "fineTune": "Fine-tune it yourself",
+      "edit": "Edit",
+      "reviewPages": "Review printable pages",
+      "preview": "Preview ({score}%)",
+      "startingPoint": "Starting point. Edit it to sound like you.",
+      "useThis": "Use this",
+      "printPreview": "Print layout preview",
+      "printPreviewNote": "Uses the PDF page layout. Save the package to review the exact downloadable file. Word may paginate differently."
+    },
+    "page": {
+      "fallback": "Couldn't redraw the page. This is your current text.",
+      "laying": "Laying out your page..."
+    },
+    "workspace": {
+      "main": "Main",
+      "factsCarry": "Your facts carry over: same jobs, same dates. Only the aim changes.",
+      "recheckLine": "We need to re-check this version before it can be finished.",
+      "postingRead": "Read the posting. Check it below and edit if anything is missing, then tailor.",
+      "postingFail": "Could not read that link automatically. Paste the job description below instead.",
+      "openFail": "This resume could not be opened. Your saved work has not changed. Try opening it again.",
+      "jobFail": "Could not read the selected job. Try importing from Forge instead.",
+      "generationFailed": "Generation failed",
+      "generateFail": "Could not generate resume. Try importing from Forge instead.",
+      "saveFirst": "Save your resume first, then download it.",
+      "versionFail": "This version could not be prepared. Save your work and try again.",
+      "didntWork": "That didn't work. Try again in a moment.",
+      "thisJob": "this job",
+      "tailorFor": "Tailor for {title}",
+      "tailorForAt": "Tailor for {title} at {company}",
+      "nothingRuns": "Nothing runs until you press the button.",
+      "tailorNow": "Tailor now",
+      "notNow": "Not now",
+      "opening": "Opening your saved work…",
+      "packageTitle": "Building Your Career Package",
+      "packageLabel": "Preparing your resume and cover letter",
+      "buildingFor": "Building your package for {job}...",
+      "buildingForAt": "Building your package for {job} at {company}...",
+      "packageBody": "Preparing your job-specific resume and cover letter, then checking the wording against your source facts. This can take a little time.",
+      "tailorTitle": "Application Tailor",
+      "startManually": "Start Manually",
+      "notice": {
+        "errorHeading": "Your resume was not tailored.",
+        "lockedHeading": "Tailoring is not open on your account yet.",
+        "errorBody": "We could not tailor your resume just now. Try again."
+      },
+      "fromPath": "{action} from the path on the left. {hint}",
+      "noResumeInLane": "No resume in your {lane} lane yet.",
+      "starting": "Starting...",
+      "startFromBase": "Start it from my base resume",
+      "aim": "Aim your base resume at a specific job. We use your Forge profile to tailor your resume, cover letter, and disclosure plan to the exact posting.",
+      "aim2": "Tailor one job here, or pick up to 3 on the Job Board and tailor them together. Each job still gets its own resume and its own AI action. Saved jobs wait for you under your saved jobs.",
+      "openingTitle": "Start with a real opening",
+      "openingBody": "Find a job in this lane, then bring it here. We will use the posting to prepare your resume and cover letter together. For a different career direction, switch lanes first.",
+      "findJobLane": "Find a job in this lane",
+      "alreadyFound": "Already found the job? Enter its details below. Open a saved resume below when you want to continue an existing package.",
+      "myResumes": "My Resumes",
+      "newResume": "+ New Resume",
+      "baseResume": "Base resume",
+      "untitled": "Untitled resume",
+      "deleteAsk": "Delete this resume?",
+      "deleting": "Deleting...",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "startingPoint": "your starting point from The Forge",
+      "atCompany": "at {company}",
+      "deleteResume": "Delete resume",
+      "haveJob": "Already have a job posting?",
+      "jobPh": "e.g., Warehouse Associate, CNA, Forklift Operator",
+      "whichCompany": "Which company?",
+      "companyRequired": "(required so we can tailor to a specific employer)",
+      "companyPh": "e.g., Amazon, local hospital, specific company",
+      "listingLink": "Job listing link",
+      "optional": "(optional)",
+      "linkPh": "Paste the URL from Indeed, LinkedIn, or any job board",
+      "reading": "Reading the posting...",
+      "readPosting": "Read the posting from this link",
+      "readNote": "We try to pull the description so we can tailor to it. Some sites block automatic reading. If that happens, just paste the text below.",
+      "pasteJd": "Paste the job description",
+      "pasteJdOptional": "(optional, but it makes the tailoring sharper)",
+      "jdPh": "Paste the posting's duties and requirements here. We tailor your resume to what this employer actually asks for, using only what's true about you.",
+      "tailorBtn": "Tailor my resume for this job",
+      "needTitle": "Add the job title and the company to tailor your resume to a specific posting.",
+      "usesWithJd": "Uses your base resume and the job description you pasted. Only what's true about you, aimed at this posting.",
+      "usesNoJd": "Uses your base resume. Paste the job description above for a sharper match. Only what's true about you, aimed at this posting.",
+      "rebuildBase": "Rebuild my base resume in the Forge",
+      "buildBaseFirst": "Build your base resume in the Forge first",
+      "blank": "Or start a blank resume here",
+      "resume": "Resume",
+      "at": "at {company}",
+      "lane": "Lane:",
+      "switchLane": "Switch lane",
+      "saveFailed": "Save failed",
+      "locked": "Locked baseline. Edits are not saved. Unlock it in My resumes to change it.",
+      "new": "+ New",
+      "checkBefore": "Check these before you send",
+      "truthSome": "The truth check found some things we could not match to what you told us. Look for each one and make sure it is true before you send this:",
+      "truthOne": "The truth check found something we could not match to what you told us. Look for each one and make sure it is true before you send this:",
+      "truthNoWords": "The truth check found something in this version it could not match to what you told us, but could not point to the exact words. Read every line before you send it.",
+      "tailoredTitle": "What we tailored for this job",
+      "tailoredNote": "Use these points in your disclosure and interview prep. They are where your profile and this job connect.",
+      "tabResume": "Resume",
+      "tabCover": "Cover Letter",
+      "tabDisclosure": "Disclosure",
+      "coverFor": "Cover Letter for {name}",
+      "copied": "Copied!",
+      "copy": "Copy",
+      "downloadDocx": "Download .docx",
+      "makeYours": "Make it yours before you send.",
+      "makeYoursBody": "Download the .docx and personalize it. Confirm the hiring manager’s name, drop in any specific details about the company, and adjust the opening if you want. A cover letter usually goes in your email body, so keep it editable. Save a PDF later, once it reads exactly how you want.",
+      "disclosurePlanner": "Disclosure Planner",
+      "noRecord": "No criminal record was detected from your Forge session. If you need help preparing a disclosure strategy, the full Disclosure Planner can help.",
+      "openPlanner": "Open Disclosure Planner",
+      "readiness": "Disclosure Readiness",
+      "startingScript": "Starting script",
+      "coaching": "This is career coaching, not legal advice.",
+      "legalHelp": "For legal guidance, contact a reentry attorney or free legal aid in your area.",
+      "openPlannerFor": "Open Disclosure Planner for {company}",
+      "thisRole": "this role",
+      "saving": "Saving...",
+      "saved": "Saved",
+      "save": "Save",
+      "savePdf": "Save as PDF",
+      "versionFinished": "Version {number}, finished. Downloads use this exact version.",
+      "checkAgain": "Check it again",
+      "draftNote": "Draft: check it before you send it.",
+      "actionsHint": ".docx = editable in Word. PDF = keeps the formatting exactly. Save both.",
+      "applied": "Applied, nice work",
+      "nextStep": "Your next step: send this application",
+      "youApplied": "You applied to {company}. Keep the momentum going.",
+      "thisJobShort": "this job",
+      "reviewPages": "Review your saved pages, then use the employer link below. We recommend working through each line with t.ROY; you can return to refine your Master Draft as you learn more.",
+      "savingPackage": "Saving your package…",
+      "savePackage": "Save package & review PDF",
+      "emailNotPrepared": "Email could not be prepared.",
+      "emailFilesRemain": "Email could not be prepared. Your saved files remain available.",
+      "preparingEmail": "Preparing your email…",
+      "emailPackage": "Save & email this job package",
+      "emailNote": "Email includes this saved resume and cover letter, when present, with filenames and next steps for this job. Private disclosure notes stay in Refinery. Up to three package emails a day; downloads remain available.",
+      "similarRole": "For a very similar role, reuse the useful wording and check it against the new posting. For a different role, find the job first and tailor from this lane’s baseline. A new career direction belongs in its own lane.",
+      "findAnother": "Find another job in this lane",
+      "buildMaster": "Build my Master Draft",
+      "nextTailor": "Next: tailor your resume for {title} →",
+      "seeAll": "See all your saved jobs →"
+    }
+  },
+  "lineReview": {
+    "kicker": "t.ROY // build it with me",
+    "title": "Make every line yours",
+    "intro": "We recommend this step. Walk through your resume with t.ROY, add the details only you know, and practice explaining your work. You can come back to it whenever you need.",
+    "start": "Start a guided line review",
+    "lineOf": "Line {current} of {total}",
+    "label": "What does this mean in your own words? What example could you give?",
+    "workWith": "Work on this with t.ROY",
+    "previous": "Previous",
+    "next": "Next line",
+    "note": "Your explanation goes to the chat when you choose to send it. Moving to the next line does not mark a fact verified or change your resume.",
+    "saveMaster": "Save a new work detail to your Master Draft"
+  },
+  "savedPreview": {
+    "title": "Your saved PDF",
+    "body": "This shows the saved resume pages and draft mark. Private coaching questions stay in your workspace.",
+    "failed": "The PDF preview could not load. Save the package again to retry.",
+    "open": "Open PDF to print or download",
+    "iframeTitle": "Exact saved resume PDF",
+    "preparing": "Preparing the saved PDF…"
+  },
+  "creativePage": {
+    "title": "Creative work",
+    "laneLabel": "Creative lane",
+    "newLane": "New creative lane",
+    "loading": "Loading..."
+  },
+  "preview": {
+    "kicker": "Preview",
+    "whatItDoes": "What it does",
+    "example": "Example output",
+    "sample": "Sample",
+    "taste": "Try a taste",
+    "unlocked": "Good news. This tool is already unlocked for you. Open it whenever you are ready.",
+    "open": "Open {title}",
+    "back": "Back to dashboard",
+    "howTitle": "How to unlock it",
+    "fallbackReason": "Finish your profile and tailor a resume to a target job. That unlocks this and the rest of your tools.",
+    "fallbackUnlock": "Tailor my resume"
+  }
+}

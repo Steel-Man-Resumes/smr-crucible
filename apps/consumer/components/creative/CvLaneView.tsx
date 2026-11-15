@@ -7,14 +7,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { CV_TYPES, type CareerLane, type CvType } from "@crucible/core/src/careerLaneShared";
 import type { PracticeEntry, TitleMode } from "@crucible/core/src/practiceRecordShared";
 import { applyPhraseAnswer, type CreativeKindSettings } from "@crucible/core/src/creativeLaneShared";
-import { buildCvModel, cvPageCap, cvPlainText, CV_TYPE_COPY } from "@crucible/core/src/cvShared";
+import { buildCvModel, cvPageCap, cvPlainText } from "@crucible/core/src/cvShared";
 import { getCvStatus } from "@crucible/core/src/cvChecks";
 import { exportOpenItemLines } from "@crucible/core/src/creativeChecks";
-import { stillNeedsProof, NEEDS_PROOF_NOTE, shownEntryIds } from "@crucible/core/src/creativeLaneShared";
-import { CREATIVE_ERRORS, CV_TABS, sendJson } from "@/lib/creative";
+import { stillNeedsProof, shownEntryIds } from "@crucible/core/src/creativeLaneShared";
+import { CV_TABS, sendJson } from "@/lib/creative";
 import { PracticeRecordPanel, CV_SECTION_ORDER } from "./PracticeRecordPanel";
 import { FacilityChoices } from "./FacilityChoices";
 import { OpenItems, OpenItemAnswersContext, type OpenItemAnswers } from "./OpenItems";
@@ -30,16 +31,18 @@ interface CvCtx {
 const inputCls =
   "t-focus w-full min-h-touch bg-t-bg border border-t-line px-3 py-2 text-sm text-t-white focus:border-t-steel focus:outline-none";
 
-const TOP: { key: keyof CreativeKindSettings; label: string; placeholder: string }[] = [
-  { key: "displayName", label: "Your name, as you want it printed", placeholder: "Ray Example" },
-  { key: "discipline", label: "Your field (optional)", placeholder: "Adult education" },
-  { key: "basedIn", label: "Where you're based", placeholder: "Toledo, OH" },
-  { key: "email", label: "Email", placeholder: "you@example.com" },
-  { key: "phone", label: "Phone (optional)", placeholder: "" },
-  { key: "website", label: "Website (optional)", placeholder: "" },
+const TOP: { key: keyof CreativeKindSettings; hasPlaceholder: boolean }[] = [
+  { key: "displayName", hasPlaceholder: true },
+  { key: "discipline", hasPlaceholder: true },
+  { key: "basedIn", hasPlaceholder: true },
+  { key: "email", hasPlaceholder: true },
+  { key: "phone", hasPlaceholder: false },
+  { key: "website", hasPlaceholder: false },
 ];
 
 export function CvLaneView({ laneId }: { laneId: string }) {
+  const t = useTranslations("refineryResume.creative.cvView");
+  const ts = useTranslations("refineryResume.creative.shared");
   const [ctx, setCtx] = useState<CvCtx | null>(null);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<"record" | "cv">("record");
@@ -75,12 +78,12 @@ export function CvLaneView({ laneId }: { laneId: string }) {
         setCtx((c) => (c ? { ...c, settings: r.data.settings as CreativeKindSettings } : c));
         setNotice("");
       } else {
-        setNotice(r.data.message || CREATIVE_ERRORS.failed);
+        setNotice(r.data.message || ts("didntSave"));
         load();
       }
       return r.ok;
     },
-    [laneId, load]
+    [laneId, load, ts]
   );
   const onTitleMode = useCallback(
     (entryId: string, mode: TitleMode) => put({ titleMode: { entryId, mode } }, (s) => ({ ...s, titleModes: { ...(s.titleModes ?? {}), [entryId]: mode } })),
@@ -96,18 +99,18 @@ export function CvLaneView({ laneId }: { laneId: string }) {
         const e = ctx?.entries.find((x) => x.id === entryId);
         if (!e) return false;
         const r = await sendJson(`/api/practice/${entryId}`, "PATCH", { details: { ...e.details, officer: yes } });
-        if (!r.ok) setNotice(r.data.message || CREATIVE_ERRORS.failed);
+        if (!r.ok) setNotice(r.data.message || ts("didntSave"));
         await load();
         return r.ok;
       },
     }),
-    [put, ctx, load]
+    [put, ctx, load, ts]
   );
 
   const model = useMemo(() => (ctx ? buildCvModel(ctx.entries, ctx.settings, ctx.cvType) : null), [ctx]);
   const status = useMemo(() => (ctx && model ? getCvStatus({ entries: ctx.entries, settings: ctx.settings, cvType: ctx.cvType, model, pages }) : null), [ctx, model, pages]);
 
-  if (failed && !ctx) return <p className="mt-6 text-sm text-t-red" role="alert">{CREATIVE_ERRORS.loadFailed}</p>;
+  if (failed && !ctx) return <p className="mt-6 text-sm text-t-red" role="alert">{ts("loadFailed")}</p>;
   if (!ctx || !model || !status) return <div className="mt-6 h-40 border border-t-line bg-t-panel" aria-hidden="true" />;
   const draft = status.blockCount > 0;
   const cap = cvPageCap(ctx.cvType);
@@ -117,21 +120,21 @@ export function CvLaneView({ laneId }: { laneId: string }) {
 
   return (
     <OpenItemAnswersContext.Provider value={answers}>
-    <section className="mt-6" data-testid="cv-lane" aria-label={`${ctx.lane.name} CV lane`}>
+    <section className="mt-6" data-testid="cv-lane" aria-label={t("ariaLane", { name: ctx.lane.name })}>
       <div className="border border-t-line bg-t-panel p-3 sm:p-4">
         <p className="text-sm text-t-white">
           <span className="font-semibold">{ctx.lane.name}</span>
-          <span className="ml-2 inline-block border border-t-line px-2 text-xs uppercase text-t-phos" data-testid="cv-type">{CV_TYPE_COPY[ctx.cvType].label}</span>
+          <span className="ml-2 inline-block border border-t-line px-2 text-xs uppercase text-t-phos" data-testid="cv-type">{ts(`cvType.${ctx.cvType}.label`)}</span>
         </p>
         <p className="mt-1 text-xs text-t-phos-dim">
-          <span className="font-semibold text-t-phos">t.ROY:</span> Every line comes from your record, dated, newest first. Nothing gets added.
+          <span className="font-semibold text-t-phos">t.ROY:</span> {t("troyLine")}
         </p>
       </div>
       {notice && <p className="mt-2 text-sm text-t-red" role="alert">{notice}</p>}
-      <div className="mt-3 flex gap-1" role="tablist" aria-label="CV tools">
-        {CV_TABS.map((t) => (
-          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} data-testid={`cv-tab-${t.key}`} onClick={() => setTab(t.key)} className={`t-focus min-h-touch px-3 text-sm border ${tab === t.key ? "border-t-amber bg-t-panel-2 text-t-amber-bright font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"}`}>
-            {t.label}
+      <div className="mt-3 flex gap-1" role="tablist" aria-label={t("toolsAria")}>
+        {CV_TABS.map((tabDef) => (
+          <button key={tabDef.key} type="button" role="tab" aria-selected={tab === tabDef.key} data-testid={`cv-tab-${tabDef.key}`} onClick={() => setTab(tabDef.key)} className={`t-focus min-h-touch px-3 text-sm border ${tab === tabDef.key ? "border-t-amber bg-t-panel-2 text-t-amber-bright font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"}`}>
+            {ts(`tab.${tabDef.key}`)}
           </button>
         ))}
       </div>
@@ -140,27 +143,27 @@ export function CvLaneView({ laneId }: { laneId: string }) {
         {tab === "cv" && (
           <div className="space-y-5" data-testid="cv-panel">
             <fieldset className="border border-t-line bg-t-panel p-3">
-              <legend className="px-1 text-sm text-t-white">Kind of CV</legend>
+              <legend className="px-1 text-sm text-t-white">{t("kindLegend")}</legend>
               <div className="grid gap-2 sm:grid-cols-2">
-                {CV_TYPES.map((t) => (
-                  <label key={t} className={`flex gap-2 border p-2 cursor-pointer ${ctx.cvType === t ? "border-t-amber" : "border-t-line"}`}>
+                {CV_TYPES.map((kind) => (
+                  <label key={kind} className={`flex gap-2 border p-2 cursor-pointer ${ctx.cvType === kind ? "border-t-amber" : "border-t-line"}`}>
                     <input
                       type="radio"
                       name="cv-kind"
                       className="mt-1"
-                      checked={ctx.cvType === t}
-                      data-testid={`cv-switch-${t}`}
+                      checked={ctx.cvType === kind}
+                      data-testid={`cv-switch-${kind}`}
                       onChange={async () => {
                         // Show the choice at once; the saved lane replaces it.
-                        setCtx((c) => (c ? { ...c, cvType: t } : c));
-                        const r = await sendJson(`/api/lanes/${laneId}`, "PATCH", { cvType: t });
+                        setCtx((c) => (c ? { ...c, cvType: kind } : c));
+                        const r = await sendJson(`/api/lanes/${laneId}`, "PATCH", { cvType: kind });
                         if (r.ok) load();
-                        else setNotice(r.data.message || CREATIVE_ERRORS.failed);
+                        else setNotice(r.data.message || ts("didntSave"));
                       }}
                     />
                     <span>
-                      <span className="block text-sm font-semibold text-t-white">{CV_TYPE_COPY[t].label}</span>
-                      <span className="block text-xs text-t-phos-dim">{CV_TYPE_COPY[t].body}</span>
+                      <span className="block text-sm font-semibold text-t-white">{ts(`cvType.${kind}.label`)}</span>
+                      <span className="block text-xs text-t-phos-dim">{ts(`cvType.${kind}.body`)}</span>
                     </span>
                   </label>
                 ))}
@@ -173,35 +176,35 @@ export function CvLaneView({ laneId }: { laneId: string }) {
               onSubmit={async (e) => {
                 e.preventDefault();
                 const ok = await put({ settings: top }, (s) => ({ ...s, ...top }));
-                setMsg(ok ? "Saved." : "That didn't save. Try again.");
+                setMsg(ok ? t("saved") : ts("didntSave"));
               }}
             >
-              <h3 className="text-sm font-semibold uppercase text-t-phos">Top of the page</h3>
-              <p className="text-xs text-t-phos-dim">No photo, birth date, age, family status or nationality. A CV here never asks for them.</p>
+              <h3 className="text-sm font-semibold uppercase text-t-phos">{t("topTitle")}</h3>
+              <p className="text-xs text-t-phos-dim">{t("topNote")}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {TOP.map((f) => (
                   <label key={f.key} className="block text-sm text-t-white">
-                    {f.label}
-                    <input className={`${inputCls} mt-1`} value={top[f.key] ?? ""} placeholder={f.placeholder} maxLength={200} data-testid={`cv-${f.key}`} onChange={(e) => setTop((t) => ({ ...t, [f.key]: e.target.value }))} />
+                    {t(`top.${f.key}.label`)}
+                    <input className={`${inputCls} mt-1`} value={top[f.key] ?? ""} placeholder={f.hasPlaceholder ? t(`top.${f.key}.ph`) : ""} maxLength={200} data-testid={`cv-${f.key}`} onChange={(e) => setTop((prev) => ({ ...prev, [f.key]: e.target.value }))} />
                   </label>
                 ))}
               </div>
               <label className="block text-sm text-t-white">
-                Interests, in your words (optional)
-                <textarea className={`${inputCls} mt-1`} rows={2} maxLength={600} value={top.interests ?? ""} data-testid="cv-interests" onChange={(e) => setTop((t) => ({ ...t, interests: e.target.value }))} />
+                {t("interests")}
+                <textarea className={`${inputCls} mt-1`} rows={2} maxLength={600} value={top.interests ?? ""} data-testid="cv-interests" onChange={(e) => setTop((prev) => ({ ...prev, interests: e.target.value }))} />
               </label>
               <label className="block text-sm text-t-white">
-                Languages and skills, in your words (optional)
-                <input className={`${inputCls} mt-1`} maxLength={300} value={top.languages ?? ""} data-testid="cv-languages" onChange={(e) => setTop((t) => ({ ...t, languages: e.target.value }))} />
+                {t("languages")}
+                <input className={`${inputCls} mt-1`} maxLength={300} value={top.languages ?? ""} data-testid="cv-languages" onChange={(e) => setTop((prev) => ({ ...prev, languages: e.target.value }))} />
               </label>
-              <button type="submit" className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright" data-testid="cv-top-save">Save</button>
+              <button type="submit" className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright" data-testid="cv-top-save">{t("save")}</button>
               <span aria-live="polite" className="ml-3 text-sm text-t-phos">{msg}</span>
             </form>
 
             {refRows.length >= 2 && (
               <fieldset className="border border-t-line bg-t-panel p-3" data-testid="cv-lead-reference">
-                <legend className="px-1 text-sm text-t-white">Your first reference</legend>
-                <p className="text-xs text-t-phos-dim">You pick who leads. A teacher, supervisor or colleague who knows your work is the strongest start.</p>
+                <legend className="px-1 text-sm text-t-white">{t("leadReference")}</legend>
+                <p className="text-xs text-t-phos-dim">{t("leadNote")}</p>
                 <div className="mt-2 space-y-1">
                   {refRows.map((r) => (
                     <label key={r.entryId} className="flex gap-2 text-sm text-t-white cursor-pointer">
@@ -222,8 +225,8 @@ export function CvLaneView({ laneId }: { laneId: string }) {
             <FacilityChoices entries={ctx.entries.filter((e) => e.section !== "work")} settings={ctx.settings} onTitleMode={onTitleMode} only="pages" />
 
             <p className="text-xs text-t-phos-dim" data-testid="cv-length">
-              {cap ? `Up to ${cap} pages, like a resume. Never padded.` : "As long as your real record. Never padded."}
-              {pages ? ` Right now: ${pages} ${pages === 1 ? "page" : "pages"}.` : ""}
+              {cap ? t("lengthCap", { cap }) : t("lengthFree")}
+              {pages ? ` ${t("rightNow", { count: pages })}` : ""}
             </p>
 
             <OpenItems status={status} doc="cv" testId="cv-open-items" />
@@ -234,12 +237,12 @@ export function CvLaneView({ laneId }: { laneId: string }) {
               fallbackText={cvPlainText(model)}
             />
 
-            {stillNeedsProof(ctx.entries, shownIds) > 0 && <p className="text-sm text-t-phos" data-testid="cv-needs-proof">{NEEDS_PROOF_NOTE}</p>}
+            {stillNeedsProof(ctx.entries, shownIds) > 0 && <p className="text-sm text-t-phos" data-testid="cv-needs-proof">{ts("needsProof")}</p>}
             <div className="flex flex-wrap gap-2" data-testid="cv-downloads">
               {(["pdf", "docx", "txt"] as const).map((f) => (
                 <a key={f} href={`/api/creative/${laneId}/export?doc=cv&format=${f}`} className="t-focus min-h-touch inline-flex items-center px-3 border border-t-line text-sm text-t-white hover:border-t-steel">
-                  {draft ? "Draft " : ""}
-                  {f === "pdf" ? "PDF" : f === "docx" ? "Word" : "Plain text"}
+                  {draft ? ts("draftPrefix") : ""}
+                  {f === "pdf" ? "PDF" : f === "docx" ? ts("word") : ts("plainTextLink")}
                 </a>
               ))}
             </div>

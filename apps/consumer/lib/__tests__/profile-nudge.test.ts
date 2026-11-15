@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CONTACT_NUDGE, profileAsNudge } from "../profile-nudge";
+import { MESSAGES } from "../../messages";
 
 const page = readFileSync(new URL("../../app/(dashboard)/dashboard/page.tsx", import.meta.url), "utf8");
 
@@ -29,16 +30,38 @@ test("the dashboard: the full-page form only without saved work; the nudge is a 
 });
 
 test("quiet mode never says required, and fills in nothing", () => {
-  assert.match(page, /\{quiet \? "Full name" : "Full Name \*"\}/);
-  assert.match(page, /\{quiet \? "Phone number" : "Phone Number \*"\}/);
+  // The dashboard's copy now lives in the catalog (refineryHome.dashboard); the page asks for each key by name.
+  const dash = (MESSAGES.en as any).refineryHome.dashboard;
+  const profile = dash.profile;
+  assert.match(page, /useTranslations\("refineryHome\.dashboard\.profile"\)/);
+  assert.match(page, /\{quiet \? t\("fullNameQuiet"\) : t\("fullName"\)\}/);
+  assert.match(page, /\{quiet \? t\("phoneQuiet"\) : t\("phone"\)\}/);
+  assert.equal(profile.fullNameQuiet, "Full name");
+  assert.equal(profile.fullName, "Full Name *");
+  assert.equal(profile.phoneQuiet, "Phone number");
+  assert.equal(profile.phone, "Phone Number *");
   assert.match(page, /required=\{!quiet\}/);
-  assert.match(page, /setError\(quiet \? CONTACT_NUDGE\.needBoth : /);
-  for (const w of Object.values(CONTACT_NUDGE)) {
+  assert.match(page, /setError\(quiet \? t\("needBoth"\) : t\("required"\)\)/);
+  // The catalog English must equal CONTACT_NUDGE so the two cannot drift, and the page reads each nudge key.
+  assert.equal(dash.nudge.summary, CONTACT_NUDGE.summary);
+  assert.equal(dash.nudge.hint, CONTACT_NUDGE.hint);
+  assert.equal(profile.nudgeTitle, CONTACT_NUDGE.title);
+  assert.equal(profile.nudgeIntro, CONTACT_NUDGE.intro);
+  assert.equal(profile.needBoth, CONTACT_NUDGE.needBoth);
+  assert.equal(profile.saveQuiet, CONTACT_NUDGE.save);
+  assert.match(page, /\{t\("nudge\.summary"\)\}/);
+  assert.match(page, /\{t\("nudge\.hint"\)\}/);
+  assert.match(page, /\{t\("nudgeTitle"\)\}/);
+  assert.match(page, /\{t\("nudgeIntro"\)\}/);
+  assert.match(page, /quiet \? t\("saveQuiet"\)/);
+  const quietCopy = [dash.nudge.summary, dash.nudge.hint, profile.nudgeTitle, profile.nudgeIntro, profile.needBoth, profile.saveQuiet, profile.fullNameQuiet, profile.phoneQuiet, profile.phoneHintQuiet];
+  for (const w of [...Object.values(CONTACT_NUDGE), ...quietCopy] as string[]) {
     assert.doesNotMatch(w, /required|must/i, w);
     assert.ok(!/[–—]| -- /.test(w), w);
   }
   // Honest about the gate (review 2026-10-29): Tailor stays locked until name and phone are saved.
   assert.match(CONTACT_NUDGE.hint, /Tailor for a job opens once your name and phone are saved/);
+  assert.match(dash.nudge.hint, /Tailor for a job opens once your name and phone are saved/);
   // The fields start from what the account holds, never a made-up value.
   assert.match(page, /const \[phone, setPhone\] = useState\(contact\?\.phone \|\| ""\);/);
 });

@@ -1,0 +1,950 @@
+{
+  "statusBadges": {
+    "resume": "Resume",
+    "coverLetter": "Cover letter",
+    "disclosure": "Disclosure",
+    "ready": "{label} ready",
+    "notStarted": "{label} not started"
+  },
+  "baselineSelector": {
+    "searchingAs": "Searching as",
+    "baseResume": "Base resume",
+    "current": "(current)",
+    "whichResumeAria": "Which resume am I searching as",
+    "manage": "Manage baselines"
+  },
+  "savedJobs": {
+    "heading": "Your saved jobs",
+    "openTracker": "Open tracker",
+    "intro": "Saved jobs across all your lanes. Open one job to work with its own resume and application.",
+    "status": {
+      "applied": "Applied",
+      "heard_back": "Heard back",
+      "interviewing": "Interviewing",
+      "offered": "Offered"
+    },
+    "tailorResume": "Tailor resume",
+    "openAndApply": "Open & apply",
+    "open": "Open",
+    "more": "+ {count, plural, =1 {1 more saved job} other {# more saved jobs}}"
+  },
+  "mySharedTasks": {
+    "heading": "From your case manager",
+    "yourCaseManager": "Your case manager",
+    "by": "by {day}"
+  },
+  "mySuggestions": {
+    "heading": "Suggestions from your case manager",
+    "yourCaseManager": "Your case manager",
+    "jobAt": "{title} at {company}",
+    "commentOn": "A comment on {label}",
+    "aDocumentYouShared": "a document you shared",
+    "about": "About: “{quote}”",
+    "fromSuggestion": "{name}. It is a suggestion; what you do with it is up to you.",
+    "saveToJobs": "Save to my jobs",
+    "seePosting": "See the posting",
+    "gotIt": "Got it",
+    "notForMe": "Not for me"
+  },
+  "dashboard": {
+    "choiceNotSaved": "Your choice wasn't saved. Try again.",
+    "nudge": {
+      "summary": "Add a phone number to your resume header",
+      "hint": "Tailor for a job opens once your name and phone are saved. Employers call this number."
+    },
+    "overview": "Overview",
+    "applicationsHeading": "Applications to keep moving",
+    "foundationHeading": "The work you can build on",
+    "yourProgress": "Your progress",
+    "skillsAria": "Skills from your shared history",
+    "savedAcross": "Saved across all lanes: {list}.",
+    "types": {
+      "resume": "{count} resumes",
+      "cover_letter": "{count} cover letters",
+      "disclosure_plan": "{count} disclosure plans",
+      "hurdle_plan": "{count} hurdle plans",
+      "interview_prep": "{count} interview sessions"
+    },
+    "anotherLane": "Aiming at another kind of work? <link>Start a lane in My resumes</link>. Your work history stays together while each goal keeps its own documents.",
+    "profile": {
+      "needBoth": "Add a name and a phone number to save these.",
+      "required": "Name and phone number are required for your resume.",
+      "couldNotSave": "Could not save. Please try again.",
+      "wentWrong": "Something went wrong. Please try again.",
+      "nudgeTitle": "Your contact details",
+      "nudgeIntro": "These go on your resume header. Nothing else.",
+      "welcomeName": "Welcome, {name}",
+      "welcome": "Welcome to The Refinery",
+      "analyzed": "I analyzed your background in The Forge. Now we put it to work. These details go on your resume header. Nothing else.",
+      "fullNameQuiet": "Full name",
+      "fullName": "Full Name *",
+      "namePlaceholder": "Your full name (as it appears on a resume)",
+      "nameHint": "Top of every resume we build for you.",
+      "email": "Email",
+      "emailHint": "Resume header + how employers reach you.",
+      "phoneQuiet": "Phone number",
+      "phone": "Phone Number *",
+      "phoneHintQuiet": "Employers call this number.",
+      "phoneHint": "Required on resumes. Employers call this number.",
+      "city": "City",
+      "state": "State",
+      "localMatching": "For local job matching.",
+      "privacy": "Your contact details are saved in your account and used on your documents. Your location also helps match local jobs and support. You choose what to share with your program. You can update or delete everything anytime in Settings.",
+      "saving": "saving...",
+      "saveQuiet": "Save",
+      "saveContinue": "save & continue"
+    },
+    "miniForge": {
+      "welcome": "Welcome. You started this inside.",
+      "loaded": "Your career plan from The Mini Forge is loaded. Your tools are ready.",
+      "dismissAria": "Dismiss",
+      "done": "Done"
+    }
+  },
+  "help": {
+    "loading": "Loading Help & Feedback...",
+    "title": "Help & Feedback",
+    "intro": "One place to get help, report a problem, share an idea, or send Troy a note. Pick what fits.",
+    "contactNotSaved": "Your contact choice did not save. Please try again.",
+    "replayRefinery": "Replay the Refinery tour",
+    "replaySettings": "Replay the Settings tour",
+    "learnSettings": "Learn your settings",
+    "orientationCheck": "Take the orientation check",
+    "modes": {
+      "bug": {
+        "label": "Report a bug",
+        "blurb": "Something broke or did not work the way you expected. Tell us what happened."
+      },
+      "confusing": {
+        "label": "Something is confusing",
+        "blurb": "Something was hard to follow. Tell us what did not make sense."
+      },
+      "help": {
+        "label": "Ask for help",
+        "blurb": "Stuck on something? Ask your question. We may have a quick answer."
+      },
+      "idea": {
+        "label": "Share an idea",
+        "blurb": "You see things others miss. Tell Troy about a problem you know firsthand or an idea you want to see grow. It could shape the site, a course, a newsletter, or research. Sometimes the next step is finding the right person to talk to."
+      },
+      "message": {
+        "label": "Message for Troy",
+        "blurb": "Write a note straight to Troy, a real person. He reads them himself."
+      }
+    },
+    "ideaLabel": "Your idea or the problem you see",
+    "messageLabel": "Your message",
+    "placeholder": {
+      "help": "What do you need help with?",
+      "idea": "What have you noticed? What could help, and who would it help? A rough idea is welcome.",
+      "bug": "What happened, and what did you expect?",
+      "message": "What would you like Troy to know?",
+      "other": "Type here..."
+    },
+    "ideaNoPlan": "You don't need a finished plan. Share only what you're comfortable sending to Troy. This goes to the private Help inbox, not a public board.",
+    "ideaContact": "Troy may contact me about this idea. I can change this choice below later.",
+    "ideaPermission": "This permission is only for contact about your idea. Publishing your story, sharing your details, or making an introduction needs a separate conversation and your permission.",
+    "ideaNoPromise": "Submitting an idea doesn't promise a project or a reply by a certain date. Updates will appear below.",
+    "includeContext": "Include what page I'm on and my recent activity to help debug (optional)",
+    "willInclude": "Here is what we'll include:",
+    "contextPage": "Page: {page}",
+    "contextPlan": "Your plan: {tier}",
+    "contextActions": "Up to 3 recent AI actions (no message text, no personal info)",
+    "working": "Working...",
+    "lookQuick": "Look for a quick answer",
+    "sending": "Sending...",
+    "sendToTroy": "Send to Troy",
+    "send": "Send",
+    "answeredIt": "That answered it",
+    "sendToPerson": "No, send it to a person",
+    "glad": "Glad that helped.",
+    "sentForced": "This needs a person, so we filed it for you. Your request is in (#{id}), status <strong>received</strong>. Troy's reply will show up below.",
+    "sent": "Got it. Your request is in (#{id}), status <strong>received</strong>. Any reply from Troy shows up below.",
+    "error": "That did not go through. Try again in a moment.",
+    "submissions": "Your submissions",
+    "submissionCount": "{count, plural, =1 {# submission} other {# submissions}}",
+    "nothingYet": "Nothing yet. When you send something, it shows up here with its status.",
+    "messageFallback": "Message",
+    "stages": {
+      "received": "Received",
+      "exploring": "Exploring",
+      "next_step": "Next step",
+      "closed": "Closed"
+    },
+    "status": {
+      "received": "received",
+      "seen": "seen",
+      "fixed": "fixed",
+      "replied": "replied",
+      "closed": "closed"
+    },
+    "ideaContactShort": "Troy may contact me about this idea",
+    "troyReplied": "Troy replied:"
+  },
+  "myHandoffs": {
+    "loadFailed": "Could not load what your case manager sent. Try again.",
+    "retry": "Retry",
+    "empty": "Nothing new from your case manager in the last 30 days.",
+    "yourCaseManager": "Your case manager",
+    "openIt": "{count, plural, =1 {Open it (1 thing)} other {Open it (# things)}}",
+    "by": "By {day}",
+    "seeWhereToApply": "See where to apply",
+    "pass": "Not for me",
+    "passed": "Passed.",
+    "youPassed": "You passed on this one.",
+    "saveFailed": "That did not save. Try again.",
+    "saveFailedConnection": "That did not save. Check the connection and try again.",
+    "saveJobsFailed": "That did not save to your jobs. Try again.",
+    "saveHelpFailed": "That did not save to your help list. Try again.",
+    "noLongerListedCannotSave": "That place is no longer listed, so it cannot be saved. Ask your case manager about it.",
+    "listingCheckFailed": "We could not check this listing just now.",
+    "noLongerListed": "No longer listed.",
+    "take": {
+      "employer": "Save to my jobs",
+      "job": "Save to my jobs",
+      "resource": "Save to my help list",
+      "next_step": "Add to my list"
+    },
+    "taken": {
+      "employer": "Saved to your jobs.",
+      "job": "Saved to your jobs.",
+      "resource": "Saved to your help list.",
+      "next_step": "Added to your list from your case manager."
+    },
+    "evidence": {
+      "employer": {
+        "A": "Has the hiring mark",
+        "B": "Reported hiring evidence, below the mark",
+        "none": "Hiring evidence not shown"
+      },
+      "resource": {
+        "A": "Checked",
+        "B": "Listed, not yet checked by us",
+        "C": "Found in a public list, unconfirmed",
+        "none": "Not checked"
+      },
+      "employerChecked": "{line}, checked {when}",
+      "resourceChecked": "Checked {when}",
+      "resourceReviewed": "{line}, source reviewed {when}"
+    },
+    "fromHeading": "From your case manager",
+    "foundHeading": "Your case manager found something for you",
+    "promise": "These are suggestions. What you do with each one is up to you. Your case manager sees whether you opened it, and whether you took or passed on each one.",
+    "seeEverything": "See everything from your case manager",
+    "loading": "Loading..."
+  },
+  "laneHome": {
+    "today": "Today: {task}",
+    "task": {
+      "resume": "Get a resume I can use",
+      "job": "Go after a job",
+      "interview": "Get ready for an interview",
+      "documents": "Creative work, a CV, or a performer page",
+      "explore": "I don't know what I want yet",
+      "support": "Get support"
+    },
+    "laneDocuments": "This lane’s documents",
+    "currentResume": "Current resume",
+    "loading": "Loading...",
+    "loadError": "We couldn't load your saved resume. Try again to check your latest work.",
+    "tryAgain": "Try again",
+    "openDocs": "Open {name}",
+    "yourDocuments": "your documents",
+    "version": "Version {number}",
+    "finishedSuffix": ", finished",
+    "draftBadge": "Draft: check it before you send it.",
+    "myResumes": "My resumes",
+    "unversioned": "You have a saved resume in this lane. It has no checked version yet.",
+    "noVersion": "No saved resume version in this lane yet.",
+    "next": "Next",
+    "reload": "Reload your workspace to see the next step.",
+    "loadingNext": "Loading your next step...",
+    "docs": {
+      "creative": "Creative work",
+      "cv": "A CV",
+      "performer": "A performer page"
+    },
+    "support": "Support",
+    "supportBody": "Rides, ID, a place to stay, food, and legal help with a record.",
+    "getSupport": "Get support",
+    "action": {
+      "reviewResume": "Review this resume",
+      "findJob": "Find a job to go after",
+      "checkAndFinish": "Check and finish",
+      "buildWithTroy": "Build it with t.ROY",
+      "saveProfile": "Save your profile",
+      "practiceThisInterview": "Practice for this interview",
+      "openApplication": "Open this application",
+      "prepareInterview": "Prepare for your interview",
+      "prepareInterviewAt": "Prepare for your interview at {company}",
+      "practiceInterview": "Practice for your interview",
+      "findHelp": "Find help near you",
+      "seePaths": "See job paths",
+      "pickJob": "Pick a job to go after",
+      "openLaneDocs": "Open this lane’s documents",
+      "chooseDocs": "Choose documents in My resumes",
+      "startResume": "Start your resume",
+      "getFiles": "Get your files in My resumes",
+      "openCreative": "Open creative work"
+    }
+  },
+  "next": {
+    "station": "Station 7",
+    "title": "What comes next",
+    "tip": "A job is one piece. School, money, your health, a ride, your ID... that stuff holds the job up. Pick what's in your way and search local help by place and need.",
+    "coverage": "We haven't checked every area yet. Where we haven't, the search says so and shows help that works anywhere.",
+    "searchHeading": "Search local help",
+    "searchWillUse": "The search will use <strong>{place}</strong>. You can change it on the next screen.",
+    "addPlace": "Add your city and state or ZIP on the next screen.",
+    "categories": {
+      "education": {
+        "label": "School and training",
+        "line": "School and training programs."
+      },
+      "financial": {
+        "label": "Money and benefits",
+        "line": "Benefits, bills and getting your money steady."
+      },
+      "legal": {
+        "label": "Legal help with a record",
+        "line": "Legal aid, record clearing and court help."
+      },
+      "mental_health": {
+        "label": "Mental health",
+        "line": "Someone to talk to."
+      },
+      "substance": {
+        "label": "Recovery support",
+        "line": "Support for your recovery, when you want it."
+      },
+      "health": {
+        "label": "Health care",
+        "line": "Clinics, check-ups and getting covered."
+      },
+      "housing": {
+        "label": "A place to stay",
+        "line": "Shelter and housing help."
+      },
+      "transportation": {
+        "label": "Getting to work",
+        "line": "Rides and ways to get to the job."
+      },
+      "id_documents": {
+        "label": "ID and documents",
+        "line": "State ID, birth certificate, Social Security card."
+      },
+      "faith": {
+        "label": "Faith and community",
+        "line": "If faith is part of your life. Interfaith and chaplain listings show first."
+      }
+    },
+    "seeEvery": "See every kind of local help",
+    "nationalHeading": "National starting points",
+    "nationalSub": "Official program pages. Each link was checked on the date shown.",
+    "national": {
+      "0": "FAFSA, federal student aid (studentaid.gov)",
+      "1": "SNAP food benefits (USDA)",
+      "2": "Government benefits finder (USA.gov)",
+      "3": "Replace a lost ID card (USA.gov)",
+      "4": "Health coverage (HealthCare.gov)",
+      "5": "Treatment for mental health or substance use (FindTreatment.gov)",
+      "6": "211, local help by phone or online (211.org)"
+    },
+    "checked": "Checked {date}"
+  },
+  "orientation": {
+    "signIn": "Sign in to take the orientation check.",
+    "kicker": "Learn the process",
+    "title": "Your next move starts here.",
+    "intro": "Review the lessons, check your understanding, then use the tools with a clear purpose.",
+    "navAria": "Orientation",
+    "tour": "Take the guided tour",
+    "settings": "Explore settings",
+    "review": "Review the process before the check",
+    "lessons": {
+      "0": {
+        "label": "A process you can keep using",
+        "idea": "The goal is work you can get and keep. The resume is one part of that process.",
+        "explanation": "Start with what you have actually done. Choose a direction, find a real opening, prepare the right documents, apply, and practice. Overview connects your saved work to a next action. You can return to an earlier step when something changes.",
+        "example": "A new interview invitation changes what matters today. It does not erase your earlier work."
+      },
+      "1": {
+        "label": "Your factual foundation",
+        "idea": "One true history can support several directions.",
+        "explanation": "Your starting resume gives you a foundation. Build your Master Draft with work you can explain: what you did, where, when, and what happened. Keep uncertain details as questions to check. A stronger sentence is useful only when it still describes your work.",
+        "example": "“Helped with deliveries” might hide route planning or checking orders. Ask what you actually did before naming those skills."
+      },
+      "2": {
+        "label": "Meet your coach",
+        "idea": "t.ROY helps you do the thinking. You keep the final say.",
+        "explanation": "Ask for a screen explanation, help describing your experience, or one question at a time. Check what t.ROY suggests. An AI can misunderstand, miss a detail, or invent one. Never keep a claim just because it sounds confident.",
+        "example": "Try: “Ask me what I did before you rewrite this line.” A suggestion is not a saved change or a sent application."
+      },
+      "3": {
+        "label": "Choose work with a reason",
+        "idea": "A real posting gives your preparation a purpose.",
+        "explanation": "Compare the duties and requirements with your experience and practical needs. Separate a requirement from a preference and from something you still need to ask. A keyword overlap is a starting point, not proof you qualify.",
+        "example": "A job may fit your skills but start before the bus runs. Check that constraint before spending time on the application."
+      },
+      "4": {
+        "label": "One job, one packet",
+        "idea": "Tailoring changes the emphasis. It never changes the facts.",
+        "explanation": "Choose the actual job and resume version. Bring the relevant work forward, check every suggested line, and inspect the documents you will send. Keep each job’s packet together so you know which version an employer received.",
+        "example": "The same warehouse experience can show order accuracy for one opening and training new coworkers for another, if you really did both."
+      },
+      "5": {
+        "label": "Finish the real action",
+        "idea": "Preparing an application and submitting it are different steps.",
+        "explanation": "Read the employer’s instructions. Check the preview and downloaded files. Submit through the employer’s required channel, then record what happened in Applications. Sending a packet to yourself does not apply to the employer.",
+        "example": "Mark Applied after you actually submit. If an interview arrives, update that job so preparation stays attached to it."
+      },
+      "6": {
+        "label": "Practice what you can defend",
+        "idea": "You should be able to explain every line in your own words.",
+        "explanation": "Choose the job you are preparing for. Practice a specific example, listen to the follow-up, and look for missing detail. Use feedback to try a clearer answer. A polished script you cannot explain will not help you in a real conversation.",
+        "example": "“I work well under pressure” becomes useful when you can describe a real busy shift, what you did, and what happened."
+      },
+      "7": {
+        "label": "Make room for real life",
+        "idea": "A practical hurdle deserves a practical next step.",
+        "explanation": "Use support tools for needs such as transportation, housing or training. Read who a service serves, its source, and what still needs checking. A checked listing does not guarantee eligibility or an available place. Planning what to disclose is your choice.",
+        "example": "For a transport problem, ask about the route and shift time. Do not assume a more confident answer fixes the ride."
+      },
+      "8": {
+        "label": "A different direction, the same person",
+        "idea": "Explore without losing the work you already built.",
+        "explanation": "A lane keeps a direction and its documents together. You might explore a trade, freelance work, a creative path, or a CV. Check which lane and job are selected before asking for changes. The underlying history stays consistent.",
+        "example": "A creative portfolio and a job resume may show different parts of your work. Neither needs an invented background."
+      },
+      "9": {
+        "label": "Settings is part of the work",
+        "idea": "Make the workspace fit how you read, think, and choose to share.",
+        "explanation": "Settings covers your coach, reading help, motion, contact details, privacy, security, data and usage. These choices affect the whole experience. The separate settings lesson walks through each group and points to the actual controls. Reading a lesson changes no setting.",
+        "example": "Prefer less movement? Choose Reduce motion. Want shorter explanations? Try Plain language. Sharing choices deserve their own careful look."
+      },
+      "10": {
+        "label": "Access is different from preparation",
+        "idea": "Opening a tool does not mean the work is finished.",
+        "explanation": "The progress guide recommends an order, while your access and remaining AI allowance determine what you can use. You can ask to open a guided tool early. Support and basic practice stay reachable. Other tool, voice and spending limits still apply.",
+        "example": "Passing the optional check opens guided tailoring and application tools immediately. It does not submit an application, add a paid plan, or remove usage limits."
+      },
+      "11": {
+        "label": "Put it into practice",
+        "idea": "You have seen the process. Now choose your next move.",
+        "explanation": "Try the optional six-question check below. Get every answer right to earn immediate guided tool access. There is no timer, no limit on retries, and explanations for anything you miss. You can also leave and come back from Help or Settings.",
+        "example": "This checks your understanding of the tools. It is not a hiring assessment, a credential, or a judgment of your ability."
+      }
+    }
+  },
+  "quiz": {
+    "accessSavedLessonFailed": "Your access is saved, but the lesson could not be completed. Try again.",
+    "resultNotConfirmed": "The result could not be confirmed. Your answers are still here. Try again.",
+    "upgradeNotConfirmed": "The upgrade could not be confirmed. Retry safely.",
+    "timedOut": "The request timed out. Your answers are still here. Retry to check and recover the upgrade.",
+    "earnedEyebrow": "Understanding earned. Ready to use.",
+    "knowWay": "You know your way forward.",
+    "toolsOpen": "Your tools are open.",
+    "passConfirmed": "Your orientation pass is confirmed. Any access you already had stays in place.",
+    "passedAll": "You passed every question. Guided tailoring and application tools are open on your account. Any access you already had stays in place.",
+    "tailorReal": "Tailor for a real job",
+    "prepareApp": "Prepare my application",
+    "limitsUnchanged": "Your usage limits and sponsored features are unchanged. Your actual career milestones still come from the work you do.",
+    "allowMotion": "Allow celebration motion",
+    "keepStill": "Keep celebration still",
+    "checkAria": "Optional orientation check",
+    "questionOf": "Question {number} of {total}",
+    "upgradeSaved": "Your upgrade is saved. Practice again if you like.",
+    "sixQuestions": "Six short questions. All six correct opens guided tools. No timer. Retry as often as you like.",
+    "earlierUnknown": "Your earlier result could not be checked. Answering again safely confirms the same upgrade.",
+    "reviewLesson": "Review: {lesson}.",
+    "scoreResult": "{correct} of {total} correct. Review the explanations and try again. Existing access stays in place.",
+    "checkingAnswers": "Checking your answers and confirming access",
+    "back": "Back",
+    "confirming": "Confirming…",
+    "nextQuestion": "Next question",
+    "retryRecover": "Retry and recover my result",
+    "checkRevised": "Check my revised answers",
+    "checkUnlock": "Check answers and unlock",
+    "pauseResume": "You can pause and resume in this tab. Reloading clears unfinished answers.",
+    "leavingClears": "Leaving this check clears unfinished answers.",
+    "earnedStays": "Earned access stays on your account.",
+    "questions": {
+      "facts": {
+        "prompt": "t.ROY adds a claim you can't check. What belongs in your resume?",
+        "choices": {
+          "0": "Anything that sounds good.",
+          "1": "Facts I can explain and support.",
+          "2": "Whatever t.ROY writes."
+        }
+      },
+      "target": {
+        "prompt": "You want a different job. What changes?",
+        "choices": {
+          "0": "My work history.",
+          "1": "Nothing. Send the same page.",
+          "2": "Choose details for this job. Keep the facts."
+        }
+      },
+      "application": {
+        "prompt": "When do you mark a job Applied?",
+        "choices": {
+          "0": "After submitting to the employer.",
+          "1": "When the packet is ready.",
+          "2": "When I save the job."
+        }
+      },
+      "privacy": {
+        "prompt": "An organization gives you access. Before sharing, check:",
+        "choices": {
+          "0": "Only its name.",
+          "1": "Nothing. Access means sharing everything.",
+          "2": "What is shared and who sees it."
+        }
+      },
+      "limits": {
+        "prompt": "What does passing this check do?",
+        "choices": {
+          "0": "Gives unlimited AI.",
+          "1": "Opens guided tools. Usage limits still apply.",
+          "2": "Completes my job preparation."
+        }
+      },
+      "practice": {
+        "prompt": "You can't explain a line in your answer. What helps?",
+        "choices": {
+          "0": "Memorize it.",
+          "1": "Fix it. Practice a real example in my words.",
+          "2": "Add stronger claims."
+        }
+      }
+    },
+    "lessonNames": {
+      "facts": "Strong starts with true",
+      "target": "My resumes",
+      "application": "Applications",
+      "privacy": "Settings",
+      "limits": "Try what you learned",
+      "practice": "Interview prep"
+    }
+  },
+  "accessRequest": {
+    "titleReply": "Reply to Troy about {label}",
+    "titleFeedback": "Share honest feedback",
+    "titleBug": "Report a problem",
+    "titleAiBonus": "Ask for extra AI actions",
+    "titleUnlock": "Ask t.ROY to open {label}",
+    "saveFailed": "That request did not save. Try again.",
+    "resultUnconfirmed": "The result could not be confirmed. Try again with the same request.",
+    "requestUnconfirmed": "The request could not be confirmed. Try again; the same request will be reused.",
+    "coachLine": "t.ROY · your AI coach",
+    "closeAria": "Close access request",
+    "close": "Close",
+    "descReply": "Answer Troy’s question in your own words. You choose what to share.",
+    "descFeedback": "Tell us what happened and what would help. You will review the summary before sending it to Troy.",
+    "descAiBonus": "Tell me what you want to finish. Extra actions depend on approved rewards and account limits.",
+    "descUnlock": "This guided tool normally follows saved preparation. Tell me why opening it now would help.",
+    "earlyAccessNote": "Early access opens a tool. It does not mark the preparation completed. You do not need to share personal hardship.",
+    "troyAsked": "Troy asked: {note}",
+    "yourReply": "Your reply",
+    "whatNeed": "What do you need to do?",
+    "addMore": "Add a little more so I know what you need.",
+    "shortEnough": "A short sentence is enough.",
+    "needsReview": "Troy needs to review this request.",
+    "summaryLabel": "Summary Troy will see",
+    "sharesNote": "This shares the request and selected tool. Your chat transcript is not attached. There is no promised response time.",
+    "agreeShare": "I agree to share this summary with Troy for review.",
+    "editReason": "Edit my reason",
+    "replyNote": "Your reply above will be added to this existing request. No chat transcript is attached.",
+    "agreeReply": "I agree to send this reply to Troy.",
+    "keepWorking": "Keep working",
+    "checking": "Checking...",
+    "sendReply": "Send reply to Troy",
+    "sendRequest": "Send request to Troy",
+    "askTroy": "Ask t.ROY",
+    "allowanceUpdated": "Your allowance was updated.",
+    "earlyOpen": "Early access is open.",
+    "savedForReview": "Your request is saved for review.",
+    "notGranted": "This request was not granted.",
+    "progressNote": "Your progress still reflects the work you have saved.",
+    "keepGoing": "Keep going"
+  },
+  "celebration": {
+    "dismissAria": "Dismiss achievement",
+    "close": "Close",
+    "earned": "You earned this",
+    "keepStill": "Keep celebrations still"
+  },
+  "progressOverview": {
+    "aiActions": "AI actions",
+    "leftToday": "left in today’s count",
+    "availableCount": "available",
+    "until": "until {when}",
+    "currentAllowance": "Your current allowance",
+    "limitsApply": "Account and operation limits still apply.",
+    "extraNoRemove": "Extra actions do not remove this limit.",
+    "askExtra": "Ask for extra AI actions",
+    "processAria": "Your process",
+    "loadFailed": "Your process could not be loaded. Your saved work is still available.",
+    "tryAgain": "Try again",
+    "loading": "Loading your process...",
+    "yourNextAction": "Your next action",
+    "yourProcess": "Your process",
+    "chosenFirst": "Your chosen work comes first. Your saved process is shown below.",
+    "oneStep": "One saved step at a time. Early access and completed preparation are shown separately.",
+    "askOpen": "Ask t.ROY to open this",
+    "seeSteps": "See your steps, rewards and access",
+    "careerProcessAria": "Career process",
+    "appRecorded": "Application recorded by you.",
+    "existingAccess": "Your existing tool access is retained. The process shows preparation you can build on.",
+    "nextReward": "Next reward",
+    "sooner": "Need a guided tool sooner? Use its lock to ask t.ROY. Support, practice and your saved documents stay reachable. Public reviews are optional and do not earn AI credits.",
+    "shareFeedback": "Share honest feedback",
+    "reportProblem": "Report a problem",
+    "bonusNote": "Useful feedback or a reproducible bug may earn a small AI bonus after review. Good or bad, tell us what happened.",
+    "yourRequests": "Your access requests",
+    "accountRequest": "Account request",
+    "replyToTroy": "Reply to Troy",
+    "keepMoving": "Keep your work moving",
+    "steps": {
+      "foundation": {
+        "label": "Your starting resume",
+        "reason": "Save your starting resume."
+      },
+      "direction": {
+        "label": "Choose a job",
+        "reason": "Save a real opening you want to pursue."
+      },
+      "tailor": {
+        "label": "Tailor your resume",
+        "reason": "Choose a job and a resume so the changes have a clear purpose."
+      },
+      "apply": {
+        "label": "Prepare and apply",
+        "reason": "Save a resume tailored to your chosen job."
+      },
+      "interview": {
+        "label": "Prepare for the interview",
+        "reason": "Record an application or tell us you have an interview. Practice is available anytime."
+      },
+      "offer": {
+        "label": "Your next move",
+        "reason": "Update the application when you receive an offer."
+      }
+    },
+    "state": {
+      "completed": "Completed",
+      "recommendedEarly": "Recommended now · early access",
+      "early": "Early access",
+      "recommended": "Recommended now",
+      "nextLocked": "Next · locked",
+      "nextAvailable": "Next · available",
+      "available": "Available"
+    }
+  },
+  "progress": {
+    "loading": "Loading your progress...",
+    "milestoneHit": "You just hit a milestone: {title}",
+    "title": "Your Progress",
+    "intro": "Every step counts. Here's what you've accomplished and what to do next.",
+    "whatNext": "What to Do Next",
+    "upcoming": "Upcoming",
+    "manageApps": "Manage applications",
+    "followUpWith": "Follow up with {company}",
+    "followUp": "Follow up",
+    "due": "due",
+    "noFollowUps": "No follow-ups scheduled yet. Save a job and set a follow-up date in Applications, and it will show up here.",
+    "roadmap": "Your Roadmap",
+    "roadmapSteps": "{completed}/{total} steps ({percent}%)",
+    "phases": {
+      "foundation": "Foundation",
+      "preparation": "Preparation",
+      "action": "Action",
+      "momentum": "Momentum"
+    },
+    "pipeline": "Your Pipeline",
+    "openTracker": "Open tracker",
+    "stages": {
+      "saved": "Saved",
+      "applied": "Applied",
+      "heard_back": "Heard back",
+      "interviewing": "Interviewing",
+      "offered": "Offered"
+    },
+    "milestones": "Milestones",
+    "milestonesSub": "Just for you. Each one is backed by something you actually did.",
+    "byNumbers": "By the Numbers",
+    "skillsFound": "Skills Found",
+    "careerPaths": "Career Paths",
+    "interviews": "Interviews",
+    "actionsTaken": "Actions Taken",
+    "activityDetail": "Activity Detail",
+    "resumesBuilt": "Resumes built",
+    "disclosurePlans": "Disclosure plans",
+    "practiceInterviews": "Practice interviews",
+    "startedCount": "{count} started",
+    "jobSearches": "Job searches",
+    "applicationsSent": "Applications sent",
+    "boardVisits": "Board visits",
+    "enc0": "Your journey starts with one step. Check out the suggestions above and pick whichever one feels right.",
+    "enc1": "You're building momentum. Every action you take makes the next one easier.",
+    "enc2": "You're putting in real work. This kind of preparation gives you a serious edge.",
+    "enc3": "You've shown serious commitment to your future. That dedication speaks volumes to any employer.",
+    "nodeDone": "Done",
+    "nodeInProgress": "In progress",
+    "nodeNotStarted": "Not started yet",
+    "nodeStatus": "Status:",
+    "revisit": "Revisit {tool}",
+    "goTo": "Go to {tool}",
+    "tools": {
+      "forge": "The Forge",
+      "dashboard": "your dashboard",
+      "resources": "Resources",
+      "tailor": "the Resume Tailor",
+      "disclosure": "Disclosure",
+      "interview": "Interview Practice",
+      "jobs": "the Job Board",
+      "thisTool": "this tool"
+    }
+  },
+  "steelMan": {
+    "components": {
+      "facts": {
+        "label": "Work facts",
+        "why": "Every true detail you confirm about your work makes every resume stronger."
+      },
+      "lines": {
+        "label": "Lines you stand behind",
+        "why": "Each line you can explain in your own words is a line you can defend in an interview."
+      },
+      "resumes": {
+        "label": "Finished resumes",
+        "why": "A finished resume passed every check and is ready to send."
+      },
+      "lanes": {
+        "label": "Lanes in use",
+        "why": "Each kind of work you aim at gets its own resume, built from the same true facts. A lane counts once it holds a finished resume."
+      },
+      "tailored": {
+        "label": "Tailored to a real job",
+        "why": "A resume shaped to one real job speaks to the person reading it."
+      },
+      "sent": {
+        "label": "Applications sent",
+        "why": "Every application you send puts you in the running."
+      },
+      "practice": {
+        "label": "Interview practice",
+        "why": "Practicing out loud makes the real interview smaller."
+      },
+      "disclosure": {
+        "label": "Disclosure ready",
+        "why": "Having your words ready for the record question puts you in control of it."
+      },
+      "proof": {
+        "label": "Proof gathered",
+        "why": "Every proof document you track down is a fact nobody can argue with."
+      },
+      "feedback": {
+        "label": "Feedback offered",
+        "why": "Telling us what worked and what broke makes this better for the next person."
+      }
+    },
+    "units": {
+      "facts": "{count, plural, =1 {fact} other {facts}}",
+      "lines": "{count, plural, =1 {line} other {lines}}",
+      "resumes": "{count, plural, =1 {resume} other {resumes}}",
+      "lanes": "{count, plural, =1 {lane} other {lanes}}",
+      "tailored": "{count, plural, =1 {job} other {jobs}}",
+      "sent": "{count, plural, =1 {application} other {applications}}",
+      "practice": "{count, plural, =1 {session} other {sessions}}",
+      "disclosure": "{count, plural, =1 {step} other {steps}}",
+      "proof": "{count, plural, =1 {document} other {documents}}",
+      "feedback": "{count, plural, =1 {note} other {notes}}"
+    },
+    "actions": {
+      "facts": {
+        "first": "Confirm one more work fact in your Master Draft",
+        "more": "Confirm one more work fact in your Master Draft"
+      },
+      "lines": {
+        "first": "Explain one more resume line in your own words",
+        "more": "Explain one more resume line in your own words"
+      },
+      "resumes": {
+        "first": "Finish your first resume",
+        "more": "Finish another resume"
+      },
+      "lanes": {
+        "first": "Finish a resume in a lane for the work you want",
+        "more": "Finish a resume for another kind of work"
+      },
+      "tailored": {
+        "first": "Shape a resume to one real job",
+        "more": "Shape a resume to one real job"
+      },
+      "sent": {
+        "first": "Record your first application",
+        "more": "Record one more application you sent"
+      },
+      "practice": {
+        "first": "Practice an interview out loud",
+        "more": "Practice an interview out loud"
+      },
+      "disclosure": {
+        "first": "Build your disclosure plan",
+        "more": "Rehearse your words out loud"
+      },
+      "proof": {
+        "first": "Add one proof document",
+        "more": "Add one proof document"
+      },
+      "feedback": {
+        "first": "Tell us what worked and what broke",
+        "more": "Tell us what worked and what broke"
+      }
+    },
+    "toastUnit": {
+      "facts": "a confirmed fact",
+      "lines": "a line you stand behind",
+      "resumes": "a finished resume",
+      "lanes": "a lane in use",
+      "tailored": "a resume shaped to a job",
+      "sent": "an application sent",
+      "practice": "interview practice",
+      "disclosure": "your words ready",
+      "proof": "a proof document gathered",
+      "feedback": "feedback shared"
+    },
+    "gainLine": "{action}: +{points} {points, plural, =1 {point} other {points}}, about {minutes} minutes.",
+    "allFull": "Every part of the meter is full. Keep using the tools for each new job.",
+    "toastOne": "+{total}: {unit}.",
+    "toastMany": "+{total}: new work saved.",
+    "barScore": "Score {score} of {max}. Band: {band}.",
+    "barNext": "Next mark: {label} at {score}",
+    "barAway": ", {count} points away",
+    "scoreAria": "Steel Man score",
+    "loading": "Loading your Steel Man meter.",
+    "resting": "Your meter is resting. Your work is saved.",
+    "nextPoints": "{count} points to {label}.",
+    "nextThere": "The points for {label} are there. The checklist shows what's left.",
+    "steelManRunning": "Steel Man: your whole job search is built and running.",
+    "meter": "Steel Man meter",
+    "honesty": "Your Steel Man score counts the real work you have done here. It is not a grade on you, and it does not predict hiring.",
+    "of": "of {max}",
+    "forgeCounts": "You built this in the Forge. It counts.",
+    "bands": {
+      "showing_up": {
+        "label": "Showing up",
+        "why": "You started. Every piece of real work moves this bar."
+      },
+      "in_the_game": {
+        "label": "In the game",
+        "why": "You built a resume, aimed it at a real job and sent it.",
+        "whyList": "A resume finished, aimed at a real job and sent.",
+        "neutral": "Your work is adding up. The first finished, tailored and sent resume is the loop this mark stands for."
+      },
+      "covering_ground": {
+        "label": "Covering ground",
+        "why": "More of the Refinery is working for you."
+      },
+      "putting_in_work": {
+        "label": "Putting in work",
+        "why": "Your work is going wide and deep."
+      },
+      "steel_man": {
+        "label": "Steel Man",
+        "why": "Your whole job search is built and running."
+      },
+      "title": "The marks on the bar",
+      "sub": "Every mark comes from the meter's own math, not round numbers. How it works is at the bottom of this page.",
+      "andUp": "{from} and up",
+      "range": "{from} to {to}",
+      "here": "Your score is here",
+      "checklistTitle": "The Steel Man checklist",
+      "checklistSub": "Steel Man takes breadth, not one tool used over and over. All of these, at the same time:",
+      "srDone": ": done",
+      "srTodo": ": still to do",
+      "done": "Done",
+      "whatLeft": "What is left: {left}"
+    },
+    "more": {
+      "points": "{count, plural, =1 {# more point} other {# more points}}",
+      "facts": "{count, plural, =1 {# more fact} other {# more facts}}",
+      "lines": "{count, plural, =1 {# more line} other {# more lines}}",
+      "lanes": "{count, plural, =1 {# more lane} other {# more lanes}}",
+      "resumes": "{count, plural, =1 {# more finished resume} other {# more finished resumes}}"
+    },
+    "req": {
+      "score": {
+        "label": "A score of {score} or more"
+      },
+      "facts": {
+        "label": "At least {min} confirmed work facts"
+      },
+      "lines": {
+        "label": "At least {min} lines you stand behind on a finished resume"
+      },
+      "breadth": {
+        "label": "{lanes} lanes in use, or {resumes} finished resumes",
+        "left": "{lanes} with a resume in it, or {resumes}"
+      },
+      "every_part": {
+        "label": "Work in all ten parts of the meter",
+        "left": "Not started yet: {list}"
+      },
+      "feedback": {
+        "label": "Honest feedback shared with us",
+        "left": "Tell us what worked and what broke"
+      }
+    },
+    "breakdown": {
+      "title": "Where your points come from",
+      "sub": "Each bar fills with your work. The thin mark is the most that part can hold.",
+      "aria": "{label}: {value} of {max}, {count} {unit}",
+      "valueOf": "{value} of {max}",
+      "points": "points"
+    },
+    "strip": {
+      "title": "Your last 30 days",
+      "summary": "You added work on {days} of the last 30 days. Most on {day}: {units} {units, plural, =1 {item} other {items}}.",
+      "none": "No dated work in the last 30 days yet. Whatever you add next shows up here.",
+      "undated": "Work facts confirmed before dates were kept still count in your score. They just don't show on this strip."
+    },
+    "gains": {
+      "title": "What moves the needle",
+      "sub": "Sorted by points for the time it usually takes. Pick whatever fits your day."
+    },
+    "moments": {
+      "title": "Moments",
+      "sub": "Each one is backed by something you did and saved.",
+      "first": "Your first moment lands with your first saved piece of work.",
+      "review": "Left us a Google review? Tick it here so we can say thanks. Honest reviews help, whatever they say. Nothing here is paid for a review.",
+      "leftReview": "I left a review"
+    },
+    "streak": {
+      "title": "Active weeks",
+      "inARow": "active weeks in a row.",
+      "reserveLeft": "{count, plural, =1 {# reserve week left, so a quiet week won't end it.} other {# reserve weeks left, so a quiet week won't end it.}}",
+      "reserveBack": "Your reserve weeks come back as the weeks roll on.",
+      "explain": "A week counts when you add any work in it. Two weeks in a row starts a streak, and quiet weeks get reserves."
+    },
+    "how": {
+      "title": "How the meter works",
+      "units": "Each part counts real units of work. The first unit counts the most, every doubling adds the same again, and each part stops adding at its limit. So the fastest way up is to use a part you haven't touched yet, not to repeat one.",
+      "marks": "The marks are worked out from that math: {firstLoop} is your first resume, first tailored resume and first application; {everyPart} is every part started once; {breadth} is every part used past its first steps; {depth} is every part used in depth.",
+      "firstOne": "(first one {points} points).",
+      "nothing": "Nothing here looks at speed, logins or time on screen. Going slow doesn't cost you a thing. Removing your own work is your right; the bar just follows what is saved.",
+      "counts": "The meter counts work you did. It does not predict hiring."
+    }
+  },
+  "tierGate": {
+    "title": "Full access requires a partner code",
+    "body": "This tool is available to clients and partners. Try The Forge first. It's free and shows you what we do.",
+    "tryForge": "Try The Forge",
+    "enterCode": "Enter a Partner Code"
+  },
+  "roleProvider": {
+    "loadFailed": "Your account could not be loaded.",
+    "tryAgain": "Try again"
+  }
+}

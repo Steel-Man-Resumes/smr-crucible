@@ -19,6 +19,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { ChevronLeft, ChevronRight, Pause, Play, X } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
 import { CompletionConfetti } from '@/components/CompletionConfetti';
+import { useServerText } from '@/components/ServerTextProvider';
 import { OrientationQuiz, type OrientationDraft } from './OrientationQuiz';
 import { BoardScene, ChartScene, LockScene, MeterScene, TitleScene, ASK_POINT, CLICK_AT } from './TourScenes';
 import { PortraitBoard, PortraitChart, PortraitLock, PortraitMeter, PortraitTitle } from './TourPortrait';
@@ -83,6 +84,7 @@ function stageCopy(beat: StageBeat, forgeComplete?: boolean) {
 
 export function TourPlayer(props: TourPlayerProps) {
   const { start, onBeat, onLeave, onNavigationReveal, accountId, forgeComplete } = props;
+  const ts = useServerText();
   const [i, setI] = useState(() => Math.max(0, Math.min(ENDING_INDEX, start)));
   const [systemReduced, setSystemReduced] = useState(osReduced);
   const [quiet, setQuiet] = useState(() => readQuiet(accountId));
@@ -196,12 +198,12 @@ export function TourPlayer(props: TourPlayerProps) {
   const roomPos = roomBeat ? roomList.indexOf(i) + 1 : 0;
   const stationIndex = stageBeat?.station ? BOARD_STATIONS.findIndex(s => s.id === stageBeat.station) + 1 : 0;
   useEffect(() => {
-    if (ending) { setAnnounce(`${TOUR_ENDING.title} ${TOUR_ENDING.quizLine}`); return; }
+    if (ending) { setAnnounce(`${ts(TOUR_ENDING.title)} ${ts(TOUR_ENDING.quizLine)}`); return; }
     if (roomBeat && !roomOk) return;
-    const where = roomBeat ? TOUR_COPY.roomOf(roomPos, roomList.length) : TOUR_COPY.stepOf(i + 1, FIRST_ROOM);
-    const head = stageBeat?.station ? `${TOUR_COPY.moveOf(stationIndex, BOARD_STATIONS.length)}, ${BOARD_STATIONS[stationIndex - 1].label}.` : /[.!?]$/.test(copy.title) ? copy.title : `${copy.title}.`;
-    setAnnounce(`${where}. ${head} ${copy.body}${stageBeat ? ` ${'sr' in copy ? copy.sr : ''}` : ''}`);
-  }, [i, roomOk]); // eslint-disable-line react-hooks/exhaustive-deps
+    const where = ts(roomBeat ? TOUR_COPY.roomOf(roomPos, roomList.length) : TOUR_COPY.stepOf(i + 1, FIRST_ROOM));
+    const head = stageBeat?.station ? `${ts(TOUR_COPY.moveOf(stationIndex, BOARD_STATIONS.length))}, ${ts(BOARD_STATIONS[stationIndex - 1].label)}.` : /[.!?]$/.test(copy.title) ? ts(copy.title) : `${ts(copy.title)}.`;
+    setAnnounce(`${where}. ${head} ${ts(copy.body)}${stageBeat ? ` ${'sr' in copy ? ts(copy.sr) : ''}` : ''}`);
+  }, [i, roomOk, ts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Act one camera. Phones use portrait scenes and a scale floor that keeps text at 13 px or more. */
   const panAt = Math.round(hold * 0.42);
@@ -349,17 +351,17 @@ export function TourPlayer(props: TourPlayerProps) {
   const progress = hold ? Math.min(1, elapsed / hold) : 0;
   const t = elapsed;
 
-  const motionButton = <button type="button" className="et-motion" onClick={toggleMotion} disabled={systemReduced} aria-label={reduced ? TOUR_COPY.motionToggleOn : TOUR_COPY.motionToggleOff}>
-    {reduced ? TOUR_COPY.motionToggleOn : TOUR_COPY.motionToggleOff}
+  const motionButton = <button type="button" className="et-motion" onClick={toggleMotion} disabled={systemReduced} aria-label={ts(reduced ? TOUR_COPY.motionToggleOn : TOUR_COPY.motionToggleOff)}>
+    {ts(reduced ? TOUR_COPY.motionToggleOn : TOUR_COPY.motionToggleOff)}
   </button>;
 
   const controls = (compact: boolean) => <div className={compact ? 'et-bar__row' : 'et-bar'} data-compact={compact}>
     <div className="et-bar__row">
-      <button type="button" onClick={() => go(i - 1)} disabled={i === 0} aria-label={TOUR_COPY.previous}><ChevronLeft size={18} aria-hidden="true" /></button>
-      <button ref={playRef} type="button" className="et-primary" onClick={toggle} aria-label={playing ? TOUR_COPY.pause : TOUR_COPY.play}>
-        {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{!compact && <span aria-hidden="true">{playing ? TOUR_COPY.pause : TOUR_COPY.play}</span>}
+      <button type="button" onClick={() => go(i - 1)} disabled={i === 0} aria-label={ts(TOUR_COPY.previous)}><ChevronLeft size={18} aria-hidden="true" /></button>
+      <button ref={playRef} type="button" className="et-primary" onClick={toggle} aria-label={ts(playing ? TOUR_COPY.pause : TOUR_COPY.play)}>
+        {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{!compact && <span aria-hidden="true">{ts(playing ? TOUR_COPY.pause : TOUR_COPY.play)}</span>}
       </button>
-      <button type="button" onClick={() => go(i + 1)} aria-label={TOUR_COPY.next}><ChevronRight size={18} aria-hidden="true" /></button>
+      <button type="button" onClick={() => go(i + 1)} aria-label={ts(TOUR_COPY.next)}><ChevronRight size={18} aria-hidden="true" /></button>
       {!compact && portrait && <span className="et-bar__grow" />}
       {!compact && !portrait && <div className="et-bar__grow et-segs" role="presentation">
         {TOUR_BEATS.map((b, n) => (b.kind === 'room' && roomOk && !roomOk[n]) ? null : <button key={b.id} type="button" className="et-seg" tabIndex={-1} aria-hidden="true" data-gap={n > 0 && TOUR_BEATS[n - 1].chapter !== b.chapter} onClick={() => go(n)}>
@@ -368,30 +370,30 @@ export function TourPlayer(props: TourPlayerProps) {
       </div>}
       {compact && <span className="et-bar__grow" />}
       {!compact && !portrait && motionButton}
-      <button type="button" onClick={onLeave} aria-label={`${TOUR_COPY.leave}. Escape`}><X size={16} aria-hidden="true" />{!compact && !portrait && <span aria-hidden="true">{TOUR_COPY.leave}</span>}</button>
+      <button type="button" onClick={onLeave} aria-label={ts(`${TOUR_COPY.leave}. Escape`)}><X size={16} aria-hidden="true" />{!compact && !portrait && <span aria-hidden="true">{ts(TOUR_COPY.leave)}</span>}</button>
     </div>
     {!compact && (portrait
       ? <div className="et-bar__row">
-          <select className="et-chapsel" aria-label={TOUR_COPY.chapter} value={chapterIndex} onChange={e => { const n = Number(e.target.value); go(n >= TOUR_CHAPTERS.length ? ENDING_INDEX : CHAPTER_START[n]); }}>
-            {TOUR_CHAPTERS.map((c, n) => <option key={c.id} value={n}>{`${TOUR_COPY.chapter} ${n + 1} of ${TOUR_CHAPTERS.length + 1}: ${c.label}`}</option>)}
-            <option value={TOUR_CHAPTERS.length}>{`${TOUR_COPY.chapter} ${TOUR_CHAPTERS.length + 1} of ${TOUR_CHAPTERS.length + 1}: Finish`}</option>
+          <select className="et-chapsel" aria-label={ts(TOUR_COPY.chapter)} value={chapterIndex} onChange={e => { const n = Number(e.target.value); go(n >= TOUR_CHAPTERS.length ? ENDING_INDEX : CHAPTER_START[n]); }}>
+            {TOUR_CHAPTERS.map((c, n) => <option key={c.id} value={n}>{ts(`${TOUR_COPY.chapter} ${n + 1} of ${TOUR_CHAPTERS.length + 1}: ${ts(c.label)}`)}</option>)}
+            <option value={TOUR_CHAPTERS.length}>{ts(`${TOUR_COPY.chapter} ${TOUR_CHAPTERS.length + 1} of ${TOUR_CHAPTERS.length + 1}: ${ts('Finish')}`)}</option>
           </select>
           {motionButton}
         </div>
-      : <div className="et-chaps" role="group" aria-label="Chapters">
-          {TOUR_CHAPTERS.map((c, n) => <button key={c.id} type="button" className="et-chap" aria-current={n === chapterIndex} onClick={() => go(CHAPTER_START[n])}>{String(n + 1).padStart(2, '0')} {c.label}</button>)}
-          <button type="button" className="et-chap" aria-current={ending} onClick={() => go(ENDING_INDEX)}>{String(TOUR_CHAPTERS.length + 1).padStart(2, '0')} Finish</button>
+      : <div className="et-chaps" role="group" aria-label={ts("Chapters")}>
+          {TOUR_CHAPTERS.map((c, n) => <button key={c.id} type="button" className="et-chap" aria-current={n === chapterIndex} onClick={() => go(CHAPTER_START[n])}>{String(n + 1).padStart(2, '0')} {ts(c.label)}</button>)}
+          <button type="button" className="et-chap" aria-current={ending} onClick={() => go(ENDING_INDEX)}>{String(TOUR_CHAPTERS.length + 1).padStart(2, '0')} {ts('Finish')}</button>
         </div>)}
-    {!compact && reduced && <p className="et-note">{TOUR_COPY.motionOff}</p>}
+    {!compact && reduced && <p className="et-note">{ts(TOUR_COPY.motionOff)}</p>}
   </div>;
 
-  const kicker = stageBeat?.station ? `${TOUR_COPY.moveOf(stationIndex, BOARD_STATIONS.length)} · ${TOUR_COPY.guide}` : `${TOUR_CHAPTERS[chapterIndex]?.label} · ${TOUR_COPY.guide}`;
+  const kicker = stageBeat?.station ? `${ts(TOUR_COPY.moveOf(stationIndex, BOARD_STATIONS.length))} · ${TOUR_COPY.guide}` : `${ts(TOUR_CHAPTERS[chapterIndex]?.label as string)} · ${TOUR_COPY.guide}`;
   const caption = stageBeat && stageBeat.scene !== 'title' && <div key={`cap-${i}`} className={`et-cap${portrait ? ' et-cap--narrow' : ''}`}>
     <span ref={markRef} className="et-cap__mark"><TroyLivingIcon size={portrait ? 36 : 46} attention={!!particles} /></span>
     <div>
       <p className="et-cap__k">{kicker}</p>
-      {copy.title && <p className="et-cap__t">{copy.title}</p>}
-      <p className="et-cap__b">{copy.body}</p>
+      {copy.title && <p className="et-cap__t">{ts(copy.title)}</p>}
+      <p className="et-cap__b">{ts(copy.body)}</p>
     </div>
   </div>;
 
@@ -415,8 +417,8 @@ export function TourPlayer(props: TourPlayerProps) {
       : stageBeat.scene === 'chart' ? <ChartScene phase={stageBeat.chart ?? 'rows'} t={t} still={still} rows={ROWS} gap={GAP} />
       : <MeterScene t={t} still={still} />);
 
-  return <div className="et-root" role="dialog" aria-modal="true" aria-label={TOUR_COPY.dialogLabel} aria-describedby="et-keys" data-playing={running} data-act={ending ? 'end' : roomBeat ? 'room' : 'stage'} data-beat={beat?.id ?? 'ending'}>
-    <p id="et-keys" className="et-sr">{TOUR_COPY.keys}</p>
+  return <div className="et-root" role="dialog" aria-modal="true" aria-label={ts(TOUR_COPY.dialogLabel)} aria-describedby="et-keys" data-playing={running} data-act={ending ? 'end' : roomBeat ? 'room' : 'stage'} data-beat={beat?.id ?? 'ending'}>
+    <p id="et-keys" className="et-sr">{ts(TOUR_COPY.keys)}</p>
     <p className="et-sr" aria-live="polite">{announce}</p>
 
     {stageBeat && <div className="et-wrap" data-shrink={!!shrink} style={shrinkStyle}>
@@ -443,11 +445,11 @@ export function TourPlayer(props: TourPlayerProps) {
       {roomOk && cut && <div ref={setCardEl} key="room-card" className="et-card" data-still={reduced} style={cardStyle}>
         <div className="et-card__head">
           <span ref={markRef}><TroyLivingIcon size={40} attention={!!particles} /></span>
-          <p className="et-cap__k">{TOUR_COPY.roomOf(roomPos, roomList.length)}</p>
+          <p className="et-cap__k">{ts(TOUR_COPY.roomOf(roomPos, roomList.length))}</p>
         </div>
         <div key={`room-${i}`} className="et-card__text" style={{ animation: reduced ? 'none' : 'etCap 420ms cubic-bezier(.16,1,.3,1) both' }}>
-          <p className="et-cap__t">{roomBeat.title}</p>
-          <p className="et-cap__b">{roomBeat.body}</p>
+          <p className="et-cap__t">{ts(roomBeat.title)}</p>
+          <p className="et-cap__b">{ts(roomBeat.body)}</p>
         </div>
         <div className="et-mini" aria-hidden="true"><i style={{ width: `${progress * 100}%` }} /></div>
         {controls(true)}
@@ -463,7 +465,7 @@ export function TourPlayer(props: TourPlayerProps) {
     </svg>}
 
     {props.saveError && !ending && <div className="et-notice" style={{ pointerEvents: 'auto', bottom: roomBeat ? undefined : 120, top: roomBeat ? 16 : undefined }} role="status">
-      <p>{props.saveError}</p>{props.onRetrySave && <button type="button" onClick={props.onRetrySave}>{TOUR_COPY.retrySave}</button>}
+      <p>{ts(props.saveError)}</p>{props.onRetrySave && <button type="button" onClick={props.onRetrySave}>{ts(TOUR_COPY.retrySave)}</button>}
     </div>}
   </div>;
 }
@@ -485,6 +487,7 @@ function Cursor({ t, still, scale }: { t: number; still: boolean; scale: number 
 }
 
 function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, onFinish, onDone, reduced, onBack }: TourPlayerProps & { reduced: boolean; onBack: () => void }) {
+  const ts = useServerText();
   const [quiz, setQuiz] = useState(false);
   const [passed, setPassed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -508,7 +511,9 @@ function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, 
 
   if (reward) {
     const celebrate = rewardCelebrates(reward);
-    const [title, body] = rewardMessage(reward);
+    const [rewardTitle, rewardBody] = rewardMessage(reward);
+    const title = ts(rewardTitle);
+    const body = ts(rewardBody);
     const go = destination || nextStep?.href;
     return <div className="et-end" data-reward={reward.status}>
       {celebrate && !reduced && <CompletionConfetti />}
@@ -518,9 +523,9 @@ function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, 
         <p className="et-reward__big" role="status">{body}</p>
         {error && <p className="et-end__err" role="alert">{error}</p>}
         <div className="et-end__actions">
-          {reward.status === 'unavailable' && <button type="button" className="et-primary" disabled={busy} onClick={() => void finish(destination)}>{busy ? TOUR_ENDING.finishing : TOUR_REWARD_COPY.retry}</button>}
-          {go && <button type="button" className={reward.status === 'unavailable' ? '' : 'et-primary'} onClick={() => onDone(go)}>{TOUR_REWARD_COPY.keepGoing}{!destination && nextStep?.action ? `: ${nextStep.action}` : ''}</button>}
-          <button type="button" onClick={() => onDone()}>{TOUR_REWARD_COPY.close}</button>
+          {reward.status === 'unavailable' && <button type="button" className="et-primary" disabled={busy} onClick={() => void finish(destination)}>{ts(busy ? TOUR_ENDING.finishing : TOUR_REWARD_COPY.retry)}</button>}
+          {go && <button type="button" className={reward.status === 'unavailable' ? '' : 'et-primary'} onClick={() => onDone(go)}>{ts(TOUR_REWARD_COPY.keepGoing)}{!destination && nextStep?.action ? `: ${ts(nextStep.action)}` : ''}</button>}
+          <button type="button" onClick={() => onDone()}>{ts(TOUR_REWARD_COPY.close)}</button>
         </div>
       </div>
     </div>;
@@ -528,21 +533,21 @@ function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, 
 
   return <div className="et-end">
     <div className="et-end__card" role="group" aria-labelledby="et-end-title">
-      <p className="et-end__k">{TOUR_ENDING.eyebrow}</p>
-      <h2 id="et-end-title" ref={heading} tabIndex={-1}>{TOUR_ENDING.title}</h2>
+      <p className="et-end__k">{ts(TOUR_ENDING.eyebrow)}</p>
+      <h2 id="et-end-title" ref={heading} tabIndex={-1}>{ts(TOUR_ENDING.title)}</h2>
       {!quiz && <>
-        <p>{TOUR_ENDING.quizLine}</p>
-        <p className="et-end__small">{TOUR_ENDING.quizNote}</p>
+        <p>{ts(TOUR_ENDING.quizLine)}</p>
+        <p className="et-end__small">{ts(TOUR_ENDING.quizNote)}</p>
       </>}
       {quiz && <OrientationQuiz accountId={accountId} draft={quizDraft} onDraftChange={onQuizDraft} onPassed={() => setPassed(true)} onContinue={href => finish(href)} />}
       {error && <p className="et-end__err" role="alert">{error}</p>}
       <div className="et-end__actions">
-        {!quiz && <button type="button" className="et-primary" onClick={() => setQuiz(true)}>{TOUR_ENDING.quizButton}</button>}
-        {quiz && !passed && <button type="button" onClick={() => setQuiz(false)}>{TOUR_ENDING.quizBack}</button>}
-        <button type="button" className={quiz && passed ? 'et-primary' : ''} disabled={busy} onClick={() => void finish()}>{busy ? TOUR_ENDING.finishing : TOUR_ENDING.finish}</button>
-        {!quiz && <button type="button" onClick={onBack}><ChevronLeft size={16} aria-hidden="true" />{TOUR_ENDING.previous}</button>}
+        {!quiz && <button type="button" className="et-primary" onClick={() => setQuiz(true)}>{ts(TOUR_ENDING.quizButton)}</button>}
+        {quiz && !passed && <button type="button" onClick={() => setQuiz(false)}>{ts(TOUR_ENDING.quizBack)}</button>}
+        <button type="button" className={quiz && passed ? 'et-primary' : ''} disabled={busy} onClick={() => void finish()}>{ts(busy ? TOUR_ENDING.finishing : TOUR_ENDING.finish)}</button>
+        {!quiz && <button type="button" onClick={onBack}><ChevronLeft size={16} aria-hidden="true" />{ts(TOUR_ENDING.previous)}</button>}
       </div>
-      {rewardClaimedAt === null && <p className="et-end__small">{TOUR_ENDING.rewardNote}</p>}
+      {rewardClaimedAt === null && <p className="et-end__small">{ts(TOUR_ENDING.rewardNote)}</p>}
     </div>
   </div>;
 }

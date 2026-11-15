@@ -9,6 +9,7 @@
  */
 
 import type { GroundingScore } from "@/lib/grounding";
+import { useServerText } from "@/components/ServerTextProvider";
 
 const BAND_STYLE = {
   red: {
@@ -32,6 +33,7 @@ const BAND_STYLE = {
 } as const;
 
 export function GroundingGauge({ score }: { score: GroundingScore }) {
+  const ts = useServerText();
   const s = BAND_STYLE[score.band];
 
   return (
@@ -51,8 +53,8 @@ export function GroundingGauge({ score }: { score: GroundingScore }) {
         />
       </div>
 
-      <p className={`text-sm font-semibold ${s.text} mb-1`}>{score.headline}</p>
-      <p className="text-xs text-t-phos-dim leading-relaxed">{score.detail}</p>
+      <p className={`text-sm font-semibold ${s.text} mb-1`}>{ts(score.headline)}</p>
+      <p className="text-xs text-t-phos-dim leading-relaxed">{ts(score.detail)}</p>
 
       {score.missing.length > 0 && (
         <div className="mt-3 border-t border-t-line pt-3">
@@ -63,7 +65,7 @@ export function GroundingGauge({ score }: { score: GroundingScore }) {
             {score.missing.map((m, i) => (
               <li key={i} className="text-[11px] text-t-phos-dim flex gap-2">
                 <span className="text-t-phos-dim flex-shrink-0">--</span>
-                <span>{m}</span>
+                <span>{ts(m)}</span>
               </li>
             ))}
           </ul>

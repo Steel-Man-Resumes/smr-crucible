@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { StatusBadges } from "./StatusBadges";
 import { BaselineSelector } from "./BaselineSelector";
 
@@ -27,20 +28,16 @@ interface SavedApp {
 }
 
 const TERMINAL = ["rejected", "declined"];
-const STATUS_LABEL: Record<string, string> = {
-  applied: "Applied",
-  heard_back: "Heard back",
-  interviewing: "Interviewing",
-  offered: "Offered",
-};
+const STATUS_KEYS = ["applied", "heard_back", "interviewing", "offered"];
 
 export function SavedJobsPanel({
-  heading = "Your saved jobs",
+  heading,
   limit,
 }: {
   heading?: string;
   limit?: number;
 }) {
+  const t = useTranslations("refineryHome.savedJobs");
   const [apps, setApps] = useState<SavedApp[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,16 +68,16 @@ export function SavedJobsPanel({
   return (
     <section>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-lg font-bold text-t-white">{heading}</h2>
+        <h2 className="text-lg font-bold text-t-white">{heading ?? t("heading")}</h2>
         <Link
           href="/dashboard/applications"
           className="t-focus text-xs font-medium text-t-steel hover:text-t-white transition-colors"
         >
-          Open tracker &rarr;
+          {t("openTracker")} &rarr;
         </Link>
       </div>
       <p className="text-xs text-t-phos-dim mb-3">
-        Saved jobs across all your lanes. Open one job to work with its own resume and application.
+        {t("intro")}
       </p>
       <div className="mb-4">
         <BaselineSelector />
@@ -90,14 +87,14 @@ export function SavedJobsPanel({
         {shown.map((app) => {
           const hasResume = !!app.resume_artifact_id;
           const isApplied = !["saved"].includes(app.status);
-          const statusLabel = STATUS_LABEL[app.status];
+          const statusLabel = STATUS_KEYS.includes(app.status) ? t(`status.${app.status}`) : undefined;
 
           // One obvious next action per job.
           const action = !hasResume
-            ? { label: "Tailor resume", primary: true }
+            ? { label: t("tailorResume"), primary: true }
             : app.status === "saved"
-              ? { label: "Open & apply", primary: true }
-              : { label: "Open", primary: false };
+              ? { label: t("openAndApply"), primary: true }
+              : { label: t("open"), primary: false };
 
           return (
             <div
@@ -144,7 +141,7 @@ export function SavedJobsPanel({
           href="/dashboard/applications"
           className="t-focus inline-block mt-3 text-xs font-medium text-t-steel hover:text-t-white transition-colors"
         >
-          + {active.length - limit} more saved {active.length - limit === 1 ? "job" : "jobs"} &rarr;
+          {t("more", { count: active.length - limit })} &rarr;
         </Link>
       )}
     </section>

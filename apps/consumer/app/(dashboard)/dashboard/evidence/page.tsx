@@ -8,12 +8,14 @@
  * Observer: headline view + CTA for partner access
  */
 
+import { useTranslations } from "next-intl";
 import { useUserTier } from "@/lib/useUserTier";
 import { DisclosureSection } from "@/components/DisclosureSection";
 import { TBtn } from "@crucible/consumer-ui";
 import { useForgeWall } from "@/components/forge/useForgeWall";
 
 export default function EvidencePage() {
+  const t = useTranslations("refineryResume.evidence");
   const tier = useUserTier();
   const isPartnerOrAdmin = tier === "partner" || tier === "admin";
   const isObserver = tier === "observer";
@@ -26,12 +28,10 @@ export default function EvidencePage() {
     <div className="max-w-3xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-t-white mb-2">
-          {isPartnerOrAdmin ? "Evidence Deck" : "The Evidence"}
+          {isPartnerOrAdmin ? t("titlePartner") : t("titleClient")}
         </h1>
         <p className="text-base text-t-phos-dim">
-          {isPartnerOrAdmin
-            ? "The research, data, and architecture behind Steel Man Resumes."
-            : "The research and data that powers your results."}
+          {isPartnerOrAdmin ? t("subtitlePartner") : t("subtitleClient")}
         </p>
       </div>
 
@@ -39,13 +39,11 @@ export default function EvidencePage() {
       {isObserver && (
         <div className="mb-8 bg-t-panel p-5 border border-t-line">
           <p className="text-sm text-t-phos mb-3">
-            You&apos;re seeing a summary. The full evidence deck with citations,
-            competitive analysis, and architecture decisions is available to
-            partner organizations.
+            {t("observer")}
           </p>
           <div className="flex gap-3">
-            <TBtn href="https://forge.steelmanresumes.com" size="sm">try The Forge</TBtn>
-            <TBtn href="/dashboard/settings" variant="ghost" size="sm">enter partner code</TBtn>
+            <TBtn href="https://forge.steelmanresumes.com" size="sm">{t("tryForge")}</TBtn>
+            <TBtn href="/dashboard/settings" variant="ghost" size="sm">{t("partnerCode")}</TBtn>
           </div>
         </div>
       )}
@@ -53,20 +51,20 @@ export default function EvidencePage() {
       {/* Key numbers — always visible */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-t-white mb-4">
-          The Numbers
+          {t("numbers")}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-t-panel border border-t-line p-4 text-center">
             <p className="text-2xl font-bold text-t-amber-bright">70M+</p>
-            <p className="text-sm text-t-phos-dim mt-1">Americans with criminal records</p>
+            <p className="text-sm text-t-phos-dim mt-1">{t("n1")}</p>
           </div>
           <div className="bg-t-panel border border-t-line p-4 text-center">
             <p className="text-2xl font-bold text-t-amber-bright">&lt;50%</p>
-            <p className="text-sm text-t-phos-dim mt-1">Employed in year 1 post-release</p>
+            <p className="text-sm text-t-phos-dim mt-1">{t("n2")}</p>
           </div>
           <div className="bg-t-panel border border-t-line p-4 text-center">
             <p className="text-2xl font-bold text-t-amber-bright">$7,500</p>
-            <p className="text-sm text-t-phos-dim mt-1">Median earnings, first year</p>
+            <p className="text-sm text-t-phos-dim mt-1">{t("n3")}</p>
           </div>
         </div>
       </section>
@@ -75,7 +73,7 @@ export default function EvidencePage() {
       {!isObserver && (
         <section className="mb-10">
           <h2 className="text-xl font-semibold text-t-white mb-4">
-            Research Citations
+            {t("citations")}
           </h2>
           {isPartnerOrAdmin ? (
             <div className="space-y-3">
@@ -87,7 +85,7 @@ export default function EvidencePage() {
                   <p className="text-sm text-t-phos-dim italic mt-0.5">{cite.title}</p>
                   {cite.finding && (
                     <p className="text-sm text-t-phos mt-2 bg-t-panel-2 px-3 py-2">
-                      {cite.finding}
+                      {t(`finding.${i}`)}
                     </p>
                   )}
                 </div>
@@ -98,15 +96,15 @@ export default function EvidencePage() {
             <div className="space-y-2">
               {CITATIONS.slice(0, 3).map((cite, i) => (
                 <div key={i} className="bg-t-panel p-3 border border-t-line">
-                  <p className="text-sm text-t-white">{cite.finding}</p>
+                  <p className="text-sm text-t-white">{t(`finding.${i}`)}</p>
                   <p className="text-xs text-t-amber-bright mt-1">{cite.authors} ({cite.year})</p>
                 </div>
               ))}
-              <DisclosureSection title="More research" summary={`${CITATIONS.length - 3} more citations`}>
+              <DisclosureSection title={t("moreResearch")} summary={t("moreCitations", { count: CITATIONS.length - 3 })}>
                 <div className="space-y-3">
                   {CITATIONS.slice(3).map((cite, i) => (
                     <div key={i} className="bg-t-panel p-3 border border-t-line">
-                      <p className="text-sm text-t-white">{cite.finding}</p>
+                      <p className="text-sm text-t-white">{t(`finding.${i + 3}`)}</p>
                       <p className="text-xs text-t-amber-bright mt-1">{cite.authors} ({cite.year})</p>
                     </div>
                   ))}
@@ -120,12 +118,12 @@ export default function EvidencePage() {
       {/* Gap Analysis — always visible, trimmed for clients */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-t-white mb-4">
-          {isPartnerOrAdmin ? "The Gap: What No Other Tool Does" : "Why This Tool Is Different"}
+          {isPartnerOrAdmin ? t("gapPartner") : t("gapClient")}
         </h2>
         <div className="space-y-3">
           {GAPS.map((gap, i) => (
             <div key={i} className="bg-t-panel p-4 border border-t-line">
-              <p className="text-sm font-medium text-t-white">{gap.gap}</p>
+              <p className="text-sm font-medium text-t-white">{t(`gap.${i}`)}</p>
               {isPartnerOrAdmin && (
                 <p className="text-xs text-t-phos-dim mt-1">{gap.detail}</p>
               )}

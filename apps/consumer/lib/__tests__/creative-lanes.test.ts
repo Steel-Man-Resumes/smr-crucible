@@ -11,6 +11,11 @@ import { join } from "node:path";
 import { planForgePath, findQuestion, ANSWER_KEY } from "../forge-path";
 import * as copy from "../creative";
 import { LANE_ERROR_COPY } from "../lanes";
+import { FACILITY_ASK_NO, FACILITY_ASK_YES } from "@crucible/core/src/creativeChecks";
+import { MESSAGES } from "../../messages";
+
+/** An English catalog value by dotted path (namespace first), for copy that moved out of the components. */
+const cat = (path: string): string => path.split(".").reduce<any>((o, k) => o?.[k], MESSAGES.en);
 
 const APP = join(__dirname, "..", "..");
 
@@ -213,9 +218,14 @@ test("review s2r3: the export passes each document's printed ids; one-tap answer
   const lane = rd("app", "api", "creative", "[laneId]", "route.ts");
   assert.match(lane, /body\.phraseAnswer[\s\S]*?if \(g\.impersonating\) return ownerOnly\(\);[\s\S]*?applyPhraseAnswer\(current, pa\.phrase, pa\.answer\)/);
   const items = rd("components", "creative", "OpenItems.tsx");
-  assert.match(items, /FACILITY_ASK_YES, FACILITY_ASK_NO/);
+  // The one-tap labels now come from the catalog; the catalog's English must equal the core constants so the two cannot drift,
+  // and the card must read both keys (yes label first, no label second) for the facility-word question.
+  assert.equal(cat("refineryResume.creative.openItems.facilityYes"), FACILITY_ASK_YES);
+  assert.equal(cat("refineryResume.creative.openItems.facilityNo"), FACILITY_ASK_NO);
+  assert.match(items, /\[t\("facilityYes"\), t\("facilityNo"\)\]/);
   for (const v of ["CvLaneView.tsx", "CreativeLaneView.tsx", "PerformerLaneView.tsx"]) assert.match(rd("components", "creative", v), /OpenItemAnswersContext\.Provider value=\{answers\}/);
   // The performer screen answers through the same PUT, one phrase at a time.
   assert.match(rd("components", "creative", "PerformerLaneView.tsx"), /put\(\{ phraseAnswer: \{ phrase, answer: yes \? "yes" : "no" \} \}, \(s\) => applyPhraseAnswer\(s, phrase, yes \? "yes" : "no"\) \?\? s\)/);
-  assert.match(rd("components", "creative", "PracticeRecordPanel.tsx"), /Other names people use for it \(optional\)/);
+  assert.equal(cat("refineryResume.creative.practice.otherNames"), "Other names people use for it (optional)");
+  assert.match(rd("components", "creative", "PracticeRecordPanel.tsx"), /label=\{t\("otherNames"\)\}/);
 });
