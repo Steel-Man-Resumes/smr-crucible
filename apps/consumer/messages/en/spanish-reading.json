@@ -2,7 +2,7 @@
   "button": "Read in Spanish",
   "title": "Spanish reading of your resume",
   "notResume": "This reading is not your resume. Your resume stays in English.",
-  "machine": "The Spanish was written by a computer and checked by a computer, not by a person.",
+  "machine": "A computer wrote this Spanish. An automatic check only compares numbers and names, and no person has read it.",
   "feedbackLead": "Tell us if something reads wrong:",
   "feedbackLink": "Help and feedback",
   "loading": "Preparing your reading...",

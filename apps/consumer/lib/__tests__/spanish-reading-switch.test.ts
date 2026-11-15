@@ -167,7 +167,7 @@ describe("the panel's words", () => {
     assert.match(es.title, /Lectura en español de tu currículum/);
     assert.match(es.notResume, /no es tu currículum/);
     assert.match(es.notResume, /sigue en inglés/);
-    assert.match(es.machine, /lo escribió una computadora y lo revisó una computadora, no una persona/);
+    assert.match(es.machine, /Una computadora escribió este español\. Una revisión automática solo compara los números y los nombres, y ninguna persona lo ha leído/);
     assert.match(es.feedbackLead, /Avísanos si algo se lee mal/);
     assert.match(es.missingLine, /^Revisa estos datos, no los pudimos comprobar: \{items\}$/);
   });
@@ -177,7 +177,7 @@ describe("the panel's words", () => {
     assert.doesNotMatch(all, /revisad[oa] por (?:una persona|un traductor|un hablante)/i);
     assert.doesNotMatch(all, /traducción (?:oficial|certificada|profesional)/i);
     assert.doesNotMatch(all, /descarga|exporta|copia (?:esto|la lectura)|usa (?:esto|la lectura) como/i);
-    assert.match(all, /no una persona/);
+    assert.match(all, /ninguna persona lo ha leído/);
   });
 
   it("the open panel shows the plain statements, the help link and no export, copy or download control", () => {
@@ -204,7 +204,7 @@ describe("the open panel, state by state (Spanish)", () => {
     const html = panel({ kind: "loading" });
     assert.match(html, /Lectura en español de tu currículum/);
     assert.match(html, /Esta lectura no es tu currículum\. Tu currículum sigue en inglés\./);
-    assert.match(html, /lo escribió una computadora y lo revisó una computadora, no una persona/);
+    assert.match(html, /Una computadora escribió este español\. Una revisión automática solo compara los números y los nombres, y ninguna persona lo ha leído/);
     assert.match(html, /href="\/dashboard\/help"[^>]*>Ayuda y comentarios</);
   });
 
