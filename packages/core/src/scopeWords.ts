@@ -16,6 +16,7 @@
 
 import { namedCredentialRe } from "./credentialWords";
 import { jobBlockText, resolvePageJob } from "./jobResolver";
+import { esScopeHits } from "./scopeLexicon";
 
 export type ScopeFamily =
   | "supervise"
@@ -107,6 +108,8 @@ export interface ScopeHit {
   role?: boolean;
   /** Round 13 (SF-3, SF-4): the role as a job title, as written ("shift lead", "Lead custodian"). */
   title?: string;
+  /** Spanish lane E: a hit read from Spanish words (scopeLexicon). Only the person's own line, word for word, clears it. */
+  es?: true;
 }
 
 // Round 13 (SF-3): "Lead custodian", "Lead cook", "Lead warehouse associate": a job title, not "led the custodians".
@@ -448,7 +451,7 @@ const PAGE_NOT_DONE_BEFORE = /\b(?:would|will|can|could|'d|'ll|hope|hoping|want|
 const TRAINED_ADJ_BEFORE = /(?:[A-Za-z0-9][-\u2010-\u2015]|\b(?:cross|forklift|osha|haccp|servsafe|safety|cpr|hazmat|equipment|fully|well|highly|newly|properly|lift|reach|crane)\s+)$/i;
 
 /** Every scope claim in a page line. */
-export function scopeHits(line: string): ScopeHit[] {
+export function scopeHits(line: string, opts: { locale?: "en" | "es" } = {}): ScopeHit[] {
   // Round 9: a known credential's name is not a scope claim ("I hold a current ServSafe Food Protection
   // Manager certification"); the credential is asked about on its own.
   const text = straightQuotes(line || "").replace(namedCredentialRe(), (x) => (/\b(?:manager|master|supervisor|lead)\b/i.test(x) ? "x".repeat(x.length) : x));
@@ -479,9 +482,14 @@ export function scopeHits(line: string): ScopeHit[] {
     }
   }
   // A role word inside another claim is that claim's people ("trained new team leads"), not a role of the person's.
-  return found
+  const english = found
     .filter((h) => !(h.role && found.some((o) => o !== h && !o.role && o.at <= h.at && o.end >= h.end)))
     .map(({ family, word, noun, nouns, objects, shared, role, title }) => ({ family, word, noun, nouns, objects, ...(shared ? { shared } : {}), ...(role ? { role } : {}), ...(role && title ? { title } : {}) }));
+  // Spanish lane E: with locale "es" the Spanish scope words are read too, after the English ones (so the first hit
+  // of an English line is the same as before). Nothing here removes or changes an English hit.
+  if (opts.locale !== "es") return english;
+  const spanish: ScopeHit[] = esScopeHits(line || "").map((h) => ({ family: h.family, word: h.word, ...(h.nouns[0] ? { noun: h.nouns[0] } : {}), nouns: h.nouns, ...(h.role ? { role: true } : {}), es: true as const }));
+  return [...english, ...spanish];
 }
 
 // The person's own words are read a little more loosely than the page: a
@@ -894,6 +902,8 @@ function objectKey(text: string): string {
 export interface ScopeContext {
   /** The page's job header line this line sits under ("FORKLIFT DRIVER | Northgate Supply | ..."), when known. */
   job?: string;
+  /** "es" also reads Spanish scope words on the line (scopeLexicon). Default: English only, as before. */
+  locale?: "en" | "es";
 }
 
 /** The one-tap question for a people-scope claim (r2 ruling). */
@@ -951,12 +961,16 @@ export function scopeHitsNotTheirs(line: string, sourceText: string, ctx: ScopeC
   const job: JobResolution = ctx.job ? resolveJob(sourceText, ctx.job) : { kind: "none" };
   const peopleSrc = job.kind === "block" ? job.text : sourceText;
   const ownJob = job.kind === "unresolved" ? false : job.kind === "block" ? isOwnLine(line, peopleSrc) || ownSentence(line, peopleSrc) : ownWhole;
-  const hits = scopeHits(line);
+  const hits = scopeHits(line, { locale: ctx.locale });
   if (ownWhole && ownJob) return [];
   const theirs = personClaims(sourceText);
   const theirsPeople = job.kind === "unresolved" ? [] : job.kind === "block" ? personClaims(peopleSrc) : theirs;
   const at = straightQuotes(line).toLowerCase();
   return hits.filter((h) => {
+    // Spanish lane E: a Spanish claim is cleared only by the person's own line word for word, never by an English
+    // claim of theirs (a Spanish source with an English output still fails closed). Mirrors the people-scope and
+    // plain branches below for what "their own line" means.
+    if (h.es) return isPeopleScopeHit(h) ? !ownJob : !ownWhole;
     // Round 13 (SF-3): a role that is one of their own job titles ("Lead Custodian | Maumee Valley").
     if (h.role && h.title && titleInOwnHeaders(h.title, sourceText)) return false;
     const peopleScope = isPeopleScopeHit(h);
@@ -1003,8 +1017,8 @@ export function scopeHitsNotTheirs(line: string, sourceText: string, ctx: ScopeC
  * work ("assign the daily work", "assigned tasks") is the person's delegation claim. Returns the scope hits in
  * the term that are still not theirs; an empty list means the evidence supports the term.
  */
-export function skillScopeNotTheirs(term: string, sourceText: string): ScopeHit[] {
-  const hits = scopeHitsNotTheirs(term, sourceText);
+export function skillScopeNotTheirs(term: string, sourceText: string, opts: { locale?: "en" | "es" } = {}): ScopeHit[] {
+  const hits = scopeHitsNotTheirs(term, sourceText, { locale: opts.locale });
   if (!hits.length) return hits;
   // A duty bullet of their own work history ("- Supervise production employees", a finished resume's line)
   // has no "I"; read it as "I supervise production employees", with every frame check still applied.
@@ -1026,6 +1040,7 @@ export function skillScopeNotTheirs(term: string, sourceText: string): ScopeHit[
     })
   );
   return hits.filter((h) => {
+    if (h.es) return true;
     if (h.family === "delegate" && handsOutWork) return false;
     return !theirs.some((c) => c.family === h.family && c.self && (!RUN_PAGE.has(h.family) || c.overPeople === true));
   });
