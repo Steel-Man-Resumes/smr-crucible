@@ -38,18 +38,18 @@ export function joinItems(items: string[]): string {
 
 /**
  * The gate: nothing renders unless the server switch is on AND the site is in
- * Spanish. `askMore` is the existing progress-bar request for more AI actions
- * (kind ai_bonus), handed in by SpanishReading.tsx; absent means the person
- * cannot ask from here and the limit line stands alone.
+ * Spanish. When a resume has used its readings the limit line stands alone and
+ * says how to get a fresh one (edit the resume); there is no request button,
+ * because nothing could grant more for this resume.
  */
-export function SpanishReadingGate({ artifactId, version, askMore }: { artifactId: string; version: string; askMore?: () => void }) {
+export function SpanishReadingGate({ artifactId, version }: { artifactId: string; version: string }) {
   const { spanishReading } = useServerSwitches();
   const locale = useLocale();
   if (!spanishReading || locale !== "es") return null;
-  return <SpanishReadingPanel artifactId={artifactId} version={version} askMore={askMore} />;
+  return <SpanishReadingPanel artifactId={artifactId} version={version} />;
 }
 
-export function SpanishReadingPanel({ artifactId, version, askMore }: { artifactId: string; version: string; askMore?: () => void }) {
+export function SpanishReadingPanel({ artifactId, version }: { artifactId: string; version: string }) {
   const t = useTranslations("spanishReading");
   const key = `${artifactId}:${version}`;
   const [phase, setPhase] = useState<Phase>(() => {
@@ -106,7 +106,7 @@ export function SpanishReadingPanel({ artifactId, version, askMore }: { artifact
         {t("button")}
       </button>
       <div id={panelId} hidden={!open} aria-live="polite" className="mt-2 max-w-full border border-t-line bg-t-panel-2 p-4 text-sm text-t-phos">
-        {open ? <PanelContent phase={phase} askMore={askMore} onClose={() => setOpen(false)} onRetry={() => void run()} headingRef={headingRef} /> : null}
+        {open ? <PanelContent phase={phase} onClose={() => setOpen(false)} onRetry={() => void run()} headingRef={headingRef} /> : null}
       </div>
     </div>
   );
@@ -114,7 +114,7 @@ export function SpanishReadingPanel({ artifactId, version, askMore }: { artifact
 
 
 /** What the open panel shows for each phase. Pure: the tests render it directly. */
-export function PanelContent({ phase, askMore, onClose, onRetry, headingRef }: { phase: Phase; askMore?: () => void; onClose: () => void; onRetry: () => void; headingRef?: React.Ref<HTMLHeadingElement> }) {
+export function PanelContent({ phase, onClose, onRetry, headingRef }: { phase: Phase; onClose: () => void; onRetry: () => void; headingRef?: React.Ref<HTMLHeadingElement> }) {
   const t = useTranslations("spanishReading");
   return (
           <>
@@ -149,11 +149,6 @@ export function PanelContent({ phase, askMore, onClose, onRetry, headingRef }: {
             {phase.kind === "limit" ? (
               <div className="mt-3" role="status" data-testid="spanish-reading-limit">
                 <p className="text-t-white">{t("limitLine")}</p>
-                {askMore ? (
-                  <button type="button" aria-haspopup="dialog" onClick={askMore} className="t-focus mt-1 inline-flex min-h-touch items-center text-xs text-t-amber-bright underline underline-offset-2" data-testid="spanish-reading-ask">
-                    {t("askMore")}
-                  </button>
-                ) : null}
               </div>
             ) : null}
             {phase.kind === "error" ? (
