@@ -300,6 +300,42 @@ describe("credential, legal status, euphemism and record words", () => {
   });
 });
 
+describe("title promotions, bilingual claims and bounds on a figure (added beyond the design's table)", () => {
+  const H = "header" as const;
+  it("a promoted title is held even with no scope word in it", () => {
+    holds("Cocinero | Café Rosa | 2019 - 2021", "Executive Chef | Café Rosa | 2019 - 2021", "scope", H);
+    holds("Cocinero | Café Rosa | 2019 - 2021", "Owner | Café Rosa | 2019 - 2021", "scope", H);
+    holds("Ayudante | Taller Norte | 2019 - 2021", "Electrician | Taller Norte | 2019 - 2021", "scope", H);
+    passes("Ayudante de electricista | Taller Norte | 2019 - 2021", "Electrician's Helper | Taller Norte | 2019 - 2021", H);
+    holds("Cocinero principal | Café Rosa | 2019 - 2021", "Head Cook | Café Rosa | 2019 - 2021", "scope", H); // "principal" is not a Spanish scope word: strict on purpose
+    passes("Electricista | Taller Norte | 2019 - 2021", "Electrician | Taller Norte | 2019 - 2021", H);
+  });
+  it("a junior word the English drops is a promotion and is held", () => {
+    holds("Ayudante de cocina | Café Rosa | 2019 - 2021", "Cook | Café Rosa | 2019 - 2021", "scope", H);
+    holds("Aprendiz de soldador | Taller Norte | 2019", "Welder | Taller Norte | 2019", "scope", H);
+    passes("Ayudante de cocina | Café Rosa | 2019 - 2021", "Kitchen Helper | Café Rosa | 2019 - 2021", H);
+    passes("Asistente de oficina | Café Rosa | 2019 - 2021", "Office Assistant | Café Rosa | 2019 - 2021", H);
+  });
+  it("bilingual and fluent are claims: the Spanish line must say two languages", () => {
+    holds("Cajera | Tienda Pueblo | 2019 - 2021", "Bilingual Cashier | Tienda Pueblo | 2019 - 2021", "character", H);
+    passes("Cajera bilingüe | Tienda Pueblo | 2019 - 2021", "Bilingual Cashier | Tienda Pueblo | 2019 - 2021", H);
+    passes("Atendí a clientes en español e inglés", "Served bilingual customers in Spanish and English");
+  });
+  it("a bound the English adds changes the figure and is held; one it drops is a note", () => {
+    holds("Cociné para 100 personas", "Cooked for over 100 people", "number");
+    holds("Cociné para 100 personas", "Cooked for up to 100 people", "number");
+    holds("Cociné para 100 personas", "Cooked for at least 100 people", "number");
+    holds("Cociné para 100 personas", "Cooked for under 100 people", "number");
+    passes("Cociné para más de 100 personas", "Cooked for over 100 people");
+    passes("Cociné para hasta 100 personas", "Cooked for up to 100 people");
+    const dropped = check("Trabajé más de 40 horas por semana", "Worked 40 hours per week");
+    assert.equal(dropped.ok, true);
+    assert.ok(dropped.notes.some((n) => n.row === "number" && n.direction === "dropped"));
+    const hedge = check("Cociné para 100 personas", "Cooked for around 100 people");
+    assert.equal(hedge.ok, true, "a hedge the English adds is a note, it does not raise the claim");
+  });
+});
+
 describe("negation and wishes", () => {
   it("a negation flipped either way is held", () => {
     holds("Nunca llegué tarde", "Arrived late", "negation");

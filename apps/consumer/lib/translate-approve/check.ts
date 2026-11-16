@@ -602,6 +602,92 @@ function lengthFindings(es: string, en: string): Finding[] {
   return [];
 }
 
+/* ------------------------------------------------ titles, bilingual, bounds --- */
+
+// Title words that promote a person. The design leaves plain titles ("Cook") unchecked and catches promotions through the
+// scope families; these are promotions that carry no scope word ("Executive Chef", "Owner", "Electrician" for a helper).
+// The English word must have a Spanish partner on the line, or the same word verbatim. A word missing here is not caught.
+const TITLE_CLAIMS: Array<{ id: string; en: RegExp; es: RegExp }> = [
+  { id: "chef", en: /\bchef\b/i, es: /\bchef\b|\bcocinero\s+(?:jefe|principal)\b|\bjef[ae]\s+de\s+cocina\b/ },
+  { id: "executive", en: /\bexecutive\b/i, es: /ejecutiv/ },
+  { id: "specialist", en: /\bspecialist\b/i, es: /especialista/ },
+  { id: "expert", en: /\bexpert\b/i, es: /\bexpert[oa]s?\b|especializad/ },
+  { id: "engineer", en: /\bengineer\b/i, es: /ingenier/ },
+  { id: "technician", en: /\btechnician\b/i, es: /\btecnic[oa]s?\b/ },
+  { id: "analyst", en: /\banalyst\b/i, es: /analista/ },
+  { id: "administrator", en: /\badministrator\b/i, es: /administrador/ },
+  { id: "officer", en: /\bofficer\b/i, es: /\b(?:oficial|agente)\b/ },
+  { id: "president", en: /\b(?:vice[\s-])?president\b/i, es: /president/ },
+  { id: "founder", en: /\bfounder\b|\bco-?founder\b/i, es: /fundador|\bfunde\b|\bfundamos\b/ },
+  { id: "owner", en: /\bowner\b/i, es: /\bdueno\b|\bduena\b|propietari|negocio propio|mi negocio|mi propio/ },
+  { id: "master", en: /\bmaster\b/i, es: /\bmaestr[oa]s?\b|\bmaster\b/ },
+  { id: "chief", en: /\bchief\b/i, es: /\bjef[ae]s?\b|principal|director/ },
+  { id: "journeyman", en: /\bjourneyman\b/i, es: /\boficial\b|artesano|journeyman/ },
+  { id: "consultant", en: /\bconsultant\b/i, es: /consultor/ },
+  { id: "architect", en: /\barchitect\b/i, es: /arquitect/ },
+  { id: "developer", en: /\b(?:developer|programmer)\b/i, es: /desarrollador|programador/ },
+  { id: "electrician", en: /\belectrician\b/i, es: /electricist|electric/ },
+  { id: "plumber", en: /\bplumber\b/i, es: /plomer|fontaner/ },
+  { id: "mechanic", en: /\bmechanic\b/i, es: /mecanic/ },
+  { id: "carpenter", en: /\bcarpenter\b/i, es: /carpinter/ },
+  { id: "nurse", en: /\b(?:nurse|paramedic)\b/i, es: /enfermer|paramedic/ },
+  { id: "accountant", en: /\baccountant\b/i, es: /contador|contabilidad/ },
+  { id: "teacher", en: /\b(?:teacher|instructor|therapist|counselor)\b/i, es: /maestr|profesor|docente|instructor|terapeuta|consejer|orientador/ },
+];
+
+// A junior word on the Spanish line ("ayudante", "aprendiz") that the English drops is a promotion.
+const JUNIOR_ES = /\b(?:ayudantes?|aprendiz|aprendices|asistentes?|practicantes?|becari[oa]s?|auxiliares?|novat[oa]s?)\b/;
+const JUNIOR_EN = /\b(?:helpers?|assistants?|apprentices?|trainees?|interns?|aides?|junior|jr|helped|helping|assisted|assisting|supported|support)\b/i;
+
+function titleFindings(es: string, en: string): Finding[] {
+  const foldedEs = fold(es);
+  const added: string[] = [];
+  for (const t of TITLE_CLAIMS) {
+    const m = en.match(t.en);
+    if (m && !t.es.test(foldedEs) && !foldedEs.includes(fold(m[0]))) added.push(m[0]);
+  }
+  const out: Finding[] = [];
+  if (added.length) out.push({ row: "scope", severity: "held", direction: "added", items: unique(added) });
+  if (JUNIOR_ES.test(foldedEs) && !JUNIOR_EN.test(en)) out.push({ row: "scope", severity: "held", direction: "dropped", items: [(foldedEs.match(JUNIOR_ES) ?? [""])[0]] });
+  return out;
+}
+
+const LANG_ABILITY_EN = /\b(?:bilingual|trilingual|multilingual|fluent|fluency|native\s+speaker)\b/i;
+const LANG_ABILITY_ES = /\b(?:bilingue|trilingue|multilingue|fluid[oa]|fluidez|nativ[oa]|dos\s+idiomas|varios\s+idiomas|ambos\s+idiomas)\b/;
+
+/** "Bilingual" claims two languages; the Spanish line must say so (a named pair of languages counts). */
+function languageAbilityFindings(es: string, en: string): Finding[] {
+  const foldedEs = fold(es);
+  const esSays = LANG_ABILITY_ES.test(foldedEs) || LANGUAGE_WORDS.filter((l) => l.es.test(foldedEs)).length >= 2;
+  const enM = en.match(LANG_ABILITY_EN);
+  if (enM && !esSays) return [{ row: "character", severity: "held", direction: "added", items: [enM[0]] }];
+  if (!enM && LANG_ABILITY_ES.test(foldedEs)) return [{ row: "character", severity: "note", direction: "dropped", items: [(foldedEs.match(LANG_ABILITY_ES) ?? [""])[0]] }];
+  return [];
+}
+
+const NUM_AHEAD_EN = String.raw`\$?(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen|twenty|thirty|forty|fifty|hundred|thousand|a\s+(?:hundred|thousand|dozen))`;
+const NUM_AHEAD_ES = String.raw`\$?(?:\d+|un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|quince|veinte|treinta|cuarenta|cincuenta|cien|ciento|mil)\b`;
+const BOUNDS: Array<{ id: string; severity: "held" | "note"; en: RegExp; es: RegExp }> = [
+  { id: "over", severity: "held", en: new RegExp(String.raw`\b(?:over|more than|above|exceeding)\s+${NUM_AHEAD_EN}`, "i"), es: new RegExp(String.raw`\b(?:mas de|mas que|sobre|por encima de|superior a)\s+${NUM_AHEAD_ES}`) },
+  { id: "under", severity: "held", en: new RegExp(String.raw`\b(?:under|less than|fewer than|below)\s+${NUM_AHEAD_EN}`, "i"), es: new RegExp(String.raw`\b(?:menos de|menos que|por debajo de|inferior a)\s+${NUM_AHEAD_ES}`) },
+  { id: "upto", severity: "held", en: /\b(?:up to|as many as|a maximum of|maximum of)\b/i, es: new RegExp(String.raw`\b(?:hasta|maximo de|como maximo)\s+(?=${NUM_AHEAD_ES})`) },
+  { id: "atleast", severity: "held", en: /\b(?:at least|a minimum of|minimum of)\b|\d\+/i, es: /\b(?:al menos|por lo menos|minimo de)\b|\d\+/ },
+  { id: "about", severity: "note", en: new RegExp(String.raw`\b(?:about|around|approximately|roughly|nearly|almost)\s+${NUM_AHEAD_EN}`, "i"), es: new RegExp(String.raw`\b(?:aproximadamente|alrededor de|cerca de|casi|unos|unas|como)\s+${NUM_AHEAD_ES}`) },
+];
+
+/** "More than 40", "up to 200", "at least 3": a bound the English adds changes the figure; one it drops is a note. */
+function boundFindings(es: string, en: string): Finding[] {
+  const foldedEs = fold(es);
+  const out: Finding[] = [];
+  for (const b of BOUNDS) {
+    const inEn = b.en.test(en);
+    const inEs = b.es.test(foldedEs);
+    if (inEn && !inEs) out.push({ row: "number", severity: b.severity, direction: "added", items: [b.id] });
+    if (inEs && !inEn) out.push({ row: "number", severity: "note", direction: "dropped", items: [b.id] });
+  }
+  return out;
+}
+
 /* ----------------------------------------------------------- the check --- */
 
 /**
@@ -631,6 +717,9 @@ export function checkUnit(input: CheckInput): CheckResult {
     findings.push(...conceptFindings("size", esConcepts(SIZE_CONCEPTS, esSizeWords(esC).map((w) => w.text), esC), enConcepts(SIZE_CONCEPTS, words.size)));
     findings.push(...conceptFindings("scale", esConcepts(SCALE_CONCEPTS, esScaleWords(esC).map((w) => w.text), esC), enConcepts(SCALE_CONCEPTS, words.scale)));
     findings.push(...toolFindings(esC, words.tool));
+    findings.push(...titleFindings(esC, enC));
+    findings.push(...languageAbilityFindings(esC, enC));
+    findings.push(...boundFindings(es, en));
     findings.push(...credentialFindings(esC, enC, input.kind));
     findings.push(...legalFindings(esC, enC));
     findings.push(...euphemismFindings(esC, enC));
