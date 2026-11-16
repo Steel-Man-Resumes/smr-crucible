@@ -44,7 +44,7 @@ export function ProgressAllowance({ compact = false }: { compact?: boolean }) {
 export function ProgressOverview() {
   const t = useTranslations("refineryHome.progressOverview");
   const ts = useServerText();
-  const words = (text: string): string => (KNOWN[text] ? t(KNOWN[text]) : text);
+  const words = (text: string): string => (KNOWN[text] ? t(KNOWN[text]) : ts(text));
   const progress = useProgression();
   if (!progress || progress.status === "inactive") return null;
   if (progress.status !== "ready" || !progress.data) return <section aria-label={t("processAria")} className="mb-6 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim">

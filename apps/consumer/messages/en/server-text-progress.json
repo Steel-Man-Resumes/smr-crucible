@@ -50,6 +50,8 @@
  "progress_allow_daily": "{base} daily Refinery AI actions{stop} Resets at midnight UTC. Other tool and spending limits still apply.",
  "progress_allow_daily_bonus": "{base} daily Refinery AI actions{plus} {bonus} bonus{stop} Resets at midnight UTC. Other tool and spending limits still apply.",
  "progress_celebration_title": "Work worth building on",
+ "progress_grant_first_tailored": "You connected your experience to a real job.",
+ "progress_grant_first_applied": "You recorded your first application. Keep that packet ready.",
  "progress_msg_request_changed": "This request changed while you replied. Refresh your requests to see the decision.",
  "progress_msg_reply_saved": "Your reply is saved for Troy to review.",
  "progress_msg_bonus_expired_prev": "This request was approved previously. That bonus has expired; check your current allowance in the progress bar.",

@@ -330,6 +330,7 @@
       "resume": "Interview against which resume?",
       "resumeHint": "(so questions match your real experience)",
       "resumeFrom": "Resume from {when}",
+      "resumeFromDate": "Resume from {when}",
       "yourAccount": "your account",
       "resumeGeneral": "General (no specific resume)",
       "resumeNote": "Questions will be based on the real jobs, tools, and results on this resume.",

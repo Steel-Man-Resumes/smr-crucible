@@ -91,6 +91,13 @@ const OBSERVER_MESSAGES: Record<string, string> = { ...PARTNER_MESSAGES };
  * nothing. Partner, observer and demo lines stay English.
  */
 export const ES_CLIENT_MESSAGES: Record<string, string> = {
+  // Refinery pages (same keys and meaning as CLIENT_MESSAGES above)
+  jobs:
+    "Busca trabajo que se ajuste a ti. Un empleador marcado tiene una señal de contratación publicada; revisa la oferta y los requisitos del trabajo específico.",
+  disclosure:
+    "Elige de qué quieres hablar y practica cómo decirlo con tus propias palabras. Esto es orientación, no asesoría legal.",
+  interview:
+    "Practica por escrito para darle forma a tu respuesta. Practica en voz alta para que se sostenga bajo presión.",
   // Forge pages (same keys and meaning as CLIENT_MESSAGES above)
   rush:
     "Pega tu currículum y dime cuál es el trabajo. Lo reescribo rápido para ese puesto, usando solo tu experiencia real.",
