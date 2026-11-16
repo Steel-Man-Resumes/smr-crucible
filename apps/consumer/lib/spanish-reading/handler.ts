@@ -26,8 +26,9 @@
  *   - The finished reading is cached per version in this server process (best
  *     effort; a cold instance or another server may not have it) and by the page.
  *   - Over the limit: a plain 429 with code reading_limit and no model call.
- *     The page shows a Spanish line and the existing progress-bar request for
- *     more (kind ai_bonus). The server policy decides any amount.
+ *     The page shows a Spanish line: edit the resume for a fresh reading (a
+ *     changed text is a new version). The progress-bar AI-bonus request does
+ *     NOT raise this limit, so the page offers no request button.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { checkFaithfulness } from "./faithfulness";

@@ -140,7 +140,7 @@ describe("the button", () => {
     assert.match(page, /\{isResume && !a\.is_demo && <SpanishReading artifactId=\{a\.id\} version=\{a\.updated_at\} \/>\}/);
     const connected = code(read("components/resume/SpanishReading.tsx"));
     assert.match(connected, /<SpanishReadingGate /);
-    assert.match(connected, /progress!\.ask\(step, "ai_bonus"\)/, "the existing request path, kind ai_bonus");
+    assert.doesNotMatch(connected, /ai_bonus|progress/, "no request button: the AI-bonus request does not raise this limit");
     assert.doesNotMatch(connected, /fetch\(/);
   });
 
@@ -182,7 +182,7 @@ describe("the panel's words", () => {
 
   it("the open panel shows the plain statements, the help link and no export, copy or download control", () => {
     const src = code(read("components/resume/SpanishReadingPanel.tsx"));
-    for (const k of ["title", "notResume", "machine", "feedbackLead", "feedbackLink", "missingLine", "limitLine", "askMore", "loading", "failed", "readingLabel"]) {
+    for (const k of ["title", "notResume", "machine", "feedbackLead", "feedbackLink", "missingLine", "limitLine", "loading", "failed", "readingLabel"]) {
       assert.match(src, new RegExp(`t\\("${k}"`), k);
     }
     assert.match(src, /href="\/dashboard\/help"/, "the existing Help and Feedback page");
@@ -197,8 +197,8 @@ describe("the panel's words", () => {
 
 
 describe("the open panel, state by state (Spanish)", () => {
-  const panel = (phase: Phase, askMore?: () => void) =>
-    intlMarkup(React.createElement(PanelContent, { phase, askMore, onClose: () => {}, onRetry: () => {} }), ES);
+  const panel = (phase: Phase) =>
+    intlMarkup(React.createElement(PanelContent, { phase, onClose: () => {}, onRetry: () => {} }), ES);
 
   it("always starts with the four plain statements and the Help and Feedback link", () => {
     const html = panel({ kind: "loading" });
@@ -231,14 +231,11 @@ describe("the open panel, state by state (Spanish)", () => {
     assert.equal(joinItems(["a", "b"]), "a, b");
   });
 
-  it("limit: the plain Spanish line and the progress-bar request, only when a request is possible", () => {
-    const withAsk = panel({ kind: "limit" }, () => {});
-    assert.match(withAsk, /Este currículum ya usó sus lecturas en español\. Si necesitas más, puedes pedirlas\./);
-    assert.match(withAsk, /data-testid="spanish-reading-ask"[^>]*>Pedir más</);
-    const without = panel({ kind: "limit" });
-    assert.match(without, /ya usó sus lecturas/);
-    assert.doesNotMatch(without, /spanish-reading-ask/);
-    assert.doesNotMatch(withAsk, /timeout|tiempo de espera|no se ejecutó/i);
+  it("limit: the plain Spanish line says how to get a fresh reading, and there is no request button", () => {
+    const limit = panel({ kind: "limit" });
+    assert.match(limit, /Este currículum ya usó sus lecturas en español\. Si lo editas, podrás pedir una lectura nueva\./);
+    assert.doesNotMatch(limit, /spanish-reading-ask|Pedir más|pedir más/, "nothing could grant more for this resume, so no request button");
+    assert.doesNotMatch(limit, /timeout|tiempo de espera|no se ejecutó/i);
   });
 
   it("errors: a plain line, an alert, a retry only for a failed reading, and never 'did not run'", () => {
