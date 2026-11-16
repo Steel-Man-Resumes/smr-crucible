@@ -51,6 +51,14 @@ function titleCase(key: string): string {
     .join(" ");
 }
 
+/**
+ * The catalog key (refineryAccount.aiCosts.endpoints.<this>) for an endpoint or workflow key. The usage log names
+ * some calls with a colon or an underscore ("grounding-verify:cover_letter"); the catalog key spells those with hyphens.
+ */
+export function endpointCatalogKey(key: string | null | undefined): string {
+  return String(key ?? "").trim().replace(/[:_]/g, "-");
+}
+
 /** Human name for an endpoint or context-page key. Falls back gracefully. */
 export function labelForEndpoint(key: string | null | undefined): string {
   if (key == null) return "Other AI work";

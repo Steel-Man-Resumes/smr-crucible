@@ -28,27 +28,31 @@ interface CoachA11y {
   coachLanguage: "en" | "es";
 }
 
+// Labels come from the catalog (refineryAccount.settings.accessibility), by the key named here.
 const FONT_OPTIONS: { value: FontScale; label: string }[] = [
-  { value: "normal", label: "Normal" },
-  { value: "large", label: "Large" },
-  { value: "xl", label: "Extra large" },
+  { value: "normal", label: "fontNormal" },
+  { value: "large", label: "fontLarge" },
+  { value: "xl", label: "fontXl" },
 ];
 const DENSITY_OPTIONS: { value: Density; label: string }[] = [
-  { value: "comfortable", label: "Comfortable" },
-  { value: "compact", label: "Compact" },
+  { value: "comfortable", label: "densityComfortable" },
+  { value: "compact", label: "densityCompact" },
 ];
 // Tri-state motion: follow the device, or force on/off.
 const MOTION_OPTIONS: { value: "auto" | "on" | "off"; label: string }[] = [
-  { value: "auto", label: "Match my device" },
-  { value: "off", label: "Allow motion" },
-  { value: "on", label: "Reduce motion" },
+  { value: "auto", label: "motionAuto" },
+  { value: "off", label: "motionOff" },
+  { value: "on", label: "motionOn" },
 ];
 
 export function AccessibilitySettingsSection() {
   // Staff have t.ROY, not a career coach (staff pass S2, walk T03).
-  const helper = useEffectiveRole()?.orgRole ? "t.ROY" : "your coach";
-  const Helper = helper === "t.ROY" ? "t.ROY" : "Your coach";
+  const staff = !!useEffectiveRole()?.orgRole;
   const tLang = useTranslations("common.lang");
+  // t = the save-failure words (the same ones the consent panel uses); ta = this section's own words.
+  const t = useTranslations("refineryAccount.consent");
+  const ta = useTranslations("refineryAccount.settings.accessibility");
+  const helper = staff ? ta("helperStaff") : ta("helperCoach");
   const [coach, setCoach] = useState<CoachA11y | null>(null);
   const [prefs, setPrefs] = useState<UiPrefs | null>(null);
   const [error, setError] = useState<{ part: "coach" | "prefs"; message: string } | null>(null);
@@ -90,10 +94,10 @@ export function AccessibilitySettingsSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) { setCoach(before); setError({ part: "coach", message: await readSaveError(res) }); }
+      if (!res.ok) { setCoach(before); setError({ part: "coach", message: await readSaveError(res, t("saveFallback")) }); }
     } catch {
       setCoach(before);
-      setError({ part: "coach", message: "Could not save. Check your connection and try again." });
+      setError({ part: "coach", message: t("connectionError") });
     }
   }
 
@@ -115,10 +119,10 @@ export function AccessibilitySettingsSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) { showPrefs(before); setError({ part: "prefs", message: await readSaveError(res) }); }
+      if (!res.ok) { showPrefs(before); setError({ part: "prefs", message: await readSaveError(res, t("saveFallback")) }); }
     } catch {
       showPrefs(before);
-      setError({ part: "prefs", message: "Could not save. Check your connection and try again." });
+      setError({ part: "prefs", message: t("connectionError") });
     }
   }
 
@@ -129,22 +133,22 @@ export function AccessibilitySettingsSection() {
     <div className="bg-t-panel border border-t-line p-5 space-y-6">
       {/* Reading help */}
       <div id="settings-reading-help">
-        <h3 className="font-semibold text-t-white mb-1">Reading help</h3>
+        <h3 className="font-semibold text-t-white mb-1">{ta("readingHelp")}</h3>
         <p className="text-sm text-t-phos-dim mb-3">
-          These also work from the chat panel. Change them here and they stay changed.
+          {ta("readingHelpNote")}
         </p>
         <div className="space-y-3">
           <ToggleRow
             id="settings-plain-language"
-            label="Plain language"
-            hint={`Shorter words and simpler sentences from ${helper}.`}
+            label={ta("plainLanguage")}
+            hint={ta("plainLanguageHint", { helper })}
             on={!!coach?.coachPlainLanguage}
             onToggle={() => saveCoach({ coachPlainLanguage: !coach?.coachPlainLanguage })}
           />
           <ToggleRow
             id="settings-read-aloud"
-            label="Read aloud"
-            hint={`${Helper} can read ${helper === "t.ROY" ? "his" : "its"} answers out loud.`}
+            label={ta("readAloud")}
+            hint={staff ? ta("readAloudHintStaff") : ta("readAloudHintCoach")}
             on={!!coach?.coachVoice}
             onToggle={() => saveCoach({ coachVoice: !coach?.coachVoice })}
           />
@@ -164,13 +168,13 @@ export function AccessibilitySettingsSection() {
       {/* Text size and motion: one block for the Settings tour (settings-display) */}
       <div id="settings-display" className="space-y-6">
       <div id="settings-text-size" className="border-t border-t-line pt-5">
-        <label className="text-sm font-medium text-t-white block mb-1">Text size</label>
-        <p className="text-sm text-t-phos-dim mb-2">Make the words bigger across the whole app.</p>
+        <label className="text-sm font-medium text-t-white block mb-1">{ta("textSize")}</label>
+        <p className="text-sm text-t-phos-dim mb-2">{ta("textSizeHint")}</p>
         <div className="flex flex-wrap gap-2">
           {FONT_OPTIONS.map((o) => (
             <PillButton
               key={o.value}
-              label={o.label}
+              label={ta(o.label)}
               selected={(prefs?.fontScale ?? "normal") === o.value}
               onClick={() => savePrefs({ fontScale: o.value })}
             />
@@ -180,15 +184,15 @@ export function AccessibilitySettingsSection() {
 
       {/* Motion */}
       <div id="settings-motion" className="border-t border-t-line pt-5">
-        <label className="text-sm font-medium text-t-white block mb-1">Motion</label>
+        <label className="text-sm font-medium text-t-white block mb-1">{ta("motion")}</label>
         <p className="text-sm text-t-phos-dim mb-2">
-          Cut down on animations. &quot;Match my device&quot; follows your phone or computer setting.
+          {ta("motionHint")}
         </p>
         <div className="flex flex-wrap gap-2">
           {MOTION_OPTIONS.map((o) => (
             <PillButton
               key={o.value}
-              label={o.label}
+              label={ta(o.label)}
               selected={motionValue === o.value}
               onClick={() =>
                 savePrefs({ reducedMotion: o.value === "auto" ? null : o.value === "on" })
@@ -201,13 +205,13 @@ export function AccessibilitySettingsSection() {
 
       {/* Density */}
       <div id="settings-spacing" className="border-t border-t-line pt-5">
-        <label className="text-sm font-medium text-t-white block mb-1">Spacing</label>
-        <p className="text-sm text-t-phos-dim mb-2">Comfortable is roomier. Compact fits more on screen.</p>
+        <label className="text-sm font-medium text-t-white block mb-1">{ta("spacing")}</label>
+        <p className="text-sm text-t-phos-dim mb-2">{ta("spacingHint")}</p>
         <div className="flex flex-wrap gap-2">
           {DENSITY_OPTIONS.map((o) => (
             <PillButton
               key={o.value}
-              label={o.label}
+              label={ta(o.label)}
               selected={(prefs?.density ?? "comfortable") === o.value}
               onClick={() => savePrefs({ density: o.value })}
             />

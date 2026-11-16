@@ -38,14 +38,15 @@ import { clearAccountBrowserState } from "@/lib/account-browser-state";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
-import { STAFF_DATA_WORDS, accountChipText, staffUsageLine } from "@/lib/staff-settings-words";
+import { STAFF_DATA_WORDS, accountChipKey, accountChipText, staffUsageLine } from "@/lib/staff-settings-words";
 import { passwordProblem, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
 import { PackageEmailSetting } from "@/components/PackageEmailSetting";
 import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
-import { usageWords, type UsageView } from "@/lib/usage-view";
+import { usageTimeFormatter, usageWords, type UsageView } from "@/lib/usage-view";
+import { endpointCatalogKey } from "@/lib/ai-usage-labels";
 import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
 
 const STAFF_HIDDEN_EXPORT_BOXES = new Set<string>(["resumes", "applications", "record_check"]);
@@ -55,10 +56,12 @@ type UsageData = UsageView | { error: string };
 /** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
 function UsageCard({ usage, staff = false }: { usage: UsageData | null; staff?: boolean }) {
   const t = useTranslations("refineryAccount.settings.usage");
+  const tEndpoint = useTranslations("refineryAccount.aiCosts.endpoints");
+  const locale = useLocale();
   const ts = useServerText();
   if (!usage) return <p className="text-sm text-t-phos-dim">{t("loading")}</p>;
   if ("error" in usage) return <p className="text-sm text-t-phos-dim">{ts(usage.error)}</p>;
-  const raw = usageWords(usage);
+  const raw = usageWords(usage, usageTimeFormatter(locale));
   const words = staff ? { ...raw, line: staffUsageLine(raw.line), bonusLine: raw.bonusLine ? staffUsageLine(raw.bonusLine) : null } : raw;
   const total = usage.kind === "allowance" ? (usage.base ?? 0) + usage.bonus : 0;
   return (
@@ -77,7 +80,7 @@ function UsageCard({ usage, staff = false }: { usage: UsageData | null; staff?: 
           <p className="text-xs font-medium text-t-white mb-1">{usage.kind === "per-tool" ? t("usedToday") : t("lowerLimit")}</p>
           <ul className="text-xs text-t-phos-dim space-y-0.5">
             {usage.ceilings.map((c) => (
-              <li key={c.tool}>{ts(c.label)}: {c.paused ? t("paused") : t("leftToday", { count: c.left })}</li>
+              <li key={c.tool}>{locale === "es" && tEndpoint.has(endpointCatalogKey(c.tool)) ? tEndpoint(endpointCatalogKey(c.tool)) : ts(c.label)}: {c.paused ? t("paused") : t("leftToday", { count: c.left })}</li>
             ))}
           </ul>
         </div>
@@ -1553,6 +1556,9 @@ function AccountSection() {
   const { data: session } = useSession();
   const accountRole = useEffectiveRole();
   const contactHeading = accountRole?.orgRole ? "Your contact info" : t("contactHeading");
+  // The chip beside "Signed in as": the catalog's word for the role (so a Spanish reader never sees the raw tier), else the plain text.
+  const chipKey = accountChipKey({ orgRole: accountRole?.orgRole, capabilities: accountRole?.capabilities ?? [], tier: (session?.user as { tier?: string } | undefined)?.tier });
+  const chipFallback = accountChipText({ orgRole: accountRole?.orgRole, capabilities: accountRole?.capabilities ?? [], tier: (session?.user as { tier?: string } | undefined)?.tier });
   const [contact, setContact] = useState<{
     name: string; phone: string; email: string; city: string; state: string;
   } | null>(null);
@@ -1602,7 +1608,7 @@ function AccountSection() {
             <p className="text-sm font-medium text-t-white">{session?.user?.email || t("unknown")}</p>
           </div>
           <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">
-            {accountChipText({ orgRole: accountRole?.orgRole, capabilities: accountRole?.capabilities ?? [], tier: (session?.user as { tier?: string } | undefined)?.tier })}
+            {chipKey ? t(chipKey) : chipFallback}
           </span>
         </div>
 

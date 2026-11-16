@@ -127,6 +127,15 @@ const at = (isoTime: string, fmt?: (d: Date) => string) => {
   return fmt ? fmt(d) : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 };
 
+/**
+ * The time format for the Usage lines in the site language: a Spanish reader gets Spanish weekday and clock words
+ * (es-US, the same locale the other date helpers use), everyone else the browser's own format as before.
+ */
+export function usageTimeFormatter(locale: string | null | undefined): ((d: Date) => string) | undefined {
+  if (locale !== 'es') return undefined;
+  return (d) => d.toLocaleString('es-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
 /** The headline and the one plain line under it. fmt formats a time in the person's own zone. */
 export function usageWords(v: UsageView, fmt?: (d: Date) => string): { headline: string; line: string; bonusLine: string | null } {
   const resets = at(v.resetsAt, fmt);

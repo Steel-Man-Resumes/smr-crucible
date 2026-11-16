@@ -12,6 +12,20 @@ export function accountChipText(opts: { orgRole: "owner" | "org_admin" | "staff"
   return opts.tier || "client";
 }
 
+/**
+ * The catalog key (refineryAccount.settings.account) for the words accountChipText gives, so a Spanish
+ * reader sees "participante" and not the raw tier "client". null for a tier the catalog has no word for;
+ * the caller then shows accountChipText as before. English values equal accountChipText exactly.
+ */
+export function accountChipKey(opts: { orgRole: "owner" | "org_admin" | "staff" | null | undefined; capabilities: readonly string[]; tier: string | null | undefined }): string | null {
+  const line = accountChipText(opts);
+  const keys: Record<string, string> = {
+    client: "roleClient", partner: "rolePartner", observer: "roleObserver", admin: "roleAdmin",
+    Owner: "roleOwner", Admin: "roleOrgAdmin", Volunteer: "roleVolunteer", "Case manager": "roleCaseManager",
+  };
+  return Object.prototype.hasOwnProperty.call(keys, line) ? keys[line] : null;
+}
+
 const PARTICIPANT_TOOLS = "t.ROY chat, tailoring, interview practice, drafts and fit checks spend from it.";
 const PARTICIPANT_SHARED = "shared across t.ROY chat, tailoring, interview practice, drafts and fit checks.";
 

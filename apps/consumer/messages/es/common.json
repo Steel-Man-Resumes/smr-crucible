@@ -28,5 +28,12 @@
   "crisis": {
     "line": "<name>Línea 988 de Prevención del Suicidio y Crisis:</name> <call>llama</call> o <text>envía un mensaje de texto</text> al 988. Gratis, a cualquier hora.",
     "chatNote": "Si estás en peligro o piensas en hacerte daño, llama o envía un mensaje de texto al 988 a cualquier hora. Es gratis."
+  },
+  "speech": {
+    "speak": "Dilo en voz alta",
+    "listening": "Escuchando... toca para detener",
+    "startAria": "Hablar en lugar de escribir",
+    "stopAria": "Dejar de hablar",
+    "stopTitle": "Detener"
   }
 }

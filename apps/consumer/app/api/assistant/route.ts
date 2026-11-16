@@ -45,6 +45,7 @@ const FINISH_THE_ANSWER = "The button was refused; that is not the answer and no
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { localeFromCookieHeader } from "@/i18n/locale";
+import { participantSpanishRule } from "@/lib/assistant-spanish-rule";
 import { streamText } from "ai";
 import { auth } from "@/auth";
 import { forgeUserId } from "@/lib/session-policy";
@@ -427,9 +428,8 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
 
 LANGUAGE: Answer in Spanish (plain, Latin American neutral). Case notes, outcome notes and funder narratives stay in English. Write a message to a participant in the language the staff member asks for. Refer to pages and buttons by their English labels. Keep these in English, word for word: the "isn't on your list" sentence, the part-of-list sentence, the safety and legal-help lines, and each skill's closing line. Never say you sent, saved or added anything, in any language.`;
     } else if (wantsSpanish) {
-      localizedSystemPrompt = `${systemPrompt}
-
-LANGUAGE: Reply in Spanish (plain, Latin American neutral, "tú"). ${siteLocale === "es" ? "The person sees the app in Spanish where a screen is translated and in English elsewhere: name pages and buttons the way they appear on the person's screen, and give the English label in parentheses when a screen is still English." : "The app interface is in English, so refer to pages and buttons by their English labels."} Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish. If the person writes their work history in Spanish and asks, help them say it in plain English, keeping every fact exactly as they gave it and adding nothing.`;
+      // The Spanish wording rules live in lib/assistant-spanish-rule.ts (screen names from the Spanish catalog, locked words).
+      localizedSystemPrompt = `${systemPrompt}\n\n${participantSpanishRule(siteLocale)}`;
     }
   }
 
