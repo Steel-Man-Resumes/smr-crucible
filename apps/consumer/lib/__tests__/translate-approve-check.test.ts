@@ -363,7 +363,7 @@ describe("skills, length, empty", () => {
   it("a much longer English line is a note (the only guard against an added plain duty)", () => {
     const r = check("Lavé platos", "Washed dishes, set tables, wiped counters, stocked napkins, swept floors and took out trash");
     assert.equal(r.ok, true);
-    assert.deepEqual(noteRows(r), ["length"]);
+    assert.deepEqual(noteRows(r), ["duty", "length"], "the added duties are also counted, as a note (see translate-approve-magnitude.test.ts)");
   });
   it("no English at all is held", () => holds("Lavé platos", "   ", "empty"));
 });

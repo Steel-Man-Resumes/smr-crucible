@@ -60,7 +60,7 @@ import {
 
 export type CheckRow =
   | "number" | "date" | "name" | "scope" | "result" | "character" | "size" | "scale" | "tool"
-  | "credential" | "legal" | "euphemism" | "record" | "negation" | "wish" | "skill" | "length" | "empty";
+  | "credential" | "legal" | "euphemism" | "record" | "negation" | "wish" | "skill" | "length" | "magnitude" | "duty" | "empty";
 
 export interface Finding {
   row: CheckRow;
@@ -241,6 +241,11 @@ function esNumbers(text: string): { items: EsNumber[]; ordinalMarks: Set<string>
   let work = rest.replace(/ | /g, " ");
   // "20 por ciento" is twenty percent: keep "ciento" from being read as the number one hundred.
   work = work.replace(/(\d[\d.,]*)\s*(?:por\s?ciento|porciento)\b/gi, "$1%");
+  // A lone "millones" or "docenas" ("millones de clientes") is a magnitude word, not a figure: the magnitude row reads it.
+  for (const plural of ["millones", "docenas"]) {
+    work = work.replace(new RegExp(`^\\s*${plural}\\b`, "iu"), " ");
+    work = work.replace(new RegExp(`\\b([\\p{L}\\d]+)\\s+${plural}\\b`, "giu"), (m, prev: string) => (/^\d+$|^(?:un|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento|mil|\w+cientos|\w+cientas)$/i.test(prev) ? m : `${prev} `));
+  }
   // "5 mil", "2 millones": a count of thousands or millions.
   work = work.replace(/(\d+(?:[.,]\d+)?)\s+(mil|millon(?:es)?)\b/gi, (_m, d: string, w: string) => {
     const base = Number(esTokenValues(d)[0]);
@@ -258,7 +263,9 @@ function esNumbers(text: string): { items: EsNumber[]; ordinalMarks: Set<string>
 }
 
 function enNumbers(text: string): { values: Set<string>; ordinalMarks: Set<string> } {
-  const { marks, rest } = ordinals(stripDates(text), "en");
+  const { marks, rest: raw } = ordinals(stripDates(text), "en");
+  // "2 million" is read by numberValues as 2,000,000 AND 1,000,000; write the product as digits first.
+  const rest = raw.replace(/(\d[\d,]*(?:\.\d+)?)\s+(thousand|million|billion)\b/gi, (_m, d: string, w: string) => String(Number(d.replace(/,/g, "")) * ({ thousand: 1e3, million: 1e6, billion: 1e9 } as Record<string, number>)[w.toLowerCase()]));
   const values = new Set<string>();
   for (const v of numberValues(rest)) if (!/^[~#]/.test(v)) values.add(String(Number(v)));
   return { values, ordinalMarks: marks };
@@ -688,6 +695,84 @@ function boundFindings(es: string, en: string): Finding[] {
   return out;
 }
 
+/* ------------------------------------------- magnitude words, added duties --- */
+
+// A magnitude is a quantity said in a word ("hundreds of customers"), not a figure. The numbers row cannot see it
+// (numberValues reads "hundreds" as "~100s", which the row ignores), so it has its own row. Three kinds:
+//   big     hundreds, thousands, millions, dozens, tens of, countless, numerous: held unless the Spanish has a matching
+//           figure, number word or magnitude word. A vague "muchos" does NOT license any of them.
+//   vague   many, several, various, multiple, a number of, lots of: licensed by a vague Spanish word or by any figure of 3 or more.
+//   small   a few, a couple, a handful: licensed by "pocos", "algunos", "un par" or a figure of 2 to 5.
+// Exact numbers ("a hundred", "one hundred", "100+", "five") are read by the numbers row.
+const MAG_BIG_EN = /\b(?:hundreds|thousands|millions|billions|dozens|scores|tens\s+of|countless|innumerable|myriad|numerous)\b/gi;
+const MAG_VAGUE_EN = /\b(?:many|several|various|multiple|a\s+number\s+of|lots\s+of|a\s+lot\s+of|plenty\s+of)\b/gi;
+const MAG_SMALL_EN = /\b(?:a\s+few|a\s+couple(?:\s+of)?|a\s+handful(?:\s+of)?)\b/gi;
+const MAG_ANY_EN = new RegExp(`${MAG_BIG_EN.source}|${MAG_VAGUE_EN.source}|${MAG_SMALL_EN.source}`, "i");
+// Spanish words lane E returns as scale words that the magnitude row owns.
+const MAG_ANY_ES = /^(?:docena|ciento|cientos|multiple|much|vari|numeros)/;
+
+interface BigMagnitude { id: string; en: RegExp; word: RegExp; min: number }
+const BIG_MAGNITUDES: BigMagnitude[] = [
+  { id: "hundreds", en: /^hundreds$/i, word: /\b(?:cientos|centenares|centenas)\b/, min: 200 },
+  { id: "thousands", en: /^thousands$/i, word: /\b(?:miles|millares)\b/, min: 2000 },
+  { id: "millions", en: /^millions$/i, word: /\b(?:millones)\b/, min: 2000000 },
+  { id: "billions", en: /^billions$/i, word: /\bmil\s+millones\b|\bbillones\b/, min: 2000000000 },
+  { id: "dozens", en: /^(?:dozens|scores)$/i, word: /\b(?:docenas|decenas|veintenas)\b/, min: 24 },
+  { id: "tens", en: /^tens\s+of$/i, word: /\b(?:decenas|docenas|veintenas)\b/, min: 20 },
+  { id: "countless", en: /^(?:countless|innumerable|myriad)$/i, word: /\b(?:incontables?|innumerables?|sin\s+numero|infinidad|sinfin|un\s+sinfin|miles|millones)\b/, min: Infinity },
+  { id: "numerous", en: /^numerous$/i, word: /\bnumeros[oa]s?\b/, min: Infinity },
+];
+const VAGUE_ES = /\b(?:much[oa]s?|vari[oa]s?|divers[oa]s?|multiples?|bastantes|numeros[oa]s?|cantidad\s+de|monton(?:es)?\s+de|tant[oa]s)\b/;
+const SMALL_ES = /\b(?:poc[oa]s?|algun[oa]s?|un\s+par|par\s+de|unos|unas|cuantos|punado)\b/;
+
+function magnitudeFindings(es: string, en: string): Finding[] {
+  const foldedEs = fold(es);
+  const values = esNumbers(es).items.flatMap((i) => i.values).map(Number).filter((n) => Number.isFinite(n));
+  const top = values.length ? Math.max(...values) : 0;
+  const added: string[] = [];
+  for (const m of en.match(MAG_BIG_EN) ?? []) {
+    const k = BIG_MAGNITUDES.find((b) => b.en.test(m.toLowerCase().replace(/\s+/g, " ")));
+    if (!k || !(k.word.test(foldedEs) || top >= k.min)) added.push(m);
+  }
+  const anyFigure3 = values.some((n) => n >= 3);
+  for (const m of en.match(MAG_VAGUE_EN) ?? []) if (!(VAGUE_ES.test(foldedEs) || anyFigure3 || BIG_MAGNITUDES.some((b) => b.word.test(foldedEs)))) added.push(m);
+  const smallOk = SMALL_ES.test(foldedEs) || values.some((n) => n >= 2 && n <= 5);
+  for (const m of en.match(MAG_SMALL_EN) ?? []) if (!smallOk) added.push(m);
+  const out: Finding[] = [];
+  if (added.length) out.push({ row: "magnitude", severity: "held", direction: "added", items: unique(added.map((a) => a.toLowerCase())) });
+  // A big Spanish magnitude the English did not carry over is a note.
+  const esBig = BIG_MAGNITUDES.filter((b) => b.word.test(foldedEs)).map((b) => (foldedEs.match(b.word) ?? [""])[0]);
+  if (esBig.length && !MAG_ANY_EN.test(en) && !numberValues(en).size) out.push({ row: "magnitude", severity: "note", direction: "dropped", items: unique(esBig) });
+  return out;
+}
+
+// An added plain duty ("Lavé platos" -> "Washed dishes and prepared salads") has no claim word, so no row above sees it.
+// The only handle is the count of separate things done: English clauses that start with a verb, against Spanish ones.
+// The English side counts a past-tense verb ("-ed" or a common irregular); the Spanish side counts a first-person past
+// verb (an accented -é, -í, -ó ending, or -aste/-aron/-aba/-ía forms, or a common irregular). An unrecognized Spanish
+// clause is NOT counted, which makes the note fire more often, never less. Note only: it never holds.
+const EN_IRREGULAR = new Set(["made", "took", "ran", "led", "built", "sold", "taught", "wrote", "drove", "kept", "did", "set", "got", "gave", "put", "cut", "fed", "met", "read", "held", "brought", "bought", "found", "paid", "sent", "fixed", "wore", "dealt", "stood", "spoke", "began", "became", "left", "lifted", "swept"]);
+const ES_IRREGULAR = new Set(["hice", "fui", "di", "puse", "tuve", "estuve", "pude", "traje", "dije", "conduje", "produje", "supe", "vi", "vine", "puse", "hizo", "fue", "tuvo", "estuvo", "cobre", "barri", "cargue", "descargue", "empaque", "saque", "toque", "pague", "llegue", "busque", "explique", "practique", "aplique", "organice", "comence", "empece"]);
+
+function startsWithEnglishVerb(piece: string): boolean {
+  const w = (piece.trim().match(/^[A-Za-z']+/) ?? [""])[0].toLowerCase();
+  return /^[a-z]{3,}ed$/.test(w) || EN_IRREGULAR.has(w);
+}
+
+function startsWithSpanishVerb(piece: string): boolean {
+  const raw = (piece.trim().replace(/^[-\u2022*]\s*/, "").match(/^[\p{L}]+/u) ?? [""])[0];
+  const f = fold(raw);
+  return /[\u00e9\u00ed\u00f3]$/i.test(raw) || ES_IRREGULAR.has(f) || /(?:aste|iste|aron|ieron|aba|aban|ia|ian|amos|imos)$/.test(f) && f.length > 4;
+}
+
+function dutyFindings(es: string, en: string, kind: UnitKind): Finding[] {
+  if (kind !== "duty" && kind !== "hook" && kind !== "summary" && kind !== "line") return [];
+  const enActions = en.split(/\s*(?:,|;|\band\b|\bthen\b|\bas well as\b)\s*/i).filter(startsWithEnglishVerb).length;
+  const esActions = es.split(/\s*(?:,|;|\s[ye]\s|\bad[eé]m[aá]s\b)\s*/i).filter(startsWithSpanishVerb).length;
+  if (enActions > esActions && enActions >= 2) return [{ row: "duty", severity: "note", direction: "added", items: [`${enActions} / ${esActions}`] }];
+  return [];
+}
+
 /* ----------------------------------------------------------- the check --- */
 
 /**
@@ -715,7 +800,9 @@ export function checkUnit(input: CheckInput): CheckResult {
     findings.push(...conceptFindings("result", esConcepts(RESULT_CONCEPTS, esResultWords(esC).map((w) => w.text), esC), enConcepts(RESULT_CONCEPTS, words.result)));
     findings.push(...conceptFindings("character", esConcepts(CHARACTER_CONCEPTS, esCharacterWords(esC).map((w) => w.text), esC), enConcepts(CHARACTER_CONCEPTS, words.character)));
     findings.push(...conceptFindings("size", esConcepts(SIZE_CONCEPTS, esSizeWords(esC).map((w) => w.text), esC), enConcepts(SIZE_CONCEPTS, words.size)));
-    findings.push(...conceptFindings("scale", esConcepts(SCALE_CONCEPTS, esScaleWords(esC).map((w) => w.text), esC), enConcepts(SCALE_CONCEPTS, words.scale)));
+    findings.push(...conceptFindings("scale", esConcepts(SCALE_CONCEPTS, esScaleWords(esC).map((w) => w.text).filter((t) => !MAG_ANY_ES.test(fold(t))), esC), enConcepts(SCALE_CONCEPTS, words.scale.filter((w) => !MAG_ANY_EN.test(w)))));
+    findings.push(...magnitudeFindings(esC, enC));
+    findings.push(...dutyFindings(es, en, input.kind));
     findings.push(...toolFindings(esC, words.tool));
     findings.push(...titleFindings(esC, enC));
     findings.push(...languageAbilityFindings(esC, enC));
