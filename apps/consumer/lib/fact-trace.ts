@@ -335,3 +335,27 @@ export function onlySupervisionUnsupported(claim: string, source: string): boole
     .filter((w) => w.length >= 3 && !FUNCTION_WORDS.has(w) && !hitWords.has(w) && !PEOPLE_NOUN_RE.test(w))
     .every((w) => src.stems.has(stemOf(w)) || src.flat.includes(` ${w} `));
 }
+
+// ---- Spanish D2 (translate and approve): the English claim words on one line -----------------------------------
+// Additive. The word lists above stay private; this only reads them, so the translate checker can ask "which
+// result, character, size, scale and tool words does this English line carry?" without copying the regexes.
+// Nothing above reads this, so no existing behavior changes.
+
+export interface ClaimWords {
+  result: string[];
+  character: string[];
+  size: string[];
+  scale: string[];
+  tool: string[];
+}
+
+/** The result, character, size, scale and tool words on an English line, as written. No source, no tracing. */
+export function claimWordsIn(line: string): ClaimWords {
+  const t = straightQuotes((line || "").trim());
+  const size = hits(SIZE_RE, t).filter((m) => {
+    // The same noise filter untracedFacts uses: "head of lettuce" is not a scope word.
+    if (m.toLowerCase() === "head" && !/\bhead\s+(?:of\s+)?(?:the\s+)?(?:crew|team|shift|department|kitchen|cook|chef)/i.test(t)) return false;
+    return true;
+  });
+  return { result: hits(RESULT_RE, t), character: hits(CHARACTER_RE, t), size, scale: hits(SCALE_RE, t), tool: hits(TOOL_RE, t) };
+}
