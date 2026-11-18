@@ -395,7 +395,13 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   const requestedRole = params.role === undefined ? saved?.saved.role || "" : params.role;
   const { roles, related, familyTitles } = searchPlan(requestedRole, saved?.target || (!saved?.laneId ? profile?.topCareerPaths[0] || "" : ""), skills);
   const relatedUsed = roles.slice(1).filter(r => related.some(t => t.toLowerCase() === r.toLowerCase()));
-  const result = await searchListings({ ...params, role: roles[0] || requestedRole, searchRoles: roles, location: params.location === undefined ? saved?.saved.location || "" : params.location, resolvedFilters: filters });
+  // Free text from the "Where?" box: put it in "City, ST" order and fix a
+  // close misspelling against the Census list, so "OH, cinncinati" searches
+  // "Cincinnati, OH" (live demo failure 2026-11-18). Resolved here, not in
+  // searchListings, so the "Searched X" notice is per request and never cached.
+  const typedLocation = sanitizeOrEmpty(params.location === undefined ? saved?.saved.location || "" : params.location);
+  const place = typedLocation ? resolveJobLocation(loadPlaceIndex(), typedLocation) : { value: "", changed: false };
+  const result = await searchListings({ ...params, role: roles[0] || requestedRole, searchRoles: roles, location: place.value, resolvedFilters: filters });
   let hidden = new Set<string>();
   let personal = readJobFit(null);
   if (params.userId) {
@@ -425,7 +431,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   const removedByChoices = loaded - jobs.length - offTopic;
   const summary: JobSearchSummary = { loaded, matched: jobs.length, excluded: loaded - jobs.length, unknownIncluded: jobs.filter(j => j.filterAssessment.unknown.length > 0).length, excludedBy, unknownBy, providerRequests: result.metadata?.providerRequests || 0, partial: true, fetchedAt: result.jobs[0]?.evidence?.fetchedAt || new Date().toISOString(), filters, laneId: saved?.laneId || null,
     offTopic, alsoFound, removedByChoices, ...(relatedUsed.length ? { relatedTerms: relatedUsed } : {}),
-    notices: [...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title match first, then description and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]),
+    notices: [...(place.changed ? [`Searched ${place.value}. If that is not the place you meant, type the city and state.`] : []), ...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title match first, then description and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]),
       ...(relatedUsed.length ? [`We also searched ${relatedUsed.map(r => `"${r}"`).join(" and ")}, a related term for "${roles[0]}". Cards say when only the related term matched.`] : []),
       ...(!relatedUsed.length && related.length && jobs.some(j => j.relevance.matchedRelatedOnly) ? [`Titles that use a related term (${related.join(", ")}) also count as matches for "${roles[0]}". Cards say when only the related term matched.`] : []),
       ...(offTopic ? [`${offTopic} loaded listing${offTopic === 1 ? "" : "s"} left out because none of your search words appear in the title or description.`] : []),
@@ -453,12 +459,7 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   const filters = params.resolvedFilters || defaultJobSearchFilters();
 
   const tenantGeo = getTenantConfig().geo;
-  // Free text from the "Where?" box: put it in "City, ST" order and fix a
-  // close misspelling against the Census list, so "OH, cinncinati" searches
-  // "Cincinnati, OH" (live demo failure 2026-11-18).
-  const typedLocation = sanitizeOrEmpty(location);
-  const resolvedLocation = typedLocation ? resolveJobLocation(loadPlaceIndex(), typedLocation) : null;
-  const searchLocation = resolvedLocation?.value || (filters.radiusMiles.value === null && filters.arrangements.value.length === 1 && filters.arrangements.value[0] === "remote" ? "United States" : "");
+  const searchLocation = sanitizeOrEmpty(location) || (filters.radiusMiles.value === null && filters.arrangements.value.length === 1 && filters.arrangements.value[0] === "remote" ? "United States" : "");
   if (!searchLocation) return { jobs: [], source: "none", fair_chance_info: "", error: "location_required" };
 
   // Build cache key from search params

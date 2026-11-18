@@ -44,6 +44,24 @@ test("short names are not guessed at", () => {
   assert.equal(r("Eli, OH"), "Eli, OH");
 });
 
+test("names that start with a state name are not split (review 11/18)", () => {
+  assert.equal(r("Kansas City"), "Kansas City");
+  assert.equal(r("Oklahoma City"), "Oklahoma City");
+  assert.equal(r("Virginia Beach"), "Virginia Beach");
+  assert.equal(r("Virginia Beach VA"), "Virginia Beach, VA");
+  assert.equal(r("Indiana PA"), "Indiana, PA");
+  assert.equal(r("Nevada City CA"), "Nevada City, CA");
+  assert.equal(r("Washington DC"), "Washington, DC");
+  assert.equal(r("Kansas City, MO"), "Kansas City, MO");
+});
+
+test("swapped letters count as one slip; unknown towns are not guessed", () => {
+  assert.equal(r("Akorn, OH"), "Akron, OH");
+  assert.equal(r("Dayten, OH"), "Dayton, OH");
+  assert.equal(r("99999"), "99999");
+  assert.equal(r("45202-1234"), "Cincinnati, OH 45202");
+});
+
 test("no index means no change", () => {
   assert.deepEqual(resolveJobLocation(null, "OH, cinncinati"), { value: "OH, cinncinati", changed: false });
 });
