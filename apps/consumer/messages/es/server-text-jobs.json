@@ -457,5 +457,6 @@
  "jobs_your_active_lane_changed_compare_paths_1914": "Tu ruta activa cambió. Compara los caminos otra vez antes de elegir.",
  "jobs_this_direction_could_not_be_saved_e616": "No se pudo guardar este rumbo. Inténtalo de nuevo.",
  "jobs_your_goal_was_saved_but_your_0880": "Tu meta se guardó, pero tu ruta activa cambió. Selecciona la meta guardada en el selector de rutas cuando quieras.",
- "jobs_the_goal_is_saved_but_it_f490": "La meta se guardó, pero no se pudo seleccionar. Intenta de nuevo con Elegir este rumbo."
+ "jobs_the_goal_is_saved_but_it_f490": "La meta se guardó, pero no se pudo seleccionar. Intenta de nuevo con Elegir este rumbo.",
+ "jobs_searched_place_if_not_the_place_7c1e": "Se buscó en {place}. Si no es el lugar que querías, escribe la ciudad y el estado."
 }

@@ -32,6 +32,15 @@ async function withProviders<T>(route: Route, run: (calls: URL[], db: DbCall[]) 
   // cache reads get cacheRow, writes are recorded, anything else gets no rows.
   process.env.DATABASE_URL = "postgresql://synthetic:synthetic@ep-synthetic-test.us-east-2.aws.neon.tech/db";
   _resetMarkCaches();
+  // The fixture was recorded 2026-10-24 with postings from 10/18-10/22. The
+  // default "posted within 30 days" filter dropped them once the real date
+  // passed 11/17, so every run here sees the walk day (CI broke 2026-11-18).
+  const RealDate = Date, WALK_DAY = RealDate.parse("2026-10-24T18:00:00Z");
+  class WalkDayDate extends RealDate {
+    constructor(...args: unknown[]) { if (args.length) super(...(args as [string])); else super(WALK_DAY); }
+    static now() { return WALK_DAY; }
+  }
+  globalThis.Date = WalkDayDate as DateConstructor;
   const original = globalThis.fetch, calls: URL[] = [], db: DbCall[] = [];
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -50,6 +59,7 @@ async function withProviders<T>(route: Route, run: (calls: URL[], db: DbCall[]) 
   }) as typeof fetch;
   try { return await run(calls, db); } finally {
     globalThis.fetch = original;
+    globalThis.Date = RealDate;
     for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
   }
 }
