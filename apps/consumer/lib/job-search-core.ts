@@ -1,5 +1,7 @@
 import { searchPlan, jobRelevance } from './job-search-relevance';
 import { normalizeLocation } from './job-location';
+import { resolveJobLocation } from './job-location-resolve';
+import { loadPlaceIndex } from './support-place-index';
 /**
  * One bounded provider search and deterministic filter path for Job Board and coach.
  * Cache public source listings; apply current lane choices after cache reads.
@@ -451,7 +453,12 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   const filters = params.resolvedFilters || defaultJobSearchFilters();
 
   const tenantGeo = getTenantConfig().geo;
-  const searchLocation = sanitizeOrEmpty(location) || (filters.radiusMiles.value === null && filters.arrangements.value.length === 1 && filters.arrangements.value[0] === "remote" ? "United States" : "");
+  // Free text from the "Where?" box: put it in "City, ST" order and fix a
+  // close misspelling against the Census list, so "OH, cinncinati" searches
+  // "Cincinnati, OH" (live demo failure 2026-11-18).
+  const typedLocation = sanitizeOrEmpty(location);
+  const resolvedLocation = typedLocation ? resolveJobLocation(loadPlaceIndex(), typedLocation) : null;
+  const searchLocation = resolvedLocation?.value || (filters.radiusMiles.value === null && filters.arrangements.value.length === 1 && filters.arrangements.value[0] === "remote" ? "United States" : "");
   if (!searchLocation) return { jobs: [], source: "none", fair_chance_info: "", error: "location_required" };
 
   // Build cache key from search params

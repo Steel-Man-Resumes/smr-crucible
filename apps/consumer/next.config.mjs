@@ -58,6 +58,9 @@ const nextConfig = {
     // The support search reads the Census place list with fs to find the
     // counties a typed town or ZIP sits in (lib/support-place-index.ts).
     "/api/resources-search": ["./public/forge-data/us-places-2020.v1.json"],
+    // The job search resolves the typed "Where?" against the same list
+    // (lib/job-location-resolve.ts).
+    "/api/job-search": ["./public/forge-data/us-places-2020.v1.json"],
     "/api/resume/layout": ["./public/fonts/resume/**/*"],
     // Phase 5 R1: saving a revision measures its pages (the status counts
     // them), the Forge save stores one, and both package emails measure and
