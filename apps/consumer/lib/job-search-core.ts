@@ -516,6 +516,11 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
     fetchUsaJobs(roleClean, searchLocation, PARALLEL_PROVIDER_TIMEOUT_MS, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("usajobs"); return result; }),
   ]);
   const sources = [...roles.map(() => "JSearch"), ...roles.map(() => "Adzuna"), "USAJOBS"];
+  // A failed provider used to leave no trace in the logs (11/18 demo: "JSearch did
+  // not answer" and nothing to check afterwards). Source and HTTP status only:
+  // no key, no query, no location.
+  const failedProviders = settled.map((r, i) => r.failed ? `${sources[i]}:${r.status ?? "none"}` : null).filter(Boolean);
+  if (failedProviders.length) console.warn(`[job-search] provider failed ${failedProviders.join(" ")}`);
   const cutShort = settled.some(r => r.partial);
   const generalBoards = settled.slice(0, roles.length * 2);
   const generalDown = generalBoards.every(r => r.failed);
